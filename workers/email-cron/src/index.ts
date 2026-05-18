@@ -41,29 +41,33 @@ export default {
     await runDailyCheck(env);
   },
   async fetch(req: Request, env: Env) {
-    // Manual trigger for testing: POST /run with header X-Admin-Token: <some secret>
     const url = new URL(req.url);
     if (req.method === 'POST' && url.pathname === '/run') {
-      await runDailyCheck(env);
-      return new Response('ok\n');
+      const force = url.searchParams.get('force') === '1';
+      await runDailyCheck(env, { force });
+      return new Response(`ok${force ? ' (force)' : ''}\n`);
     }
-    return new Response('dca-email-cron — POST /run to trigger\n', { status: 200 });
+    return new Response('dca-email-cron — POST /run (or /run?force=1) to trigger\n', { status: 200 });
   },
 };
 
-async function runDailyCheck(env: Env) {
+async function runDailyCheck(env: Env, opts: { force?: boolean } = {}) {
   const nowEt = isoDateInNewYork(new Date());
   const next = nextNyseTradingDay(nowEt);
   const [y, m] = next.split('-').map(Number);
   const firstOfMonth = firstNyseTradingDayOfMonth(y, m);
-  if (next !== firstOfMonth) {
-    console.log(`[cron] today=${nowEt} next=${next} first=${firstOfMonth} — not the month's first trading day, skipping`);
-    return;
-  }
-  // Also sanity-check next IS a trading day
-  if (!isNyseTradingDay(next)) {
-    console.log(`[cron] next=${next} not a trading day, skipping`);
-    return;
+
+  if (!opts.force) {
+    if (next !== firstOfMonth) {
+      console.log(`[cron] today=${nowEt} next=${next} first=${firstOfMonth} — not the month's first trading day, skipping`);
+      return;
+    }
+    if (!isNyseTradingDay(next)) {
+      console.log(`[cron] next=${next} not a trading day, skipping`);
+      return;
+    }
+  } else {
+    console.log(`[cron] FORCE mode — bypassing date and dedupe checks (today=${nowEt}, next=${next}, first=${firstOfMonth})`);
   }
 
   const ym = `${y}-${String(m).padStart(2, '0')}`;
@@ -73,10 +77,12 @@ async function runDailyCheck(env: Env) {
   for (const s of settingsList) {
     if (!s.email_to) continue;
     const dedupeKey = `sent:${s.user_id}:${ym}`;
-    const already = await env.EMAIL_KV.get(dedupeKey);
-    if (already) {
-      console.log(`[cron] user=${s.user_id} already sent for ${ym}, skip`);
-      continue;
+    if (!opts.force) {
+      const already = await env.EMAIL_KV.get(dedupeKey);
+      if (already) {
+        console.log(`[cron] user=${s.user_id} already sent for ${ym}, skip`);
+        continue;
+      }
     }
 
     try {
@@ -85,9 +91,11 @@ async function runDailyCheck(env: Env) {
         ym,
         monthlyDca: s.monthly_dca_usd,
       });
-      await env.EMAIL_KV.put(dedupeKey, '1', { expirationTtl: 60 * 60 * 24 * 40 });
-      await recordEmailLog(env, s.user_id, ym).catch((e) => console.warn('email_log write failed', e));
-      console.log(`[cron] sent to ${s.email_to} for ${ym}`);
+      if (!opts.force) {
+        await env.EMAIL_KV.put(dedupeKey, '1', { expirationTtl: 60 * 60 * 24 * 40 });
+        await recordEmailLog(env, s.user_id, ym).catch((e) => console.warn('email_log write failed', e));
+      }
+      console.log(`[cron] sent to ${s.email_to} for ${ym}${opts.force ? ' (force, dedupe skipped)' : ''}`);
     } catch (err) {
       console.error(`[cron] send failed for ${s.email_to}:`, err);
     }
