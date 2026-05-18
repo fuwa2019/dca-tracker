@@ -28,8 +28,25 @@ export function useAuth() {
   return { session, user, loading };
 }
 
-export async function signInWithMagicLink(email: string, redirectTo: string) {
-  return supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo } });
+/**
+ * Send a 6-digit OTP to the user's email. Supabase actually sends BOTH a magic
+ * link and an OTP `{{ .Token }}` in the same email — but mail-provider link
+ * scanners (Gmail, iCloud) often consume the magic link before the user clicks,
+ * leaving the link "expired". OTP codes can't be scanner-consumed, so we use
+ * those exclusively.
+ *
+ * Tweak Supabase → Authentication → Email Templates → Magic Link to display
+ * the token: `Your verification code is: {{ .Token }}`.
+ */
+export async function sendOtp(email: string) {
+  return supabase.auth.signInWithOtp({
+    email,
+    options: { shouldCreateUser: true },
+  });
+}
+
+export async function verifyEmailOtp(email: string, token: string) {
+  return supabase.auth.verifyOtp({ email, token, type: 'email' });
 }
 
 export async function signOut() {
