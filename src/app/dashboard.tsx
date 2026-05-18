@@ -64,10 +64,21 @@ export function DashboardPage() {
     targetUsd: target,
   });
 
-  const xirr = useMemo(
-    () => computeXirr(buildXirrEvents({ cashflows, currentMarketValueUsd: aggregates.mv })),
+  const xirrEvents = useMemo(
+    () => buildXirrEvents({ cashflows, currentMarketValueUsd: aggregates.mv }),
     [cashflows, aggregates.mv],
   );
+  const xirr = useMemo(() => computeXirr(xirrEvents), [xirrEvents]);
+  const xirrHint = useMemo(() => {
+    if (xirr !== null) return '按每笔入金时点和金额精确折现';
+    const usableDeposits = xirrEvents.filter((e) => e.amount < 0).length;
+    if (aggregates.mv <= 0) return '需要先有当前持仓市值';
+    if (usableDeposits === 0) return '需要至少 1 笔填好"USD 到账日"的入金';
+    if (usableDeposits < 2 && new Set(xirrEvents.map((e) => e.when.toISOString().slice(0, 10))).size < 2) {
+      return '需要至少 2 笔不同日期的入金';
+    }
+    return '数据条件不足以计算';
+  }, [xirr, xirrEvents, aggregates.mv]);
   const twrResult = useMemo(
     () =>
       computeTwr({
@@ -134,14 +145,26 @@ export function DashboardPage() {
         <StatCard
           label="年化收益率 (XIRR · 钱加权)"
           value={xirr !== null ? signedPct(xirr) : '—'}
-          sub="按每笔入金时点和金额精确折现"
+          sub={xirrHint}
           className={changeColor(xirr)}
         />
         <StatCard
           label={`时间加权 TWR · 年化 ${twrResult?.approximated ? '(粗估)' : ''}`}
-          value={twrResult?.annualized != null ? signedPct(twrResult.annualized) : '—'}
-          sub={twrResult ? `累计 ${signedPct(twrResult.twr)} · ${twrResult.periodDays} 天` : '不足 90 天不显示年化'}
-          className={changeColor(twrResult?.annualized ?? 0)}
+          value={
+            twrResult?.annualized != null
+              ? signedPct(twrResult.annualized)
+              : twrResult
+                ? signedPct(twrResult.twr)
+                : '—'
+          }
+          sub={
+            twrResult
+              ? twrResult.annualized != null
+                ? `累计 ${signedPct(twrResult.twr)} · ${twrResult.periodDays} 天`
+                : `累计区间 · ${twrResult.periodDays} 天 (不足 90 天不年化，避免噪声)`
+              : '录入交易后显示'
+          }
+          className={changeColor(twrResult?.annualized ?? twrResult?.twr ?? 0)}
         />
       </div>
 
