@@ -14,6 +14,10 @@
 export interface Env {
   QUOTE_CACHE: KVNamespace;
   ALLOWED_ORIGINS: string;
+  /** Optional. If set, every successful /api/quote also upserts into Supabase
+   *  `quote_snapshots` (so anonymous /share/[token] views have prices to compute returns). */
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
 }
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
@@ -33,7 +37,7 @@ interface QuoteOut {
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
     const corsHeaders = buildCors(req, env);
 
@@ -41,7 +45,7 @@ export default {
 
     try {
       if (url.pathname === '/api/quote') {
-        return withCors(await handleQuote(url, env), corsHeaders);
+        return withCors(await handleQuote(url, env, ctx), corsHeaders);
       }
       if (url.pathname === '/api/chart') {
         return withCors(await handleChart(url, env), corsHeaders);
@@ -57,7 +61,7 @@ export default {
   },
 };
 
-async function handleQuote(url: URL, env: Env): Promise<Response> {
+async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
   const raw = url.searchParams.get('symbols') ?? '';
   const symbols = raw
     .split(',')
@@ -95,9 +99,43 @@ async function handleQuote(url: URL, env: Env): Promise<Response> {
 
   if (quotes.length > 0) {
     await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(quotes), { expirationTtl: QUOTE_TTL });
+    // Fire-and-forget snapshot to Supabase so anonymous /share/[token] pages
+    // can compute return_pct without needing direct Yahoo access.
+    if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+      ctx.waitUntil(upsertSnapshots(env, quotes).catch((e) => console.warn('snapshot upsert failed:', e)));
+    }
   }
 
   return json({ quotes, cache: 'miss' });
+}
+
+async function upsertSnapshots(env: Env, quotes: QuoteOut[]): Promise<void> {
+  const rows = quotes
+    .filter((q) => q.price !== null)
+    .map((q) => ({
+      ticker: q.ticker,
+      price: q.price,
+      prev_close: q.prevClose,
+      change: q.change,
+      change_pct: q.changePct,
+      market_state: q.marketState,
+      source: q.source,
+      updated_at: new Date().toISOString(),
+    }));
+  if (rows.length === 0) return;
+  const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/quote_snapshots?on_conflict=ticker`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: env.SUPABASE_SERVICE_ROLE_KEY!,
+      Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY!}`,
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!r.ok) {
+    throw new Error(`supabase upsert ${r.status}: ${await r.text()}`);
+  }
 }
 
 async function handleChart(url: URL, env: Env): Promise<Response> {
