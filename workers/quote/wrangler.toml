@@ -1,0 +1,13 @@
+name = "dca-quote"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+
+# Cache responses across requests (5 min for /api/quote, 1 hour for /api/chart).
+[[kv_namespaces]]
+binding = "QUOTE_CACHE"
+id = "2ed3dfa2431d4937be121ffb3883a847"
+preview_id = "52cfea8072f048c1a61b51b7727e4171"
+
+# Update this with your Pages domain after first deploy and re-run `npm run deploy`.
+[vars]
+ALLOWED_ORIGINS = "http://localhost:5173,https://dca.pages.dev"

@@ -1,0 +1,19 @@
+name = "dca-email-cron"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+
+# Fire daily at UTC 03:00 = Beijing 11:00
+[triggers]
+crons = ["0 3 * * *"]
+
+[[kv_namespaces]]
+binding = "EMAIL_KV"
+id = "844368030d484191a0f3ef3b29f18145"
+preview_id = "8065182012e74e55a80b4920ec768c6b"
+
+# Required secrets (set via `wrangler secret put`):
+#   RESEND_API_KEY            — Resend API token
+#   SUPABASE_URL              — your project URL
+#   SUPABASE_SERVICE_ROLE_KEY — service-role key (read settings, write email_log)
+#   FROM_EMAIL                — e.g. "DCA <reminders@yourdomain.com>"
+#   ADMIN_EMAIL               — fallback test recipient when settings.email_to is null
