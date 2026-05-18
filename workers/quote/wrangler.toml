@@ -8,6 +8,7 @@ binding = "QUOTE_CACHE"
 id = "2ed3dfa2431d4937be121ffb3883a847"
 preview_id = "52cfea8072f048c1a61b51b7727e4171"
 
-# Update this with your Pages domain after first deploy and re-run `npm run deploy`.
+# Production + preview deploys + local dev. Pages preview subdomains are
+# matched by the trailing ".dca-tracker.pages.dev" — keep one entry per pattern.
 [vars]
-ALLOWED_ORIGINS = "http://localhost:5173,https://dca.pages.dev"
+ALLOWED_ORIGINS = "http://localhost:5173,https://dca-tracker.pages.dev"
