@@ -1,22 +1,36 @@
 import { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronDown } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import { PositionCard } from '@/components/PositionCard';
 import { StatCard } from '@/components/StatCard';
 import { CostBasisToggle } from '@/components/CostBasisToggle';
 import { TargetProgressRing } from '@/components/TargetProgressRing';
-import { EquityCurveChart } from '@/components/EquityCurveChart';
+import {
+  EquityCurveChart,
+  MetricToggle,
+  RangeToggle,
+  availableRanges,
+  type ChartMetric,
+} from '@/components/EquityCurveChart';
 import { useQuotes } from '@/hooks/useQuotes';
+import { useDailyPrices } from '@/hooks/useDailyPrices';
 import { useTransactions, useCashflows, useSettings, useTotalInvested } from '@/hooks/usePortfolio';
 import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
 import { computeTwr } from '@/lib/calc/twr';
+import { buildEquityHistory, BENCHMARK_TICKER, type RangeKey } from '@/lib/calc/history';
 import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
 import { isUsMarketOpen } from '@/lib/quote';
 
 export function DashboardPage() {
   const [basis, setBasis] = useState<'avg' | 'fifo'>('avg');
+  const [chartMetric, setChartMetric] = useState<ChartMetric>('returnPct');
+  const [chartRange, setChartRange] = useState<RangeKey>('ALL');
+  const [showBenchmark, setShowBenchmark] = useState(true);
+  const [showLegacyLines, setShowLegacyLines] = useState(false);
   const { data: txns = [] } = useTransactions();
   const { data: cashflows = [] } = useCashflows();
   const { data: settings } = useSettings();
@@ -34,11 +48,35 @@ export function DashboardPage() {
   const { data: quotes = [] } = useQuotes(symbols);
   const quoteByTicker = useMemo(() => new Map(quotes.map((q) => [q.ticker, q])), [quotes]);
 
-  const priceMap = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const q of quotes) if (q.price != null) m[q.ticker] = q.price;
+  // --- Equity-history data plumbing ----------------------------
+  const earliestDate = useMemo(() => {
+    const cashDates = cashflows.map((c) => c.usd_in_date).filter((d): d is string => !!d);
+    const tradeDates = txns.map((t) => t.trade_date);
+    const all = [...cashDates, ...tradeDates].sort();
+    return all[0] ?? null;
+  }, [cashflows, txns]);
+  const historySymbols = useMemo(
+    () => [...new Set([...positions.map((p) => p.ticker), BENCHMARK_TICKER])],
+    [positions],
+  );
+  const { data: dailyPrices } = useDailyPrices(historySymbols, earliestDate);
+  const todayQuotes = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const q of quotes) if (q.price != null) m.set(q.ticker, q.price);
     return m;
   }, [quotes]);
+  const history = useMemo(() => {
+    if (!dailyPrices) return [];
+    return buildEquityHistory({
+      transactions: txns,
+      cashflows,
+      prices: dailyPrices,
+      todayQuotes,
+      todaySpyPrice: todayQuotes.get(BENCHMARK_TICKER),
+    });
+  }, [dailyPrices, txns, cashflows, todayQuotes]);
+  const ranges = useMemo(() => availableRanges(history), [history]);
+  const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');
 
   const aggregates = useMemo(() => {
     let mv = 0;
@@ -91,8 +129,11 @@ export function DashboardPage() {
         })),
         cashflows: cashflows.map((c) => ({ usd_in_date: c.usd_in_date, usd_amount: c.usd_amount })),
         currentMarketValueUsd: aggregates.mv,
+        priceOn: dailyPrices
+          ? (ticker, isoDate) => dailyPrices.get(ticker)?.get(isoDate) ?? null
+          : undefined,
       }),
-    [txns, cashflows, aggregates.mv],
+    [txns, cashflows, aggregates.mv, dailyPrices],
   );
 
   const marketOpen = isUsMarketOpen();
@@ -170,12 +211,54 @@ export function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>资产曲线</CardTitle>
-            <CardDescription>累计入金 vs 累计成本（绿色虚线为当前市值参考）</CardDescription>
+          <CardHeader className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>资产曲线</CardTitle>
+                <CardDescription>
+                  {chartMetric === 'returnPct' ? '收益率 %' : '收益金额 $'}
+                  {showBenchmark && ' · 对照 SPY (资金时点对齐)'}
+                </CardDescription>
+              </div>
+              <MetricToggle value={chartMetric} onChange={setChartMetric} />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <RangeToggle value={effectiveRange} onChange={setChartRange} available={ranges} />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>vs SPY</span>
+                <Switch checked={showBenchmark} onCheckedChange={setShowBenchmark} />
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <EquityCurveChart transactions={txns} cashflows={cashflows} quotes={priceMap} />
+            <EquityCurveChart
+              history={history}
+              metric={chartMetric}
+              range={effectiveRange}
+              showBenchmark={showBenchmark}
+              showLegacyLines={showLegacyLines}
+            />
+            <button
+              type="button"
+              onClick={() => setShowLegacyLines((v) => !v)}
+              className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            >
+              <ChevronDown
+                className={`h-3 w-3 transition-transform ${showLegacyLines ? 'rotate-180' : ''}`}
+              />
+              {showLegacyLines ? '隐藏' : '显示'}累计入金/成本辅助线
+            </button>
+            <AnimatePresence>
+              {history.length === 0 && earliestDate && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="mt-2 text-center text-[11px] text-muted-foreground"
+                >
+                  正在拉取历史价格…
+                </motion.p>
+              )}
+            </AnimatePresence>
           </CardContent>
         </Card>
         <Card>

@@ -1,99 +1,286 @@
 import { useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts';
+import {
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  ReferenceLine,
+  Scatter,
+  ComposedChart,
+} from 'recharts';
 import { motion } from 'framer-motion';
-import type { Database } from '@/lib/database.types';
+import {
+  sliceByRange,
+  availableRanges,
+  aggregateMarkers,
+  markerGranularityFor,
+  type HistoryPoint,
+  type RangeKey,
+} from '@/lib/calc/history';
+import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
-type TxnRow = Database['public']['Tables']['transactions']['Row'];
-type CashRow = Database['public']['Tables']['cashflows']['Row'];
+export type ChartMetric = 'returnPct' | 'pnl';
 
 interface Props {
-  transactions: TxnRow[];
-  cashflows: CashRow[];
-  quotes: Record<string, number>;
+  history: HistoryPoint[];
+  metric: ChartMetric;
+  range: RangeKey;
+  showBenchmark: boolean;
+  showLegacyLines?: boolean;
 }
 
-interface Point {
-  date: string;
-  invested: number;
-  costBasis: number;
-}
+export function EquityCurveChart({ history, metric, range, showBenchmark, showLegacyLines = false }: Props) {
+  const sliced = useMemo(() => sliceByRange(history, range), [history, range]);
+  const markers = useMemo(
+    () => aggregateMarkers(sliced, markerGranularityFor(range)),
+    [sliced, range],
+  );
 
-/**
- * Show two curves:
- * - Cumulative invested principal (= Σ USD deposits over time)
- * - Cumulative cost basis (= Σ buy notional at trade date)
- * Today's portfolio market value drawn as a single dot using current quotes.
- */
-export function EquityCurveChart({ transactions, cashflows, quotes }: Props) {
-  const { data, todayMV } = useMemo(() => {
-    // Build a date-sorted timeline of events
-    type Event = { date: string; deltaInvested: number; deltaCost: number };
-    const events: Event[] = [];
-    for (const c of cashflows) {
-      if (c.usd_in_date && c.usd_amount) {
-        events.push({ date: c.usd_in_date, deltaInvested: Number(c.usd_amount), deltaCost: 0 });
-      }
-    }
-    for (const t of transactions) {
-      const notional = Number(t.shares) * Number(t.price);
-      events.push({
-        date: t.trade_date,
-        deltaInvested: 0,
-        deltaCost: t.side === 'buy' ? notional : -notional,
-      });
-    }
-    events.sort((a, b) => a.date.localeCompare(b.date));
-
-    let invested = 0;
-    let cost = 0;
-    const byDate = new Map<string, Point>();
-    for (const e of events) {
-      invested += e.deltaInvested;
-      cost += e.deltaCost;
-      byDate.set(e.date, { date: e.date, invested, costBasis: cost });
-    }
-    const points = [...byDate.values()];
-
-    // Market value at today using quotes
-    const netShares = new Map<string, number>();
-    for (const t of transactions) {
-      const s = Number(t.shares);
-      netShares.set(t.ticker, (netShares.get(t.ticker) ?? 0) + (t.side === 'buy' ? s : -s));
-    }
-    let mv = 0;
-    for (const [tk, sh] of netShares) {
-      const px = quotes[tk] ?? 0;
-      mv += sh * px;
-    }
-
-    return { data: points, todayMV: mv };
-  }, [transactions, cashflows, quotes]);
-
-  if (data.length === 0) {
+  if (sliced.length === 0) {
     return (
-      <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-        暂无数据 — 添加交易和资金流后会显示资产曲线
+      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+        暂无数据 — 录入交易和资金流后会显示资产曲线
       </div>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="h-64 w-full">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+        <ComposedChart data={sliced} margin={{ top: 12, right: 8, left: 0, bottom: 8 }}>
           <CartesianGrid strokeDasharray="2 4" className="stroke-border" vertical={false} />
-          <XAxis dataKey="date" tick={{ fontSize: 11 }} tickMargin={6} tickFormatter={(v) => (v as string).slice(5)} />
-          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${Math.round((v as number) / 1000)}k`} width={50} />
-          <Tooltip
-            contentStyle={{ borderRadius: 12, border: '1px solid hsl(var(--border))', fontSize: 12 }}
-            formatter={(value: number) => `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
-            labelFormatter={(label) => label}
+          <XAxis
+            dataKey="date"
+            tick={{ fontSize: 11 }}
+            tickMargin={6}
+            interval="preserveStartEnd"
+            tickFormatter={(v) => formatXTick(v as string, range)}
+            minTickGap={36}
           />
-          <ReferenceLine y={todayMV} stroke="hsl(142 71% 45%)" strokeDasharray="3 3" label={{ value: '当前市值', fontSize: 10, fill: 'hsl(142 71% 45%)', position: 'insideTopRight' }} />
-          <Line type="monotone" dataKey="invested" stroke="hsl(var(--foreground))" strokeWidth={2} dot={false} name="累计入金" />
-          <Line type="monotone" dataKey="costBasis" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} strokeDasharray="4 4" dot={false} name="累计成本" />
-        </LineChart>
+          <YAxis
+            tick={{ fontSize: 11 }}
+            tickFormatter={(v) => formatYTick(v as number, metric)}
+            width={metric === 'returnPct' ? 48 : 56}
+            domain={['auto', 'auto']}
+          />
+          <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 3" />
+
+          {showLegacyLines && (
+            <>
+              <Line type="monotone" dataKey="invested" stroke="hsl(var(--muted-foreground))" strokeWidth={1} dot={false} name="累计入金" strokeDasharray="3 3" />
+              <Line type="monotone" dataKey="costBasis" stroke="hsl(var(--muted-foreground))" strokeWidth={1} dot={false} name="累计成本" strokeDasharray="6 4" />
+            </>
+          )}
+
+          {showBenchmark && (
+            <Line
+              type="monotone"
+              dataKey={metric === 'returnPct' ? 'returnPctSpy' : 'pnlSpy'}
+              stroke="hsl(var(--muted-foreground))"
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+              dot={false}
+              name="SPY 对照"
+              isAnimationActive={false}
+            />
+          )}
+
+          <Line
+            type="monotone"
+            dataKey={metric === 'returnPct' ? 'returnPctUser' : 'pnlUser'}
+            stroke="hsl(var(--foreground))"
+            strokeWidth={2.2}
+            dot={false}
+            name="我的组合"
+            activeDot={{ r: 4, strokeWidth: 0 }}
+            isAnimationActive={false}
+          />
+
+          {markers.length > 0 && (
+            <Scatter
+              data={markers.map((m) => ({
+                date: m.date,
+                value: metric === 'returnPct' ? m.returnPctUser : m.navUser - 0,
+                _marker: m,
+              }))}
+              dataKey="value"
+              shape={(props: { cx?: number; cy?: number; payload?: { _marker: typeof markers[number] } }) => {
+                const m = props.payload?._marker;
+                if (!m || props.cx == null || props.cy == null) return <g />;
+                const isBuy = m.totalBuyUsd >= m.totalSellUsd;
+                const r = m.hasLumpsum ? 5 : 3.5;
+                const fill = isBuy ? 'hsl(142 71% 45%)' : 'hsl(0 84% 60%)';
+                return (
+                  <g>
+                    <circle cx={props.cx} cy={props.cy} r={r + 1.5} fill="hsl(var(--background))" />
+                    <circle cx={props.cx} cy={props.cy} r={r} fill={fill} stroke="hsl(var(--background))" strokeWidth={1} />
+                  </g>
+                );
+              }}
+            />
+          )}
+
+          <Tooltip
+            cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '3 3' }}
+            content={<EquityTooltip metric={metric} showBenchmark={showBenchmark} />}
+            isAnimationActive={false}
+          />
+        </ComposedChart>
       </ResponsiveContainer>
     </motion.div>
   );
 }
+
+function formatYTick(v: number, metric: ChartMetric): string {
+  if (metric === 'returnPct') return `${(v * 100).toFixed(0)}%`;
+  if (Math.abs(v) >= 1000) return `$${(v / 1000).toFixed(0)}k`;
+  return `$${v.toFixed(0)}`;
+}
+
+function formatXTick(iso: string, range: RangeKey): string {
+  if (range === '1M' || range === '3M') {
+    // MM/DD
+    return iso.slice(5).replace('-', '/');
+  }
+  if (range === '6M' || range === '1Y') {
+    // MMM (e.g. Jan)
+    const [, mm] = iso.split('-');
+    return `${Number(mm)}月`;
+  }
+  // ALL: YYYY/MM
+  return iso.slice(0, 7).replace('-', '/');
+}
+
+interface TooltipPayloadItem {
+  payload?: HistoryPoint & { _marker?: ReturnType<typeof aggregateMarkers>[number] };
+}
+
+function EquityTooltip({
+  metric,
+  showBenchmark,
+  active,
+  payload,
+}: {
+  metric: ChartMetric;
+  showBenchmark: boolean;
+  active?: boolean;
+  payload?: TooltipPayloadItem[];
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const point = payload[0]?.payload;
+  if (!point) return null;
+
+  const userValue = metric === 'returnPct' ? point.returnPctUser : point.pnlUser;
+  const spyValue = metric === 'returnPct' ? point.returnPctSpy : point.pnlSpy;
+  const diff = userValue - spyValue;
+
+  return (
+    <div className="rounded-xl border bg-popover/95 px-3 py-2.5 shadow-lg backdrop-blur min-w-[180px]">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground tnum">{point.date}</div>
+      <div className={cn('mt-1 text-base font-semibold tnum', changeColor(userValue))}>
+        {metric === 'returnPct' ? signedPct(userValue) : signedUsd(userValue)}
+        <span className="ml-1 text-[10px] font-normal text-muted-foreground">我的</span>
+      </div>
+      {showBenchmark && (
+        <>
+          <div className={cn('text-sm tnum', changeColor(spyValue))}>
+            {metric === 'returnPct' ? signedPct(spyValue) : signedUsd(spyValue)}
+            <span className="ml-1 text-[10px] font-normal text-muted-foreground">SPY 对照</span>
+          </div>
+          <div className={cn('mt-1 border-t pt-1 text-xs tnum', changeColor(diff))}>
+            差值 {metric === 'returnPct' ? signedPct(diff) : signedUsd(diff)}
+          </div>
+        </>
+      )}
+      {point.txns.length > 0 && (
+        <div className="mt-2 space-y-0.5 border-t pt-1.5">
+          {point.txns.map((t, i) => (
+            <div key={i} className="text-[11px] tnum">
+              <span className={t.side === 'buy' ? 'text-success' : 'text-danger'}>{t.side === 'buy' ? '买' : '卖'}</span>{' '}
+              <span className="font-medium">{t.ticker}</span> {t.shares.toFixed(4)} @ {usd.format(t.price)}
+              {t.kind === 'lumpsum' && <span className="ml-1 text-amber-600">·大额</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------- Control surface --------------------
+ * Re-exportable controls so Dashboard can place them in the card header.
+ */
+
+export function MetricToggle({ value, onChange }: { value: ChartMetric; onChange: (v: ChartMetric) => void }) {
+  return (
+    <div className="relative inline-flex rounded-lg bg-muted p-1 text-xs">
+      {(['returnPct', 'pnl'] as const).map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => onChange(opt)}
+          className={cn(
+            'relative z-10 rounded-md px-3 py-1.5 font-medium transition-colors',
+            value === opt ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {opt === 'returnPct' ? '收益率 %' : '收益金额 $'}
+          {value === opt && (
+            <motion.span
+              layoutId="metric-toggle-pill"
+              className="absolute inset-0 -z-10 rounded-md bg-background shadow-sm"
+              transition={{ type: 'spring', damping: 30, stiffness: 350 }}
+            />
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function RangeToggle({
+  value,
+  onChange,
+  available,
+}: {
+  value: RangeKey;
+  onChange: (v: RangeKey) => void;
+  available: RangeKey[];
+}) {
+  const all: RangeKey[] = ['1M', '3M', '6M', '1Y', 'ALL'];
+  return (
+    <div className="relative inline-flex rounded-lg bg-muted p-1 text-xs">
+      {all.map((opt) => {
+        const ok = available.includes(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            disabled={!ok}
+            onClick={() => ok && onChange(opt)}
+            title={ok ? undefined : '数据不足，无法显示此区间'}
+            className={cn(
+              'relative z-10 rounded-md px-2.5 py-1.5 font-medium transition-colors min-w-[36px]',
+              !ok && 'cursor-not-allowed opacity-30',
+              value === opt && ok ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {opt}
+            {value === opt && ok && (
+              <motion.span
+                layoutId="range-toggle-pill"
+                className="absolute inset-0 -z-10 rounded-md bg-background shadow-sm"
+                transition={{ type: 'spring', damping: 30, stiffness: 350 }}
+              />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export { availableRanges };
