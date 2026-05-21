@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,12 +21,13 @@ export function RebalancePage() {
   const priceMap = useMemo(() => new Map(quotes.map((q) => [q.ticker, q.price ?? 0])), [quotes]);
 
   const [newCash, setNewCash] = useState('3000');
-  const [weights, setWeights] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    const equal = watchlist.length > 0 ? (100 / watchlist.length).toFixed(1) : '';
-    for (const t of watchlist) init[t] = equal;
-    return init;
-  });
+  const [weights, setWeights] = useState<Record<string, string>>(() => defaultWeights(watchlist));
+  const dirtyRef = useRef(false);
+  // Rebuild defaults when watchlist arrives async — but only if user hasn't edited
+  useEffect(() => {
+    if (dirtyRef.current) return;
+    setWeights(defaultWeights(watchlist));
+  }, [watchlist]);
 
   const weightSum = Object.values(weights).reduce((s, v) => s + (Number(v) || 0), 0);
   const cash = Number(newCash) || 0;
@@ -83,24 +84,40 @@ export function RebalancePage() {
                     step="0.1"
                     inputMode="decimal"
                     value={v}
-                    onChange={(e) => setWeights((w) => ({ ...w, [t]: e.target.value }))}
+                    onChange={(e) => {
+                      dirtyRef.current = true;
+                      setWeights((w) => ({ ...w, [t]: e.target.value }));
+                    }}
                   />
                   <span className="text-xs text-muted-foreground">%</span>
                 </div>
               ))}
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                const equal = (100 / watchlist.length).toFixed(1);
-                const next: Record<string, string> = {};
-                for (const t of watchlist) next[t] = equal;
-                setWeights(next);
-              }}
-            >
-              等权填充
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  dirtyRef.current = false;
+                  setWeights(defaultWeights(watchlist));
+                }}
+              >
+                还原默认
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  dirtyRef.current = true;
+                  const equal = (100 / watchlist.length).toFixed(1);
+                  const next: Record<string, string> = {};
+                  for (const t of watchlist) next[t] = equal;
+                  setWeights(next);
+                }}
+              >
+                等权填充
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -109,7 +126,7 @@ export function RebalancePage() {
         <Card>
           <CardHeader>
             <CardTitle>建议买入</CardTitle>
-            <CardDescription>按整股数四舍五入向下取整 · 剩余 USD 列出供参考</CardDescription>
+            <CardDescription>支持 0.0001 股精度（Schwab 碎股）· 剩余 USD 列出供参考</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-sm">
@@ -124,7 +141,7 @@ export function RebalancePage() {
                     当前 {pct(r.currentWeight)} → 目标 {pct(r.targetWeight)}
                   </div>
                   <div className="text-right text-xs tnum text-muted-foreground">
-                    买 <span className="font-medium text-foreground">{r.buyShares} 股</span> ≈ {usd.format(r.buyShares * (priceMap.get(r.ticker) ?? 0))}
+                    买 <span className="font-medium text-foreground">{r.buyShares.toFixed(4)} 股</span> ≈ {usd.format(r.buyShares * (priceMap.get(r.ticker) ?? 0))}
                   </div>
                   <div className="w-24 text-right text-xs tnum">
                     分配 {usd.format(r.buyUsd)}
@@ -140,4 +157,22 @@ export function RebalancePage() {
       )}
     </div>
   );
+}
+
+/** Project-recommended default weights.
+ *  If the watchlist exactly matches VOO/QQQM/SMH (any order), use 50/25/25.
+ *  Otherwise fall back to equal-weight. */
+function defaultWeights(watchlist: string[]): Record<string, string> {
+  const set = new Set(watchlist.map((t) => t.toUpperCase()));
+  const out: Record<string, string> = {};
+  if (set.size === 3 && set.has('VOO') && set.has('QQQM') && set.has('SMH')) {
+    for (const t of watchlist) {
+      const u = t.toUpperCase();
+      out[t] = u === 'VOO' ? '50' : '25';
+    }
+    return out;
+  }
+  const equal = watchlist.length > 0 ? (100 / watchlist.length).toFixed(1) : '';
+  for (const t of watchlist) out[t] = equal;
+  return out;
 }

@@ -60,6 +60,28 @@ export function useTotalInvested() {
   return { ...cashflows, total };
 }
 
+/**
+ * Cash USD currently sitting in Schwab — i.e. money you deposited but haven't
+ * deployed into stock yet. Must be included in NAV so XIRR / TWR / charts don't
+ * report a fake loss when you've deposited more than you've bought.
+ *
+ *   cash = Σ cashflow.usd_amount − Σ buy_notional + Σ sell_notional
+ */
+export function useCashBalance() {
+  const cashflows = useCashflows();
+  const txns = useTransactions();
+  const depositedUsd = cashflows.data?.reduce((s, c) => s + (Number(c.usd_amount) || 0), 0) ?? 0;
+  let buyUsd = 0;
+  let sellUsd = 0;
+  for (const t of txns.data ?? []) {
+    const notional = Number(t.shares) * Number(t.price);
+    if (t.side === 'buy') buyUsd += notional;
+    else sellUsd += notional;
+  }
+  const cash = depositedUsd - buyUsd + sellUsd;
+  return { cash, depositedUsd, buyUsd, sellUsd, isLoading: cashflows.isLoading || txns.isLoading };
+}
+
 export function useExchangeLoss() {
   const cashflows = useCashflows();
   let totalLoss = 0;
@@ -68,14 +90,15 @@ export function useExchangeLoss() {
   let totalUsdIdeal = 0;
   for (const c of cashflows.data ?? []) {
     const cny = Number(c.cny_amount) || 0;
+    const feesCny = Number(c.fees_cny) || 0;
     const usd = Number(c.usd_amount) || 0;
     const rate = Number(c.target_rate) || 0;
     if (rate > 0) {
-      const ideal = cny / rate;
+      const ideal = (cny + feesCny) / rate;
       totalUsdIdeal += ideal;
       totalLoss += ideal - usd;
     }
-    totalCny += cny;
+    totalCny += cny + feesCny;
     totalUsdActual += usd;
   }
   return {

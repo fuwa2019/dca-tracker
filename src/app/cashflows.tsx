@@ -71,9 +71,10 @@ export function CashflowsPage() {
           <AnimatePresence initial={false}>
             {rows.map((c, i) => {
               const cnyAmt = Number(c.cny_amount);
+              const feesCny = Number(c.fees_cny) || 0;
               const usdAmt = Number(c.usd_amount ?? 0);
               const rate = Number(c.target_rate);
-              const ideal = rate > 0 ? cnyAmt / rate : 0;
+              const ideal = rate > 0 ? (cnyAmt + feesCny) / rate : 0;
               const loss = ideal - usdAmt;
               return (
                 <motion.div

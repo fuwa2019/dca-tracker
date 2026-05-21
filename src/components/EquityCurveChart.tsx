@@ -103,7 +103,7 @@ export function EquityCurveChart({ history, metric, range, showBenchmark, showLe
             <Scatter
               data={markers.map((m) => ({
                 date: m.date,
-                value: metric === 'returnPct' ? m.returnPctUser : m.navUser - 0,
+                value: metric === 'returnPct' ? m.returnPctUser : m.pnlUser,
                 _marker: m,
               }))}
               dataKey="value"

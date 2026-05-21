@@ -1,1 +1,118 @@
-做一个能云端iphone、mac、iPad、pc同步的网页应用，我要免费开源的，你可以用类似google、github的生态或者你可能有更好的选择。用来统计我在嘉信Schab每个月投入的股票，通常是voo、qqqm、smh，统计每一次从大陆cny帐户到schab到账usd到损耗百分比，注意有时候大额建仓的时候统计不了，因我我可能多次将cny转移到港卡，时间段比较分散所以无法统计、或者你有更好的计算方法。我希望这个网页应用可以让我自己看到数据并且在网页即时输入交易信息并且像好用的富途等一样能看到开仓盈亏、当日盈亏、仓位管理，而且我可以分享给别人看，但是别人不能修改编辑数据。我预计每年年尾调整持仓，到一定比例，我会输入一个比例，你帮我计算投入金额。网页获取的数据可以是24h实时的吗，如果不行那要怎么解决，你要给我一个方案。每次交易完，我记录的时候会输入成交股价和成交股数。可以查看最近交易的几笔，也可以点击更多来查询全部交易，支持完成的搜索功能比如日期金额股票搜索等等。你要注意在iphone 15pro、ipad pro、macbook air、pc上网页显示的排版适配，注意字体大小要比较清晰，布局简洁好用，参考市面上广受好评的基金和股票交易软件的样式。我每个月主要以定投投入为主，有时候可能会或者比较多的钱投入，与定投区分，你要有这样的标签区分。我希望能知道我当前组合的年化收益率，你觉得应该怎么实现比较好，或者你建议不显示也可以。我希望知道我离用复利实现100w usd还要多久，你觉得应该怎么实现比较好，或者你建议不显示也可以。每一笔已经提交的交易应该可以被重新编辑和删除。你要注意网页动画的实现，要参考苹果等顶级网页的动画设计，不要卡顿而且要美观。我认为这一段记账方法在一些方面比较好，你要学习一下并且告诉我你想学习哪些方面：“我是如何记账的？ 最近，有朋友问我：为什么证券App显示的投资收益不靠谱？ 经过我的分析才知道，他们最近调了仓，把标普 500 指数基金换成了纳指基金。 而很多证券App显示的收益，往往是当前持仓的账面收益。因此，先前基金的收益就不再算成收益。这导致账面显示的数字不是真实的总体收益。 因此，我建议大家用电子表格或者纸质本子，记录下自己基金账户的总投资本金。这样就可以更好地评估自己的收益。 注意，在计算投资本金的时候，要减去从账户里取出的钱。 比如，下面是一个账户的现金流： 2023：存100万 2024：取30万 2025：存40万。 那么，总投资额就是：  100万 - 30万 + 40万 = 110万 如果当前账户总资产是 150 万，那么盈利就是：  150万 - 110万 = 40 万 另外， 如果你感兴趣，也可也用电子表格大致计算你每个时期（比如每年、每季度）的收益率。其公式就是： (期末值 - 期初值 - 现金流) ÷ (期初值 + 现金流) 比如，帐户年初的总资产是100万。在一年内，账户的净现金流是50万。 到了年末，账户的总资产变成 200万。那么该账户今年的账面收益率就是: (200万 - 100万 - 50万) ÷ (100万 + 50万) = 33.3% 当然，现金流投入的时间是会影响收益率的。如果现金流较大，而你希望较为精确地计算收益率，那么必须考虑每笔现金流在账户里停留时间占整个期间的比例，计算该笔投资的“有效现金流”。 比如，如果你在 4 月份初投入10万，那么到了年底，它的有效投资时间就是 8 个月。因此，它的有效现金流就是：  10万 × 8 ÷ 12 = 6.67 万 如果你是每月或者每季度定投，而每笔投资的数额差不多，它们的平均有效投资时间就是 6 个月。那么，你的有效现金流就是原始现金流的一半。 仍然按照上面的例子，修改后的收益率就是： (期末值 - 期初值 - 现金流) ÷ (期初值 + 有效现金流) = (200万 - 100万 - 50万) ÷ (100万 + 50万 × 50%) = 40.0% 我自己是用谷歌公司的云端电子表格 Sheets 来记账。我有多个表格，包括现金流、每年的收益率、家庭净资产等。”我希望你能在每一个月第一个美股交易日的前一天早上11点提醒我入金，且这个日期要是新的一月，给我发邮件，应该怎么实现？我有大陆的家庭nas，fnos系统，但是只有公网ipv6.我有美国的vps（小ram小硬盘1核cpu），有公网v4.我需要实现比较简单，1h可以完成配置。
+  P0 必修
+
+  1. 邮件 Worker 无鉴权触发发信
+     位置：workers/email-cron/src/index.ts:43
+     问题：公网 POST /run?force=1 可绕过日期和去重。
+     修改：增加 ADMIN_SECRET，要求 Authorization: Bearer ...；或生产环境删除 /
+     run?force=1。force 也要保留频控/去重。
+  2. 总资产/盈亏没有现金仓位
+     位置：src/app/dashboard.tsx:81、src/hooks/usePortfolio.ts:56
+     问题：只算股票市值，不算未买入现金；入金未买满会显示假亏损。
+     修改：新增 cash balance 口径：现金 = 累计到账USD - 买入成交额 + 卖出成交
+     额，总资产用 持仓市值 + 现金。XIRR、TWR、资产曲线、$1M 进度都用 NAV。
+  3. TWR 现金流分段公式错误
+     位置：src/lib/calc/twr.ts:98
+     问题：当前 cashflow 被算进上一段收益，违背 TWR。
+     修改：现金流日作为分段边界；先计算前一段 V_end / V_start - 1，再把现金流加
+     入下一段起始 NAV。或改用每日 NAV 链接法。
+  4. 卖出可超过持仓
+     位置：src/components/TxnForm.tsx:43、src/lib/calc/position.ts:63
+     问题：超卖后 FIFO 静默吞掉错误，持仓和已实现盈亏失真。
+     修改：前端提交卖出前计算当前可卖股数并拦截；计算层遇到超卖应抛错或返回
+     validation error。必要时数据库用 RPC 写交易，统一校验。
+  5. Cloudflare Pages 深层路由可能 404
+     位置：src/App.tsx:29
+     问题：/share/:token 直接打开可能不回退到 SPA。
+     修改：新增 public/_redirects：/* /index.html 200。
+
+  P1 重要
+
+  6. 汇兑损耗口径不完整
+     位置：src/components/CashflowForm.tsx:45
+     问题：没录入/计算 fees_cny，fees_usd 也没纳入口径；target_rate 标注成 USD/
+     CNY 但实际按 CNY/USD 用。
+     修改：表单增加 CNY 手续费；文案改为“参考汇率 CNY/USD”。推荐公式：总CNY成本
+     = cny_amount + fees_cny，理想USD = 总CNY成本 / target_rate，损耗 = 理想USD
+     - usd_amount。fees_usd 只做拆分展示，避免重复扣。
+  7. 再平衡默认比例和碎股不符合要求
+     位置：src/app/rebalance.tsx:23、src/lib/calc/rebalance.ts:68
+     问题：默认等权，且只支持整股。
+     修改：默认 VOO:QQQM:SMH = 2:1:1，即 50/25/25。买入股数改为 0.0001 精度：
+     Math.floor(rawShares * 10000) / 10000，显示 toFixed(4)，文案删除“整股”。
+  8. 再平衡 settings 异步加载后不同步
+     位置：src/app/rebalance.tsx:23
+     问题：weights 只在首次 render 初始化，watchlist 后续变化不会更新。
+     修改：用 useEffect 监听 watchlist，当用户未手动修改或标的变化时重建默认权
+     重。
+  9. Supabase 部署文档漏跑 0002_daily_prices.sql
+     位置：README.md:74、supabase/README.md:5
+     问题：新部署缺 daily_prices 表，资产曲线失败。
+     修改：文档改成按顺序执行 0001_init.sql 和 0002_daily_prices.sql。
+  10. Quote Worker CORS 预览域名匹配错误
+
+     位置：workers/quote/src/index.ts:373、workers/quote/wrangler.toml:15
+     问题：注释说支持 preview pattern，代码实际精确匹配。
+     修改：支持 *.pages.dev 或明确列出生产域名/本地域名；不要让注释和实现矛盾。
+  11. SPY 基准遇到周末/假日入金会漏买
+
+     位置：src/lib/calc/history.ts:93
+     问题：cashflow 当天无 SPY close 时，只增加 invested，不增加 SPY shares。
+     修改：把 cashflow 规范到下一个交易日，或用 pendingSpyCash 在后续第一个有
+     SPY close 的日期买入。
+  12. 图表交易标记在金额模式下坐标错误
+
+     位置：src/components/EquityCurveChart.tsx:102
+     问题：金额模式用 navUser 放 marker，但主线是 pnlUser。
+     修改：Scatter value 改为：收益率模式 returnPctUser，金额模式 pnlUser。
+  13. 分享视图收益率在卖出后不准
+
+     位置：supabase/migrations/0001_init.sql:205
+     问题：shared_portfolio 用所有历史买入均价，没有按卖出扣减剩余成本。
+     修改：SQL 函数按平均成本等比例扣减卖出成本，或改为 RPC 返回脱敏后的前端同口
+     径计算结果。
+
+  P2 质量/部署
+
+  14. .env.example 缺失
+
+     位置：README.md:107
+     问题：文档要求复制 .env.example，但文件不存在。
+     修改：新增 .env.example，只放占位值：VITE_SUPABASE_URL、
+     VITE_SUPABASE_ANON_KEY、VITE_QUOTE_WORKER_URL。
+  15. lint 脚本不可运行
+
+     位置：package.json:11
+     问题：定义了 eslint，但没安装 ESLint。
+     修改：要么补齐 eslint、typescript-eslint、eslint-plugin-react-hooks 配置；
+     要么删除 lint 脚本，避免假质量门。
+  16. .gitignore 太少
+
+     位置：.gitignore:1
+     问题：未排除 node_modules/、dist/、worker node_modules、.env*。
+     修改：加入这些目录和环境文件，避免提交依赖、构建产物和密钥。
+  17. 前端 typecheck 不覆盖 Worker
+
+     位置：tsconfig.json:1、worker tsconfig
+     问题：根 npm run typecheck 只检查前端和 Vite 配置。
+     修改：根 package 增加脚本，例如同时跑 tsc -b、cd workers/quote && tsc
+     --noEmit、cd workers/email-cron && tsc --noEmit。
+  18. 新建交易/资金流默认日期用 UTC
+
+     位置：src/components/TxnForm.tsx:23、src/components/CashflowForm.tsx:22
+     问题：中国早上会默认成前一天。
+     修改：用本地日期格式化函数，或固定 Asia/Shanghai。
+  19. 美股开盘判断忽略 NYSE 假日
+
+     位置：src/lib/quote.ts:32
+     问题：节假日会误判盘中并 1 分钟刷新。
+     修改：复用 NYSE holiday calendar，或文案改成“工作日盘中估算”。
+  20. 邮件提醒默认开启
+
+     位置：supabase/migrations/0001_init.sql:102
+     问题：注册后自动订阅提醒。
+     修改：开源/多用户场景建议默认 email_enabled=false，让用户主动开启。
+  21. README 引用不存在/本机路径
+
+     位置：README.md:5
+     问题：写 CLAUDE.md 和本机 .claude 路径，仓库内实际是 AGENT.md。
+     修改：可不改；如果开源，建议改成 AGENT.md 或删除本机路径。

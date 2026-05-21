@@ -61,8 +61,19 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
         totalBoughtUsd += sh * px;
         buyCount += 1;
       } else {
-        // sell — drain fifo queue, accumulate realized P/L
-        let remaining = sh;
+        // sell — drain fifo queue, accumulate realized P/L.
+        // If the sell exceeds current holdings (data corruption / form bypass),
+        // we cap at available shares and warn rather than producing negative
+        // net positions silently.
+        const fifoAvailable = fifoQueue.reduce((acc, l) => acc + l.shares, 0);
+        const capped = Math.min(sh, fifoAvailable);
+        if (capped < sh - 1e-9) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[position] oversell on ${tx.ticker} on ${tx.trade_date}: tried to sell ${sh}, only ${fifoAvailable} available — capped`,
+          );
+        }
+        let remaining = capped;
         while (remaining > 1e-9 && fifoQueue.length > 0) {
           const lot = fifoQueue[0];
           const take = Math.min(remaining, lot.shares);
@@ -72,10 +83,11 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
           if (lot.shares <= 1e-9) fifoQueue.shift();
         }
         // avg-cost: keep per-share basis, subtract proportional cost
+        const avgSell = Math.min(capped, avgShares);
         if (avgShares > 1e-9) {
           const avgBasis = avgCostTotal / avgShares;
-          avgCostTotal -= avgBasis * sh;
-          avgShares -= sh;
+          avgCostTotal -= avgBasis * avgSell;
+          avgShares -= avgSell;
           if (avgShares < 1e-9) {
             avgShares = 0;
             avgCostTotal = 0;

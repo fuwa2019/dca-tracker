@@ -27,6 +27,8 @@ export interface Env {
   SUPABASE_SERVICE_ROLE_KEY: string;
   FROM_EMAIL: string;
   ADMIN_EMAIL?: string;
+  /** Required for manual triggers via POST /run; not used by the scheduled handler. */
+  ADMIN_SECRET?: string;
 }
 
 interface SettingsRow {
@@ -43,11 +45,21 @@ export default {
   async fetch(req: Request, env: Env) {
     const url = new URL(req.url);
     if (req.method === 'POST' && url.pathname === '/run') {
+      // Require bearer token to prevent anyone-on-the-internet from triggering Resend sends.
+      const expected = env.ADMIN_SECRET;
+      if (!expected) {
+        return new Response('admin_secret_not_configured\n', { status: 503 });
+      }
+      const auth = req.headers.get('Authorization') ?? '';
+      const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+      if (provided !== expected || provided.length === 0) {
+        return new Response('unauthorized\n', { status: 401 });
+      }
       const force = url.searchParams.get('force') === '1';
       await runDailyCheck(env, { force });
       return new Response(`ok${force ? ' (force)' : ''}\n`);
     }
-    return new Response('dca-email-cron — POST /run (or /run?force=1) to trigger\n', { status: 200 });
+    return new Response('dca-email-cron — POST /run with Authorization: Bearer <ADMIN_SECRET>\n', { status: 200 });
   },
 };
 
@@ -77,12 +89,13 @@ async function runDailyCheck(env: Env, opts: { force?: boolean } = {}) {
   for (const s of settingsList) {
     if (!s.email_to) continue;
     const dedupeKey = `sent:${s.user_id}:${ym}`;
-    if (!opts.force) {
-      const already = await env.EMAIL_KV.get(dedupeKey);
-      if (already) {
-        console.log(`[cron] user=${s.user_id} already sent for ${ym}, skip`);
-        continue;
-      }
+    // Always honor month-level dedupe — even in force mode — to avoid hammering Resend
+    // with repeated test sends. To re-send for an already-emailed month, manually
+    // delete the KV key via `wrangler kv key delete --binding=EMAIL_KV "<key>"`.
+    const already = await env.EMAIL_KV.get(dedupeKey);
+    if (already) {
+      console.log(`[cron] user=${s.user_id} already sent for ${ym}, skip`);
+      continue;
     }
 
     try {
@@ -91,11 +104,10 @@ async function runDailyCheck(env: Env, opts: { force?: boolean } = {}) {
         ym,
         monthlyDca: s.monthly_dca_usd,
       });
-      if (!opts.force) {
-        await env.EMAIL_KV.put(dedupeKey, '1', { expirationTtl: 60 * 60 * 24 * 40 });
-        await recordEmailLog(env, s.user_id, ym).catch((e) => console.warn('email_log write failed', e));
-      }
-      console.log(`[cron] sent to ${s.email_to} for ${ym}${opts.force ? ' (force, dedupe skipped)' : ''}`);
+      // Record dedupe regardless of force, for the reason explained above.
+      await env.EMAIL_KV.put(dedupeKey, '1', { expirationTtl: 60 * 60 * 24 * 40 });
+      await recordEmailLog(env, s.user_id, ym).catch((e) => console.warn('email_log write failed', e));
+      console.log(`[cron] sent to ${s.email_to} for ${ym}${opts.force ? ' (force)' : ''}`);
     } catch (err) {
       console.error(`[cron] send failed for ${s.email_to}:`, err);
     }

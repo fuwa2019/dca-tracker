@@ -76,6 +76,7 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
   const lastClose = new Map<string, number>();
   const netShares = new Map<string, number>();
   let spyShares = 0;
+  let pendingSpyCash = 0; // cash sitting in queue waiting for the next SPY trading day
   let invested = 0;
   let costBasis = 0;
 
@@ -94,13 +95,18 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
     const flow = cashByDate.get(iso);
     if (flow && flow > 0) {
       invested += flow;
-      const spyPx = lastClose.get(BENCHMARK_TICKER);
-      if (spyPx && spyPx > 0) {
-        spyShares += flow / spyPx;
-      }
+      pendingSpyCash += flow;
     }
 
-    // 2) Apply this day's transactions
+    // 2) Drain any pending SPY cash if today is a SPY trading day
+    //    (i.e., we have an actual close price for SPY on this date — not just a forward-filled prior close).
+    const spyCloseToday = prices.get(BENCHMARK_TICKER)?.get(iso);
+    if (spyCloseToday && spyCloseToday > 0 && pendingSpyCash > 0) {
+      spyShares += pendingSpyCash / spyCloseToday;
+      pendingSpyCash = 0;
+    }
+
+    // 3) Apply this day's transactions
     const dayTxns = txnsByDate.get(iso) ?? [];
     for (const t of dayTxns) {
       const delta = t.side === 'buy' ? t.shares : -t.shares;
@@ -108,19 +114,30 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       costBasis += t.side === 'buy' ? t.shares * t.price : -t.shares * t.price;
     }
 
-    // 3) Compute end-of-day NAV
+    // 3) Compute end-of-day NAV (stock holdings + uninvested cash sitting in Schwab)
     const isLastDay = iso === todayIso;
-    let navUser = 0;
+    let stockMv = 0;
     for (const [ticker, sh] of netShares) {
       if (Math.abs(sh) < 1e-9) continue;
       const px = isLastDay && todayQuotes?.get(ticker) != null
         ? (todayQuotes.get(ticker) as number)
         : (lastClose.get(ticker) ?? 0);
-      navUser += sh * px;
+      stockMv += sh * px;
     }
+    // cash = cumulative deposits minus cumulative buy-cost plus sell-proceeds (= invested - costBasis).
+    // We've been tracking costBasis as buys - sells, so cash = invested - costBasis.
+    const cashOnDay = invested - costBasis;
+    const navUser = stockMv + cashOnDay;
     const spyPxToday = isLastDay && todaySpyPrice != null
       ? todaySpyPrice
       : (lastClose.get(BENCHMARK_TICKER) ?? 0);
+    // On the last day, if SPY has a live price and there's still pending cash
+    // (e.g. user added a Sat/Sun cashflow and Monday's close isn't in daily_prices yet),
+    // drain it against the live price so today's navSpy reflects today's deposit.
+    if (isLastDay && todaySpyPrice != null && todaySpyPrice > 0 && pendingSpyCash > 0) {
+      spyShares += pendingSpyCash / todaySpyPrice;
+      pendingSpyCash = 0;
+    }
     const navSpy = spyShares * spyPxToday;
 
     out.push({
@@ -173,29 +190,23 @@ export function availableRanges(history: HistoryPoint[]): RangeKey[] {
  * chart doesn't drown in dots on long ranges. Returns one synthetic marker per
  * bucket, attached to the bucket's last day's data point.
  */
-export function aggregateMarkers(
-  history: HistoryPoint[],
-  granularity: 'day' | 'week' | 'month',
-): Array<{
+export interface MarkerPoint {
   date: string;
-  /** Index into the slice (so chart can position on x axis). */
   navUser: number;
   returnPctUser: number;
+  pnlUser: number;
   totalBuyUsd: number;
   totalSellUsd: number;
   count: number;
   hasLumpsum: boolean;
-}> {
+}
+
+export function aggregateMarkers(
+  history: HistoryPoint[],
+  granularity: 'day' | 'week' | 'month',
+): MarkerPoint[] {
   if (history.length === 0) return [];
-  const buckets = new Map<string, {
-    date: string;
-    navUser: number;
-    returnPctUser: number;
-    totalBuyUsd: number;
-    totalSellUsd: number;
-    count: number;
-    hasLumpsum: boolean;
-  }>();
+  const buckets = new Map<string, MarkerPoint>();
   for (const p of history) {
     if (p.txns.length === 0) continue;
     const key = granularity === 'day' ? p.date
@@ -205,6 +216,7 @@ export function aggregateMarkers(
       date: p.date,
       navUser: p.navUser,
       returnPctUser: p.returnPctUser,
+      pnlUser: p.pnlUser,
       totalBuyUsd: 0,
       totalSellUsd: 0,
       count: 0,
@@ -221,6 +233,7 @@ export function aggregateMarkers(
     existing.date = p.date;
     existing.navUser = p.navUser;
     existing.returnPctUser = p.returnPctUser;
+    existing.pnlUser = p.pnlUser;
     buckets.set(key, existing);
   }
   return [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date));

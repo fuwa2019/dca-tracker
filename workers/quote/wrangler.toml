@@ -12,7 +12,7 @@ binding = "QUOTE_CACHE"
 id = "2ed3dfa2431d4937be121ffb3883a847"
 preview_id = "52cfea8072f048c1a61b51b7727e4171"
 
-# Production + preview deploys + local dev. Pages preview subdomains are
-# matched by the trailing ".dca-tracker.pages.dev" — keep one entry per pattern.
+# CORS allow-list. `*` matches one DNS label (handles Pages preview hashes like
+# https://abc123.dca-tracker.pages.dev). Use https://*.pages.dev sparingly.
 [vars]
-ALLOWED_ORIGINS = "http://localhost:5173,https://dca-tracker.pages.dev"
+ALLOWED_ORIGINS = "http://localhost:5173,https://dca-tracker.pages.dev,https://*.dca-tracker.pages.dev"

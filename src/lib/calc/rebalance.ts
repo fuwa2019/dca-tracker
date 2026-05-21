@@ -67,7 +67,10 @@ export function rebalance({ holdings, targetWeights, newCashUsd }: RebalanceInpu
 
   return rows.map((r, i) => {
     const buyUsd = scaled[i];
-    const buyShares = r.price > 0 ? Math.floor(buyUsd / r.price) : 0;
+    // Schwab supports fractional shares to 4 decimal places. Floor to avoid
+    // accidentally over-spending on the user's recommended buy.
+    const rawShares = r.price > 0 ? buyUsd / r.price : 0;
+    const buyShares = Math.floor(rawShares * 10000) / 10000;
     const leftoverUsd = buyUsd - buyShares * r.price;
     const resultingValue = r.marketValue + buyShares * r.price;
     return {

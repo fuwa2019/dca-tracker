@@ -372,8 +372,11 @@ function json(body: unknown, status = 200): Response {
 
 function buildCors(req: Request, env: Env): Record<string, string> {
   const origin = req.headers.get('Origin') ?? '';
-  const allowed = (env.ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  const allow = allowed.includes(origin) ? origin : allowed[0] ?? '*';
+  const allowed = (env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const allow = isOriginAllowed(origin, allowed) ? origin : allowed[0] ?? '*';
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
@@ -381,6 +384,27 @@ function buildCors(req: Request, env: Env): Record<string, string> {
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };
+}
+
+/** Allow exact match OR wildcard `*` segments. Examples:
+ *    "https://dca-tracker.pages.dev" → exact only
+ *    "https://*.dca-tracker.pages.dev" → matches any subdomain (CF Pages preview deploys)
+ *    "https://*.pages.dev" → matches every Pages site (broader; use sparingly)
+ */
+function isOriginAllowed(origin: string, allowed: string[]): boolean {
+  if (!origin) return false;
+  for (const rule of allowed) {
+    if (rule === origin) return true;
+    if (!rule.includes('*')) continue;
+    // Escape regex specials, then turn '*' into '[^.]+' (one DNS label).
+    const pattern = '^' + rule.split('*').map(escapeRegex).join('[^.]+') + '$';
+    if (new RegExp(pattern).test(origin)) return true;
+  }
+  return false;
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function withCors(res: Response, headers: Record<string, string>): Response {

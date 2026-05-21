@@ -46,6 +46,12 @@ export function ymOf(iso: string): string {
   return iso.slice(0, 7);
 }
 
+/** Returns YYYY-MM-DD in Asia/Shanghai. Use for form defaults so 早上录入不会变成"前一天"。 */
+export function todayLocalIso(): string {
+  // en-CA emits YYYY-MM-DD; timeZone fixes the offset.
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+}
+
 /** Returns a Tailwind text-color class based on sign. */
 export function changeColor(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'text-muted-foreground';

@@ -16,7 +16,7 @@ import {
 } from '@/components/EquityCurveChart';
 import { useQuotes } from '@/hooks/useQuotes';
 import { useDailyPrices } from '@/hooks/useDailyPrices';
-import { useTransactions, useCashflows, useSettings, useTotalInvested } from '@/hooks/usePortfolio';
+import { useTransactions, useCashflows, useSettings, useTotalInvested, useCashBalance } from '@/hooks/usePortfolio';
 import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
@@ -35,6 +35,7 @@ export function DashboardPage() {
   const { data: cashflows = [] } = useCashflows();
   const { data: settings } = useSettings();
   const { total: totalInvested } = useTotalInvested();
+  const { cash } = useCashBalance();
 
   const watchlist = settings?.watchlist ?? ['VOO', 'QQQM', 'SMH'];
   const positions = useMemo(
@@ -79,18 +80,20 @@ export function DashboardPage() {
   const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');
 
   const aggregates = useMemo(() => {
-    let mv = 0;
+    let stockMv = 0;
     let costBasis = 0;
     let dayPL = 0;
     for (const p of positions) {
       const q = quoteByTicker.get(p.ticker);
       const { marketValue, costBasis: cb } = unrealizedPL(p, q?.price ?? null, basis);
-      mv += marketValue;
+      stockMv += marketValue;
       costBasis += cb;
       if (q?.change != null) dayPL += p.shares * q.change;
     }
-    return { mv, costBasis, dayPL, totalPL: mv - totalInvested };
-  }, [positions, quoteByTicker, basis, totalInvested]);
+    // NAV = stocks + uninvested cash sitting in Schwab.
+    const nav = stockMv + cash;
+    return { mv: nav, stockMv, cash, costBasis, dayPL, totalPL: nav - totalInvested };
+  }, [positions, quoteByTicker, basis, totalInvested, cash]);
 
   const target = Number(settings?.target_usd ?? 1_000_000);
   const annualRet = Number(settings?.expected_annual_ret ?? 0.08);
@@ -158,26 +161,31 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <StatCard label="组合市值" value={usd.format(aggregates.mv)} sub={`本金 ${usd.format(totalInvested)}`} delay={0} />
+        <StatCard
+          label="组合净值 (NAV)"
+          value={usd.format(aggregates.mv)}
+          sub={`持仓 ${usd.format(aggregates.stockMv)} · 现金 ${usd.format(aggregates.cash)}`}
+          delay={0}
+        />
         <StatCard
           label="今日盈亏"
           value={signedUsd(aggregates.dayPL)}
-          sub={aggregates.mv > 0 ? signedPct(aggregates.dayPL / aggregates.mv) : '—'}
+          sub={aggregates.stockMv > 0 ? signedPct(aggregates.dayPL / aggregates.stockMv) : '—'}
           className={changeColor(aggregates.dayPL)}
           delay={0.05}
         />
         <StatCard
-          label="累计盈亏 (vs 本金)"
+          label="累计盈亏 (NAV vs 本金)"
           value={signedUsd(aggregates.totalPL)}
           sub={totalInvested > 0 ? signedPct(aggregates.totalPL / totalInvested) : '—'}
           className={changeColor(aggregates.totalPL)}
           delay={0.1}
         />
         <StatCard
-          label="开仓盈亏"
-          value={signedUsd(aggregates.mv - aggregates.costBasis)}
-          sub={aggregates.costBasis > 0 ? signedPct((aggregates.mv - aggregates.costBasis) / aggregates.costBasis) : '—'}
-          className={changeColor(aggregates.mv - aggregates.costBasis)}
+          label="开仓盈亏（持仓口径）"
+          value={signedUsd(aggregates.stockMv - aggregates.costBasis)}
+          sub={aggregates.costBasis > 0 ? signedPct((aggregates.stockMv - aggregates.costBasis) / aggregates.costBasis) : '—'}
+          className={changeColor(aggregates.stockMv - aggregates.costBasis)}
           delay={0.15}
         />
       </div>

@@ -72,7 +72,10 @@
 见 [`supabase/README.md`](./supabase/README.md)。简版：
 
 1. supabase.com 新建免费项目
-2. SQL Editor 跑 `supabase/migrations/0001_init.sql`
+2. SQL Editor 按顺序跑：
+   - `supabase/migrations/0001_init.sql`（基础表 + RLS）
+   - `supabase/migrations/0002_daily_prices.sql`（日线价表，资产曲线 + SPY 对照所需）
+   - `supabase/migrations/0003_shared_portfolio_v2.sql`（修复卖出后均价的分享函数）
 3. Authentication → 启用 Email Magic Link
 4. 记下 `Project URL` / `anon key` / `service_role key`
 

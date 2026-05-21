@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { todayLocalIso } from '@/lib/format';
 import type { Database } from '@/lib/database.types';
 
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
@@ -19,12 +20,13 @@ export function CashflowForm({ initial, onDone }: Props) {
   const qc = useQueryClient();
   const isEdit = !!initial;
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalIso();
   const [cnyOutDate, setCnyOutDate] = useState(initial?.cny_out_date ?? today);
   const [cnyAmount, setCnyAmount] = useState(initial ? String(initial.cny_amount) : '');
   const [usdInDate, setUsdInDate] = useState(initial?.usd_in_date ?? today);
   const [usdAmount, setUsdAmount] = useState(initial?.usd_amount ? String(initial.usd_amount) : '');
   const [targetRate, setTargetRate] = useState(initial ? String(initial.target_rate) : '7.20');
+  const [feesCny, setFeesCny] = useState(initial ? String(initial.fees_cny) : '0');
   const [feesUsd, setFeesUsd] = useState(initial ? String(initial.fees_usd) : '0');
   const [note, setNote] = useState(initial?.note ?? '');
 
@@ -35,6 +37,7 @@ export function CashflowForm({ initial, onDone }: Props) {
       setUsdInDate(initial.usd_in_date ?? today);
       setUsdAmount(initial.usd_amount ? String(initial.usd_amount) : '');
       setTargetRate(String(initial.target_rate));
+      setFeesCny(String(initial.fees_cny));
       setFeesUsd(String(initial.fees_usd));
       setNote(initial.note ?? '');
     }
@@ -43,7 +46,12 @@ export function CashflowForm({ initial, onDone }: Props) {
   const cny = Number(cnyAmount) || 0;
   const usd = Number(usdAmount) || 0;
   const rate = Number(targetRate) || 0;
-  const idealUsd = rate > 0 ? cny / rate : 0;
+  const fCny = Number(feesCny) || 0;
+  // Loss = (CNY paid out incl. fees) at target CNY/USD rate − USD actually received.
+  // fees_usd is recorded for display only — it's already subtracted from usd_amount when
+  // the user reports the net USD that landed on Schwab.
+  const totalCnyCost = cny + fCny;
+  const idealUsd = rate > 0 ? totalCnyCost / rate : 0;
   const loss = idealUsd - usd;
   const lossPct = idealUsd > 0 ? loss / idealUsd : 0;
 
@@ -55,6 +63,7 @@ export function CashflowForm({ initial, onDone }: Props) {
         usd_in_date: usdInDate || null,
         usd_amount: usd || null,
         target_rate: rate,
+        fees_cny: fCny,
         fees_usd: Number(feesUsd) || 0,
         note: note || null,
       };
@@ -102,14 +111,18 @@ export function CashflowForm({ initial, onDone }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="rate">目标汇率 (USD/CNY)</Label>
+          <Label htmlFor="rate">参考汇率 (CNY/USD)</Label>
           <Input id="rate" type="number" step="0.0001" inputMode="decimal" value={targetRate} onChange={(e) => setTargetRate(e.target.value)} required />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="fees">USD 手续费</Label>
-          <Input id="fees" type="number" step="0.01" inputMode="decimal" value={feesUsd} onChange={(e) => setFeesUsd(e.target.value)} />
+          <Label htmlFor="fees-cny">CNY 手续费</Label>
+          <Input id="fees-cny" type="number" step="0.01" inputMode="decimal" value={feesCny} onChange={(e) => setFeesCny(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="fees-usd">USD 手续费</Label>
+          <Input id="fees-usd" type="number" step="0.01" inputMode="decimal" value={feesUsd} onChange={(e) => setFeesUsd(e.target.value)} />
         </div>
       </div>
 
@@ -119,10 +132,17 @@ export function CashflowForm({ initial, onDone }: Props) {
       </div>
 
       {idealUsd > 0 && (
-        <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs tnum">
-          <div className="flex justify-between text-muted-foreground"><span>理想 USD ({cny.toFixed(0)} / {rate.toFixed(4)})</span><span>${idealUsd.toFixed(2)}</span></div>
+        <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs tnum space-y-1">
+          <div className="flex justify-between text-muted-foreground">
+            <span>总 CNY 成本 ({cny.toFixed(2)}{fCny > 0 ? ` + ${fCny.toFixed(2)} 手续费` : ''})</span>
+            <span>¥{totalCnyCost.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-muted-foreground">
+            <span>理想 USD (÷ {rate.toFixed(4)})</span>
+            <span>${idealUsd.toFixed(2)}</span>
+          </div>
           {usd > 0 && (
-            <div className={`mt-1 flex justify-between font-medium ${loss > 0 ? 'text-danger' : 'text-success'}`}>
+            <div className={`flex justify-between font-medium ${loss > 0 ? 'text-danger' : 'text-success'}`}>
               <span>损耗</span><span>${loss.toFixed(2)} ({(lossPct * 100).toFixed(2)}%)</span>
             </div>
           )}

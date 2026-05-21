@@ -98,13 +98,16 @@ export function computeTwr(input: TwrInput): TwrResult | null {
     const flowOnDay = flowsByDate.get(d) ?? 0;
     cumulativeFlow += flowOnDay;
 
-    if (i > 0 && prevValue + flowOnDay > 0) {
-      // Sub-period return: (V_end - V_start - flow) / (V_start + flow)
-      // We treat flow on date d as happening at start of the sub-period [d, next].
-      const denom = prevValue + flowOnDay;
-      const r = (value - prevValue - flowOnDay) / denom;
+    if (i > 0 && prevValue > 0) {
+      // Strict TWR: the sub-period return is V_just_before_flow / V_prev_start − 1,
+      // i.e. flow on date d is treated as arriving at the END of the prior sub-period
+      // (period boundary). After we record the return, we add the flow into the
+      // NEW sub-period's starting value (prevValue for next iteration).
+      const valueBeforeFlow = value - flowOnDay;
+      const r = valueBeforeFlow / prevValue - 1;
       if (Number.isFinite(r)) subReturns.push(r);
     }
+    // Set up next sub-period's starting value: post-flow value on this breakpoint.
     prevValue = value;
   }
 

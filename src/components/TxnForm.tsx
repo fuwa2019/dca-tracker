@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,6 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useTransactions } from '@/hooks/usePortfolio';
+import { aggregatePositions } from '@/lib/calc/position';
+import { todayLocalIso } from '@/lib/format';
 import type { Database } from '@/lib/database.types';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
@@ -20,7 +23,8 @@ export function TxnForm({ initial, onDone }: Props) {
   const qc = useQueryClient();
   const isEdit = !!initial;
 
-  const [tradeDate, setTradeDate] = useState(initial?.trade_date ?? new Date().toISOString().slice(0, 10));
+  const { data: allTxns = [] } = useTransactions();
+  const [tradeDate, setTradeDate] = useState(initial?.trade_date ?? todayLocalIso());
   const [ticker, setTicker] = useState(initial?.ticker ?? 'VOO');
   const [side, setSide] = useState<'buy' | 'sell'>(initial?.side ?? 'buy');
   const [price, setPrice] = useState(initial ? String(initial.price) : '');
@@ -40,8 +44,22 @@ export function TxnForm({ initial, onDone }: Props) {
     }
   }, [initial]);
 
+  // Max sellable shares for the current ticker (excluding this txn if editing).
+  const maxSellable = useMemo(() => {
+    if (side !== 'sell') return Infinity;
+    const upper = ticker.toUpperCase();
+    const others = isEdit && initial ? allTxns.filter((t) => t.id !== initial.id) : allTxns;
+    const positions = aggregatePositions(others as TxnRow[]);
+    return positions.find((p) => p.ticker === upper)?.shares ?? 0;
+  }, [side, ticker, allTxns, isEdit, initial]);
+
+  const sellOverflow = side === 'sell' && Number(shares) > maxSellable + 1e-9;
+
   const mut = useMutation({
     mutationFn: async () => {
+      if (sellOverflow) {
+        throw new Error(`卖出数量 ${shares} 超过当前持仓 ${maxSellable.toFixed(4)} 股`);
+      }
       const payload = {
         trade_date: tradeDate,
         ticker: ticker.toUpperCase(),
@@ -116,7 +134,22 @@ export function TxnForm({ initial, onDone }: Props) {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="shares">股数</Label>
-          <Input id="shares" type="number" step="0.000001" inputMode="decimal" value={shares} onChange={(e) => setShares(e.target.value)} required />
+          <Input
+            id="shares"
+            type="number"
+            step="0.000001"
+            inputMode="decimal"
+            value={shares}
+            onChange={(e) => setShares(e.target.value)}
+            required
+            aria-invalid={sellOverflow}
+          />
+          {side === 'sell' && Number.isFinite(maxSellable) && (
+            <p className={`text-[11px] tnum ${sellOverflow ? 'text-danger' : 'text-muted-foreground'}`}>
+              当前可卖 {maxSellable.toFixed(4)} 股
+              {sellOverflow && ' · 超出持仓'}
+            </p>
+          )}
         </div>
       </div>
 
@@ -135,7 +168,7 @@ export function TxnForm({ initial, onDone }: Props) {
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => onDone?.()}>取消</Button>
-        <Button type="submit" disabled={mut.isPending}>
+        <Button type="submit" disabled={mut.isPending || sellOverflow}>
           {mut.isPending ? '保存中…' : isEdit ? '保存' : '添加交易'}
         </Button>
       </div>
