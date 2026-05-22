@@ -46,16 +46,24 @@ export function SharePage() {
   const history: HistoryPoint[] = useMemo(() => {
     const raw = historyQuery.data;
     if (!raw || 'error' in raw) return [];
-    return raw.series
-      .filter((p) => isIsoDate(p.date) && Number.isFinite(p.return_pct_user) && Number.isFinite(p.return_pct_spy))
+    const series = Array.isArray(raw.series) ? raw.series : [];
+    return series
+      .map((p) => ({
+        date: normalizeDate(p.date),
+        returnPctUser: toFiniteNumber(p.return_pct_user),
+        returnPctSpy: toFiniteNumber(p.return_pct_spy),
+      }))
+      .filter((p): p is { date: string; returnPctUser: number; returnPctSpy: number } => (
+        isIsoDate(p.date) && p.returnPctUser !== null && p.returnPctSpy !== null
+      ))
       .map((p) => ({
         date: p.date,
         invested: 0,
         costBasis: 0,
         navUser: 0,
         navSpy: 0,
-        returnPctUser: p.return_pct_user,
-        returnPctSpy: p.return_pct_spy,
+        returnPctUser: p.returnPctUser,
+        returnPctSpy: p.returnPctSpy,
         pnlUser: 0,
         pnlSpy: 0,
         txns: [],
@@ -105,7 +113,7 @@ export function SharePage() {
         onShowBenchmarkChange={setShowBenchmark}
         loading={historyQuery.isLoading}
         showDemoControls={false}
-        emptyMessage="暂无可公开展示的历史数据"
+        emptyMessage={historyQuery.error ? '历史数据加载失败，请刷新重试' : '暂无可公开展示的历史数据'}
       />
 
       <Card>
@@ -156,6 +164,16 @@ function isValidShareToken(value: string | undefined): value is string {
 
 function isIsoDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function normalizeDate(value: unknown) {
+  if (typeof value === 'string') return value.slice(0, 10);
+  return '';
+}
+
+function toFiniteNumber(value: unknown) {
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
