@@ -90,8 +90,9 @@ export function usePortfolioHistory() {
         })),
       };
     },
-    staleTime: 60 * 1000,
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: (previous) => previous,
+    refetchOnWindowFocus: false,
   });
 }
 

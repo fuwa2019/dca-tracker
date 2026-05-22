@@ -220,6 +220,10 @@ export interface Database {
         Args: Record<string, never>;
         Returns: PortfolioHistory | { error: string };
       };
+      refresh_portfolio_history_cache: {
+        Args: Record<string, never>;
+        Returns: PortfolioHistory | { error: string };
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

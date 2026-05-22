@@ -25,8 +25,9 @@ export function SharePage() {
       return data as SharedPortfolio | { error: string };
     },
     enabled: !!shareToken,
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60_000,
+    placeholderData: (previous) => previous,
+    refetchOnWindowFocus: false,
   });
 
   const historyQuery = useQuery({
@@ -38,8 +39,9 @@ export function SharePage() {
       return data as SharedHistory | { error: string };
     },
     enabled: !!shareToken,
-    refetchInterval: 5 * 60_000,
-    refetchOnWindowFocus: true,
+    staleTime: 10 * 60_000,
+    placeholderData: (previous) => previous,
+    refetchOnWindowFocus: false,
   });
 
   // Adapt SharedHistory to the same HistoryPoint shape used by the dashboard chart.

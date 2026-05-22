@@ -28,6 +28,7 @@ const LEGACY_DEMO_NOTE = '[DCA_TEST_10Y_60_VOO]';
 const DEMO_TICKER = 'QQQ';
 const DEMO_MONTHLY_USD = 60;
 const DEMO_RATE = 7.2;
+const MAX_CHART_POINTS = 720;
 
 interface Props {
   history: HistoryPoint[];
@@ -87,7 +88,7 @@ function IbkrPerformancePanelView({
 
   const performanceRows = useMemo(() => buildPerformanceRows(history), [history]);
   const visibleRows = useMemo(() => sliceRowsByRange(performanceRows, range), [performanceRows, range]);
-  const chartRows = useMemo<ChartRow[]>(
+  const fullChartRows = useMemo<ChartRow[]>(
     () =>
       visibleRows.map((row) => ({
         ...row,
@@ -98,6 +99,7 @@ function IbkrPerformancePanelView({
       })),
     [visibleRows],
   );
+  const chartRows = useMemo(() => downsampleChartRows(fullChartRows, MAX_CHART_POINTS), [fullChartRows]);
 
   const summary = useMemo(() => buildSummary(performanceRows), [performanceRows]);
   const dateLabel = visibleRows.length > 0
@@ -648,7 +650,13 @@ function buildSummary(rows: PerfRow[]) {
 
 function returnSince(rows: PerfRow[], startDate: string, key: 'spyCumulativeReturn' | 'portfolioCumulativeReturn') {
   const end = rows[rows.length - 1]?.[key] ?? 0;
-  const previous = [...rows].reverse().find((row) => row.date < startDate)?.[key] ?? 0;
+  let previous = 0;
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].date < startDate) {
+      previous = rows[i][key];
+      break;
+    }
+  }
   return periodReturn(previous, end);
 }
 
@@ -684,6 +692,16 @@ function roundUp(value: number) {
 function formatPct(value: number) {
   if (!Number.isFinite(value)) return '-';
   return (value * 100).toFixed(2);
+}
+
+function downsampleChartRows(rows: ChartRow[], maxPoints: number) {
+  if (rows.length <= maxPoints) return rows;
+  const step = Math.ceil(rows.length / maxPoints);
+  const sampled: ChartRow[] = [];
+  for (let i = 0; i < rows.length; i += step) sampled.push(rows[i]);
+  const last = rows[rows.length - 1];
+  if (sampled[sampled.length - 1] !== last) sampled.push(last);
+  return sampled;
 }
 
 function useDemoDcaData() {
@@ -773,12 +791,21 @@ function useDemoDcaData() {
 }
 
 async function invalidatePortfolioQueries(qc: ReturnType<typeof useQueryClient>) {
+  await refreshPortfolioHistoryCache();
   await Promise.all([
     qc.invalidateQueries({ queryKey: ['transactions'] }),
     qc.invalidateQueries({ queryKey: ['cashflows'] }),
     qc.invalidateQueries({ queryKey: ['portfolio_history'] }),
     qc.invalidateQueries({ queryKey: ['daily_prices'] }),
   ]);
+}
+
+async function refreshPortfolioHistoryCache() {
+  const { error } = await supabase.rpc('refresh_portfolio_history_cache');
+  if (!error) return;
+  if (error.code === 'PGRST202' || /refresh_portfolio_history_cache/i.test(error.message)) return;
+  // eslint-disable-next-line no-console
+  console.warn('[history-cache] refresh failed', error.message);
 }
 
 function seriesToPriceMap(series: HistorySeries[], ticker: string) {

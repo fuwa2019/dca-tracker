@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { PositionCard } from '@/components/PositionCard';
@@ -7,20 +6,17 @@ import { StatCard } from '@/components/StatCard';
 import { TargetProgressRing } from '@/components/TargetProgressRing';
 import { IbkrPerformancePanel } from '@/components/IbkrPerformancePanel';
 import { useQuotes } from '@/hooks/useQuotes';
-import { useDailyPrices } from '@/hooks/useDailyPrices';
 import { useTransactions, useCashflows, useSettings, useTotalInvested, useCashBalance, usePortfolioHistory } from '@/hooks/usePortfolio';
 import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
-import { computeTwr } from '@/lib/calc/twr';
-import { availableRanges, buildEquityHistory, BENCHMARK_TICKER, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
+import { availableRanges, BENCHMARK_TICKER, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
 import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
 import { isUsMarketOpen } from '@/lib/quote';
 
 const COST_BASIS_MODE = 'avg' as const;
 
 export function DashboardPage() {
-  const qc = useQueryClient();
   const [chartRange, setChartRange] = useState<RangeKey>('ALL');
   const [showBenchmark, setShowBenchmark] = useState(true);
   const { data: txns = [] } = useTransactions();
@@ -48,27 +44,7 @@ export function DashboardPage() {
     const all = [...cashDates, ...tradeDates].sort();
     return all[0] ?? null;
   }, [cashflows, txns]);
-  const historySymbols = useMemo(
-    () => [...new Set([...txns.map((t) => t.ticker.toUpperCase()), BENCHMARK_TICKER])],
-    [txns],
-  );
-  const { data: dailyPrices } = useDailyPrices(historySymbols, earliestDate);
   const portfolioHistory = usePortfolioHistory();
-  const todayQuotes = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const q of quotes) if (q.price != null) m.set(q.ticker, q.price);
-    return m;
-  }, [quotes]);
-  const localHistory = useMemo(() => {
-    if (!dailyPrices) return [];
-    return buildEquityHistory({
-      transactions: txns,
-      cashflows,
-      prices: dailyPrices,
-      todayQuotes,
-      todaySpyPrice: todayQuotes.get(BENCHMARK_TICKER),
-    });
-  }, [dailyPrices, txns, cashflows, todayQuotes]);
   const rpcHistory = useMemo(() => {
     const rows = portfolioHistory.data?.series ?? [];
     return rows.map((p) => ({
@@ -84,40 +60,7 @@ export function DashboardPage() {
       txns: p.txns ?? [],
     }));
   }, [portfolioHistory.data]);
-  const preferLocalHistory = hasReturnMovement(localHistory) && !hasReturnMovement(rpcHistory);
-  const historySelection = useMemo(() => {
-    if (preferLocalHistory || rpcHistory.length === 0) {
-      return { history: localHistory, source: 'local' };
-    }
-    if (localHistory.length === 0) {
-      return { history: rpcHistory, source: 'rpc' };
-    }
-    const merged = mergeLatestLivePoint(rpcHistory, localHistory);
-    return { history: merged, source: merged === rpcHistory ? 'rpc' : 'rpc+live' };
-  }, [preferLocalHistory, rpcHistory, localHistory]);
-  const history = historySelection.history;
-
-  useEffect(() => {
-    if (!dailyPrices) return;
-    qc.invalidateQueries({ queryKey: ['portfolio_history'] });
-  }, [dailyPrices, qc]);
-
-  // One-time diagnostic — remove once曲线确认正常。
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useEffect(() => {
-    if (history.length === 0) return;
-    // eslint-disable-next-line no-console
-    console.log('[equity-curve]', {
-      points: history.length,
-      first: history[0],
-      last: history[history.length - 1],
-      source: historySelection.source,
-      rpcPoints: rpcHistory.length,
-      localPoints: localHistory.length,
-      pricesTickers: dailyPrices ? [...dailyPrices.keys()] : [],
-      pricesSizes: dailyPrices ? Object.fromEntries([...dailyPrices.entries()].map(([k, v]) => [k, v.size])) : {},
-    });
-  }, [history, dailyPrices, rpcHistory.length, localHistory.length, historySelection.source]);
+  const history = rpcHistory;
 
   const ranges = useMemo(() => availableRanges(history), [history]);
   const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');
@@ -163,24 +106,7 @@ export function DashboardPage() {
     }
     return '数据条件不足以计算';
   }, [xirr, xirrEvents, aggregates.mv]);
-  const twrResult = useMemo(
-    () =>
-      computeTwr({
-        transactions: txns.map((t) => ({
-          trade_date: t.trade_date,
-          ticker: t.ticker,
-          side: t.side,
-          price: Number(t.price),
-          shares: Number(t.shares),
-        })),
-        cashflows: cashflows.map((c) => ({ usd_in_date: c.usd_in_date, usd_amount: c.usd_amount })),
-        currentMarketValueUsd: aggregates.mv,
-        priceOn: dailyPrices
-          ? (ticker, isoDate) => dailyPrices.get(ticker)?.get(isoDate) ?? null
-          : undefined,
-      }),
-    [txns, cashflows, aggregates.mv, dailyPrices],
-  );
+  const twrResult = useMemo(() => summarizeTwrFromHistory(history), [history]);
 
   const marketOpen = isUsMarketOpen();
 
@@ -266,7 +192,7 @@ export function DashboardPage() {
         availableRanges={ranges}
         showBenchmark={showBenchmark}
         onShowBenchmarkChange={setShowBenchmark}
-        loading={history.length === 0 && !!earliestDate}
+        loading={portfolioHistory.isLoading || (history.length === 0 && !!earliestDate)}
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -302,28 +228,23 @@ export function DashboardPage() {
   );
 }
 
-function hasReturnMovement(history: Array<{ returnPctUser: number; returnPctSpy: number }>) {
-  return history.some((p) => Math.abs(p.returnPctUser) > 1e-8 || Math.abs(p.returnPctSpy) > 1e-8);
+function summarizeTwrFromHistory(history: HistoryPoint[]) {
+  const first = history[0];
+  const last = history[history.length - 1];
+  if (!first || !last) return null;
+  const periodDays = Math.max(0, daysBetween(first.date, last.date));
+  const twr = last.returnPctUser;
+  const canAnnualize = periodDays >= 90 && Number.isFinite(twr) && 1 + twr > 0;
+  return {
+    twr,
+    annualized: canAnnualize ? Math.pow(1 + twr, 365 / periodDays) - 1 : null,
+    periodDays,
+    approximated: false,
+  };
 }
 
-function mergeLatestLivePoint(primary: HistoryPoint[], live: HistoryPoint[]) {
-  const primaryLast = primary[primary.length - 1];
-  const liveLast = live[live.length - 1];
-  if (!primaryLast || !liveLast || primaryLast.date !== liveLast.date) return primary;
-
-  return [
-    ...primary.slice(0, -1),
-    {
-      ...primaryLast,
-      invested: liveLast.invested,
-      costBasis: liveLast.costBasis,
-      navUser: liveLast.navUser,
-      navSpy: liveLast.navSpy,
-      returnPctUser: liveLast.returnPctUser,
-      returnPctSpy: liveLast.returnPctSpy,
-      pnlUser: liveLast.pnlUser,
-      pnlSpy: liveLast.pnlSpy,
-      txns: liveLast.txns.length > 0 ? liveLast.txns : primaryLast.txns,
-    },
-  ];
+function daysBetween(startIso: string, endIso: string) {
+  const [sy, sm, sd] = startIso.split('-').map(Number);
+  const [ey, em, ed] = endIso.split('-').map(Number);
+  return Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86_400_000);
 }
