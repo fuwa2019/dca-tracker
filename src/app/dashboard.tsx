@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { PositionCard } from '@/components/PositionCard';
 import { StatCard } from '@/components/StatCard';
-import { CostBasisToggle } from '@/components/CostBasisToggle';
 import { TargetProgressRing } from '@/components/TargetProgressRing';
 import { IbkrPerformancePanel } from '@/components/IbkrPerformancePanel';
 import { useQuotes } from '@/hooks/useQuotes';
@@ -14,13 +13,14 @@ import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
 import { computeTwr } from '@/lib/calc/twr';
-import { availableRanges, buildEquityHistory, BENCHMARK_TICKER, type RangeKey } from '@/lib/calc/history';
+import { availableRanges, buildEquityHistory, BENCHMARK_TICKER, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
 import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
 import { isUsMarketOpen } from '@/lib/quote';
 
+const COST_BASIS_MODE = 'avg' as const;
+
 export function DashboardPage() {
   const qc = useQueryClient();
-  const [basis, setBasis] = useState<'avg' | 'fifo'>('avg');
   const [chartRange, setChartRange] = useState<RangeKey>('ALL');
   const [showBenchmark, setShowBenchmark] = useState(true);
   const { data: txns = [] } = useTransactions();
@@ -85,7 +85,17 @@ export function DashboardPage() {
     }));
   }, [portfolioHistory.data]);
   const preferLocalHistory = hasReturnMovement(localHistory) && !hasReturnMovement(rpcHistory);
-  const history = rpcHistory.length > 0 && !preferLocalHistory ? rpcHistory : localHistory;
+  const historySelection = useMemo(() => {
+    if (preferLocalHistory || rpcHistory.length === 0) {
+      return { history: localHistory, source: 'local' };
+    }
+    if (localHistory.length === 0) {
+      return { history: rpcHistory, source: 'rpc' };
+    }
+    const merged = mergeLatestLivePoint(rpcHistory, localHistory);
+    return { history: merged, source: merged === rpcHistory ? 'rpc' : 'rpc+live' };
+  }, [preferLocalHistory, rpcHistory, localHistory]);
+  const history = historySelection.history;
 
   useEffect(() => {
     if (!dailyPrices) return;
@@ -101,13 +111,13 @@ export function DashboardPage() {
       points: history.length,
       first: history[0],
       last: history[history.length - 1],
-      source: rpcHistory.length > 0 && !preferLocalHistory ? 'rpc' : 'local',
+      source: historySelection.source,
       rpcPoints: rpcHistory.length,
       localPoints: localHistory.length,
       pricesTickers: dailyPrices ? [...dailyPrices.keys()] : [],
       pricesSizes: dailyPrices ? Object.fromEntries([...dailyPrices.entries()].map(([k, v]) => [k, v.size])) : {},
     });
-  }, [history, dailyPrices, rpcHistory.length, localHistory.length, preferLocalHistory]);
+  }, [history, dailyPrices, rpcHistory.length, localHistory.length, historySelection.source]);
 
   const ranges = useMemo(() => availableRanges(history), [history]);
   const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');
@@ -118,7 +128,7 @@ export function DashboardPage() {
     let dayPL = 0;
     for (const p of positions) {
       const q = quoteByTicker.get(p.ticker);
-      const { marketValue, costBasis: cb } = unrealizedPL(p, q?.price ?? null, basis);
+      const { marketValue, costBasis: cb } = unrealizedPL(p, q?.price ?? null, COST_BASIS_MODE);
       stockMv += marketValue;
       costBasis += cb;
       if (q?.change != null) dayPL += p.shares * q.change;
@@ -126,7 +136,7 @@ export function DashboardPage() {
     // NAV = stocks + uninvested cash sitting in Schwab.
     const nav = stockMv + cash;
     return { mv: nav, stockMv, cash, costBasis, dayPL, totalPL: nav - totalInvested };
-  }, [positions, quoteByTicker, basis, totalInvested, cash]);
+  }, [positions, quoteByTicker, totalInvested, cash]);
 
   const target = Number(settings?.target_usd ?? 1_000_000);
   const annualRet = Number(settings?.expected_annual_ret ?? 0.08);
@@ -189,7 +199,6 @@ export function DashboardPage() {
           <span className="text-xs text-muted-foreground">
             {marketOpen ? '🟢 美股盘中 · 行情延迟 ~15min' : '⚪️ 盘后 / 休市'}
           </span>
-          <CostBasisToggle value={basis} onChange={setBasis} />
         </div>
       </div>
 
@@ -284,7 +293,7 @@ export function DashboardPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {positions.map((p, i) => (
-              <PositionCard key={p.ticker} position={p} quote={quoteByTicker.get(p.ticker)} basis={basis} index={i} />
+              <PositionCard key={p.ticker} position={p} quote={quoteByTicker.get(p.ticker)} basis={COST_BASIS_MODE} index={i} />
             ))}
           </div>
         )}
@@ -295,4 +304,26 @@ export function DashboardPage() {
 
 function hasReturnMovement(history: Array<{ returnPctUser: number; returnPctSpy: number }>) {
   return history.some((p) => Math.abs(p.returnPctUser) > 1e-8 || Math.abs(p.returnPctSpy) > 1e-8);
+}
+
+function mergeLatestLivePoint(primary: HistoryPoint[], live: HistoryPoint[]) {
+  const primaryLast = primary[primary.length - 1];
+  const liveLast = live[live.length - 1];
+  if (!primaryLast || !liveLast || primaryLast.date !== liveLast.date) return primary;
+
+  return [
+    ...primary.slice(0, -1),
+    {
+      ...primaryLast,
+      invested: liveLast.invested,
+      costBasis: liveLast.costBasis,
+      navUser: liveLast.navUser,
+      navSpy: liveLast.navSpy,
+      returnPctUser: liveLast.returnPctUser,
+      returnPctSpy: liveLast.returnPctSpy,
+      pnlUser: liveLast.pnlUser,
+      pnlSpy: liveLast.pnlSpy,
+      txns: liveLast.txns.length > 0 ? liveLast.txns : primaryLast.txns,
+    },
+  ];
 }

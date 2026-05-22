@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CartesianGrid,
+  Tooltip,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -22,8 +23,9 @@ const GRID = '#EEEEEE';
 const TEXT = '#111111';
 const SECONDARY = '#6B7280';
 const PANEL = '#F5F8FC';
-const DEMO_NOTE = '[DCA_TEST_10Y_60_VOO]';
-const DEMO_TICKER = 'VOO';
+const DEMO_NOTE = '[DCA_TEST_10Y_60_QQQ]';
+const LEGACY_DEMO_NOTE = '[DCA_TEST_10Y_60_VOO]';
+const DEMO_TICKER = 'QQQ';
 const DEMO_MONTHLY_USD = 60;
 const DEMO_RATE = 7.2;
 
@@ -143,7 +145,7 @@ function FilterPanel({
     { key: '3M', label: '3月' },
     { key: '6M', label: '6月' },
     { key: '1Y', label: '1年' },
-    { key: 'ALL', label: '开户至今' },
+    { key: 'ALL', label: '开仓至今' },
   ];
 
   return (
@@ -166,10 +168,6 @@ function FilterPanel({
         })}
       </FilterGroup>
 
-      <FilterGroup title="频率">
-        <button type="button" className="h-6 border px-2.5 text-[12px]" style={buttonStyle(true)}>每日</button>
-      </FilterGroup>
-
       <FilterGroup title="业绩表现衡量">
         <button type="button" className="h-6 border px-2.5 text-[12px]" style={buttonStyle(true)}>时间加权回报</button>
       </FilterGroup>
@@ -187,10 +185,6 @@ function FilterPanel({
         >
           {showBenchmark ? '✓ SPY' : 'SPY'}
         </button>
-      </FilterGroup>
-
-      <FilterGroup title="实时">
-        <button type="button" className="h-6 border px-2.5 text-[12px]" style={buttonStyle(false)}>日线收盘价</button>
       </FilterGroup>
 
       <FilterGroup title="测试数据">
@@ -245,16 +239,12 @@ function SummaryTable({
           <div className="text-[16px] font-semibold" style={{ color: TEXT }}>历史业绩</div>
           <div className="mt-1 text-[11px]" style={{ color: SECONDARY }}>{dateLabel}</div>
         </div>
-        <label className="flex items-center gap-2 text-[12px]" style={{ color: '#333333' }}>
-          <input type="checkbox" className="h-3.5 w-3.5" />
-          年化收益率
-        </label>
       </div>
       <table className="w-full border-collapse text-[13px]">
         <thead>
           <tr className="border-t border-b" style={{ borderColor: '#E5E5E5' }}>
             <th className="px-4 py-2 text-left font-medium" />
-            {['MTD %', 'QTD %', 'YTD %', '开户至今 %'].map((h) => (
+            {['MTD %', 'QTD %', 'YTD %', '开仓至今 %'].map((h) => (
               <th key={h} className="px-4 py-2 text-right font-medium" style={{ color: TEXT }}>{h}</th>
             ))}
           </tr>
@@ -307,6 +297,7 @@ function PerformanceChartCard({
   const pageCount = Math.max(1, Math.ceil(tableRows.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);
   const pageRows = tableRows.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const [infoOpen, setInfoOpen] = useState(false);
   const domain = chartDomain(rows.flatMap((row) => [
     showBenchmark ? row.spyCumulativePct : 0,
     row.portfolioCumulativePct,
@@ -314,24 +305,39 @@ function PerformanceChartCard({
 
   return (
     <div className="overflow-hidden border bg-white" style={{ borderColor: BORDER, borderRadius: 3 }}>
-      <div className="flex h-[72px] items-start justify-between border-b px-4 py-3" style={{ borderColor: '#E5E5E5' }}>
+      <div className="relative flex h-[72px] items-start justify-between border-b px-4 py-3" style={{ borderColor: '#E5E5E5' }}>
         <div>
           <div className="text-[16px] font-semibold" style={{ color: TEXT }}>{title}</div>
           <div className="mt-1 text-[11px]" style={{ color: SECONDARY }}>{dateLabel}</div>
         </div>
-        <div
+        <button
+          type="button"
+          onClick={() => setInfoOpen((open) => !open)}
           className="flex h-4 w-4 items-center justify-center rounded-full text-[11px] leading-none text-white"
           style={{ background: DEEP_BLUE }}
-          title="时间加权收益率"
+          aria-label="查看累积基准比较说明"
         >
           ?
-        </div>
+        </button>
+        {infoOpen && (
+          <div
+            className="absolute right-4 top-10 z-20 w-[320px] border bg-white p-3 text-[12px] leading-5"
+            style={{ borderColor: BORDER, color: TEXT }}
+          >
+            累积基准比较展示从当前筛选起点开始，组合与 SPY 基准的累计时间加权收益率。今日点优先使用实时行情；历史日期使用日线收盘价。
+          </div>
+        )}
       </div>
 
       <div className="h-[380px] bg-white px-3 pb-2 pt-4">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={rows} margin={{ top: 12, right: 18, left: 6, bottom: 28 }}>
             <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
+            <Tooltip
+              cursor={<CrosshairCursor domain={domain} />}
+              content={<PerformanceTooltip showBenchmark={showBenchmark} />}
+              isAnimationActive={false}
+            />
             <XAxis
               dataKey="date"
               axisLine={false}
@@ -356,7 +362,7 @@ function PerformanceChartCard({
                 stroke={GREEN}
                 strokeWidth={2}
                 dot={false}
-                activeDot={false}
+                activeDot={{ r: 3, strokeWidth: 0, fill: GREEN }}
                 isAnimationActive={false}
               />
             )}
@@ -366,7 +372,7 @@ function PerformanceChartCard({
               stroke={BLUE}
               strokeWidth={2}
               dot={false}
-              activeDot={false}
+              activeDot={{ r: 3, strokeWidth: 0, fill: BLUE }}
               isAnimationActive={false}
             />
           </LineChart>
@@ -376,6 +382,84 @@ function PerformanceChartCard({
       <PerformanceTable rows={pageRows} showBenchmark={showBenchmark} />
       <Pager page={safePage} pageCount={pageCount} onPageChange={onPageChange} />
     </div>
+  );
+}
+
+function PerformanceTooltip({
+  active,
+  payload,
+  label,
+  showBenchmark,
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey?: string; value?: number; payload?: ChartRow }>;
+  label?: string;
+  showBenchmark: boolean;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+  return (
+    <div className="border bg-white px-3 py-2 text-[12px] shadow-none" style={{ borderColor: BORDER, color: TEXT }}>
+      <div className="mb-1 tabular-nums" style={{ color: SECONDARY }}>日期 {label ?? row.date}</div>
+      {showBenchmark && (
+        <div className="flex min-w-[230px] justify-between gap-4 tabular-nums">
+          <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5" style={{ background: GREEN }} />SPY</span>
+          <span>累计 {formatPct(row.spyCumulativeReturn)}%</span>
+        </div>
+      )}
+      {showBenchmark && (
+        <div className="flex min-w-[230px] justify-between gap-4 tabular-nums" style={{ color: SECONDARY }}>
+          <span>SPY 当日</span>
+          <span>{formatPct(row.spyPeriodReturn)}%</span>
+        </div>
+      )}
+      <div className="flex min-w-[230px] justify-between gap-4 tabular-nums">
+        <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5" style={{ background: BLUE }} />Consolidated</span>
+        <span>累计 {formatPct(row.portfolioCumulativeReturn)}%</span>
+      </div>
+      <div className="flex min-w-[230px] justify-between gap-4 tabular-nums" style={{ color: SECONDARY }}>
+        <span>Consolidated 当日</span>
+        <span>{formatPct(row.portfolioPeriodReturn)}%</span>
+      </div>
+    </div>
+  );
+}
+
+function CrosshairCursor({
+  points,
+  left = 0,
+  top = 0,
+  width = 0,
+  height = 0,
+  domain,
+  payload,
+}: {
+  points?: Array<{ x?: number; y?: number }>;
+  left?: number;
+  top?: number;
+  width?: number;
+  height?: number;
+  domain?: [number, number];
+  payload?: Array<{ payload?: ChartRow }>;
+}) {
+  const x = points?.[0]?.x;
+  const row = payload?.[0]?.payload;
+  const yValue = row?.portfolioCumulativePct;
+  const [min, max] = domain ?? [0, 0];
+  const y = typeof yValue === 'number' && max !== min
+    ? top + ((max - yValue) / (max - min)) * height
+    : undefined;
+
+  if (typeof x !== 'number') return null;
+
+  return (
+    <g pointerEvents="none">
+      <line x1={x} x2={x} y1={top} y2={top + height} stroke="#9CA3AF" strokeWidth={1} strokeDasharray="3 3" />
+      {typeof y === 'number' && (
+        <line x1={left} x2={left + width} y1={y} y2={y} stroke="#9CA3AF" strokeWidth={1} strokeDasharray="3 3" />
+      )}
+    </g>
   );
 }
 
@@ -589,13 +673,13 @@ function useDemoDcaData() {
       .from('transactions')
       .delete()
       .eq('user_id', user.id)
-      .eq('note', DEMO_NOTE);
+      .in('note', [DEMO_NOTE, LEGACY_DEMO_NOTE]);
     if (tx.error) throw tx.error;
     const cf = await supabase
       .from('cashflows')
       .delete()
       .eq('user_id', user.id)
-      .eq('note', DEMO_NOTE);
+      .in('note', [DEMO_NOTE, LEGACY_DEMO_NOTE]);
     if (cf.error) throw cf.error;
   }
 
@@ -617,7 +701,7 @@ function useDemoDcaData() {
       const history = await fetchHistory([DEMO_TICKER, 'SPY'], '10y');
       const prices = seriesToPriceMap(history, DEMO_TICKER);
       const tradeRows = buildMonthlyDemoTrades(prices);
-      if (tradeRows.length === 0) throw new Error('没有拿到 VOO 历史价格');
+      if (tradeRows.length === 0) throw new Error('没有拿到 QQQ 历史价格');
 
       const cashflows = tradeRows.map((row) => ({
         user_id: user.id,
