@@ -38,16 +38,23 @@ async function readFromSupabase(symbols: string[], earliestDate: string): Promis
   return map;
 }
 
-/** Returns true if every symbol has at least one row at-or-before earliestDate
- *  (we don't require strict equality since the earliest day may be a non-trading day). */
+/** Returns true when Supabase already has a usable daily series for charting.
+ *  A single close near the event date is not enough for PortfolioAnalyst-style
+ *  performance: we need enough closes after the start date to draw a line. */
 function coverageOk(map: PriceMap, symbols: string[], earliestDate: string): boolean {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const needsMultiPointSeries = addDays(earliestDate, 7) < todayIso;
+  const freshEnoughDate = addDays(todayIso, -10);
+
   for (const s of symbols) {
     const m = map.get(s);
     if (!m || m.size === 0) return false;
-    // The earliest stored date for this ticker must be ≤ earliestDate + some leeway (7 days
-    // for weekends/holidays at the edge).
-    const firstDate = [...m.keys()][0];
+    const dates = [...m.keys()].sort();
+    const firstDate = dates[0];
+    const lastDate = dates[dates.length - 1];
     if (firstDate > addDays(earliestDate, 7)) return false;
+    if (needsMultiPointSeries && m.size < 2) return false;
+    if (needsMultiPointSeries && lastDate < freshEnoughDate) return false;
   }
   return true;
 }

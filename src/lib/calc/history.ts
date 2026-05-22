@@ -43,8 +43,8 @@ export interface BuildHistoryInput {
  *
  * Forward-fill rule: when a ticker's price is missing for a date (e.g. between
  * trading days, holidays, or pre-data dates), we re-use the most recent prior
- * close. If no prior close exists yet, we treat that ticker's contribution
- * as zero for that day.
+ * close. If no prior close exists yet, we use the latest trade price as the
+ * temporary account-equity anchor until market closes arrive.
  */
 export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
   const { transactions, cashflows, prices, todayQuotes, todaySpyPrice, asOf } = input;
@@ -97,6 +97,7 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
 
   // Per-ticker latest known close (for forward-fill)
   const lastClose = new Map<string, number>();
+  const lastTradePrice = new Map<string, number>();
   const netShares = new Map<string, number>();
   let spyShares = 0;
   let pendingSpyCash = 0; // cash sitting in queue waiting for the next SPY trading day
@@ -138,6 +139,7 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
     for (const t of dayTxns) {
       const delta = t.side === 'buy' ? t.shares : -t.shares;
       netShares.set(t.ticker, (netShares.get(t.ticker) ?? 0) + delta);
+      lastTradePrice.set(t.ticker, t.price);
       costBasis += t.side === 'buy' ? t.shares * t.price : -t.shares * t.price;
     }
 
@@ -148,7 +150,7 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       if (Math.abs(sh) < 1e-9) continue;
       const px = isLastDay && todayQuotes?.get(ticker) != null
         ? (todayQuotes.get(ticker) as number)
-        : (lastClose.get(ticker) ?? 0);
+        : (lastClose.get(ticker) ?? lastTradePrice.get(ticker) ?? 0);
       stockMv += sh * px;
     }
     // cash = cumulative deposits minus cumulative buy-cost plus sell-proceeds (= invested - costBasis).

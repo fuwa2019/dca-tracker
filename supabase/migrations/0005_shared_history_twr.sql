@@ -27,6 +27,7 @@ declare
     v_flow numeric;
     v_results jsonb := '[]'::jsonb;
     v_last_close hstore := ''::hstore;
+    v_last_trade_price hstore := ''::hstore;
     v_net_shares hstore := ''::hstore;
     v_prev_nav_user numeric := null;
     v_prev_nav_spy numeric := null;
@@ -104,6 +105,7 @@ begin
                 delta numeric := case when r.side = 'buy' then r.shares else -r.shares end;
             begin
                 v_net_shares := v_net_shares || hstore(r.ticker, (cur_shares + delta)::text);
+                v_last_trade_price := v_last_trade_price || hstore(r.ticker, r.price::text);
                 v_cost_basis := v_cost_basis + case when r.side = 'buy' then r.shares * r.price else -r.shares * r.price end;
             end;
         end loop;
@@ -112,7 +114,7 @@ begin
         for r in select (e).key as tk, (e).value as sval from each(v_net_shares) e loop
             declare
                 sh numeric := r.sval::numeric;
-                px text := v_last_close -> r.tk;
+                px text := coalesce(v_last_close -> r.tk, v_last_trade_price -> r.tk);
             begin
                 if sh <> 0 and px is not null then
                     v_stock_mv := v_stock_mv + sh * px::numeric;
