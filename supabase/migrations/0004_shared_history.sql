@@ -102,12 +102,12 @@ begin
             end;
         end loop;
 
-        -- 5) Compute end-of-day NAV
+        -- 5) Compute end-of-day NAV — iterate hstore via each(), aliased to avoid keyword clashes
         v_stock_mv := 0;
-        for r in select skey, svalue from each(v_net_shares) loop
+        for r in select (e).key as tk, (e).value as sval from each(v_net_shares) e loop
             declare
-                sh numeric := r.svalue::numeric;
-                px text := v_last_close -> r.skey;
+                sh numeric := r.sval::numeric;
+                px text := v_last_close -> r.tk;
             begin
                 if sh <> 0 and px is not null then
                     v_stock_mv := v_stock_mv + sh * px::numeric;
