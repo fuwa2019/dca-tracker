@@ -37,6 +37,8 @@ interface Props {
   showBenchmark: boolean;
   onShowBenchmarkChange: (show: boolean) => void;
   loading?: boolean;
+  showDemoControls?: boolean;
+  emptyMessage?: string;
 }
 
 type PerfRow = {
@@ -55,6 +57,21 @@ type ChartRow = PerfRow & {
 };
 
 export function IbkrPerformancePanel({
+  showDemoControls = true,
+  ...props
+}: Props) {
+  if (!showDemoControls) {
+    return <IbkrPerformancePanelView {...props} showDemoControls={false} demoData={null} />;
+  }
+  return <IbkrPerformancePanelWithDemo {...props} showDemoControls={showDemoControls} />;
+}
+
+function IbkrPerformancePanelWithDemo(props: Omit<Props, 'showDemoControls'> & { showDemoControls: boolean }) {
+  const demoData = useDemoDcaData();
+  return <IbkrPerformancePanelView {...props} demoData={demoData} />;
+}
+
+function IbkrPerformancePanelView({
   history,
   range,
   onRangeChange,
@@ -62,9 +79,11 @@ export function IbkrPerformancePanel({
   showBenchmark,
   onShowBenchmarkChange,
   loading = false,
-}: Props) {
+  emptyMessage,
+  showDemoControls,
+  demoData,
+}: Props & { showDemoControls: boolean; demoData: ReturnType<typeof useDemoDcaData> | null }) {
   const [cumulativePage, setCumulativePage] = useState(0);
-  const demoData = useDemoDcaData();
 
   const performanceRows = useMemo(() => buildPerformanceRows(history), [history]);
   const visibleRows = useMemo(() => sliceRowsByRange(performanceRows, range), [performanceRows, range]);
@@ -96,11 +115,12 @@ export function IbkrPerformancePanel({
         showBenchmark={showBenchmark}
         onShowBenchmarkChange={onShowBenchmarkChange}
         demoData={demoData}
+        showDemoControls={showDemoControls}
       />
 
       {history.length === 0 ? (
         <div className="border bg-white p-10 text-center text-[13px]" style={{ borderColor: BORDER, color: SECONDARY }}>
-          {loading ? '正在拉取历史价格...' : '暂无数据 - 录入交易和资金流后会显示资产曲线'}
+          {loading ? '正在拉取历史价格...' : (emptyMessage ?? '暂无数据 - 录入交易和资金流后会显示资产曲线')}
         </div>
       ) : (
         <>
@@ -132,13 +152,15 @@ function FilterPanel({
   showBenchmark,
   onShowBenchmarkChange,
   demoData,
+  showDemoControls,
 }: {
   range: RangeKey;
   availableRanges: RangeKey[];
   onRangeChange: (range: RangeKey) => void;
   showBenchmark: boolean;
   onShowBenchmarkChange: (show: boolean) => void;
-  demoData: ReturnType<typeof useDemoDcaData>;
+  demoData: ReturnType<typeof useDemoDcaData> | null;
+  showDemoControls: boolean;
 }) {
   const ranges: Array<{ key: RangeKey; label: string }> = [
     { key: '1M', label: '1月' },
@@ -187,29 +209,31 @@ function FilterPanel({
         </button>
       </FilterGroup>
 
-      <FilterGroup title="测试数据">
-        <button
-          type="button"
-          disabled={demoData.busy}
-          onClick={() => demoData.seed()}
-          className="h-6 border px-2.5 text-[12px] disabled:opacity-45"
-          style={buttonStyle(false)}
-        >
-          {demoData.seeding ? '生成中...' : '生成10年定投'}
-        </button>
-        <button
-          type="button"
-          disabled={demoData.busy}
-          onClick={() => demoData.clear()}
-          className="h-6 border px-2.5 text-[12px] disabled:opacity-45"
-          style={buttonStyle(false)}
-        >
-          {demoData.clearing ? '清除中...' : '清除测试'}
-        </button>
-        {demoData.message && (
-          <span className="ml-1 self-center text-[11px]" style={{ color: SECONDARY }}>{demoData.message}</span>
-        )}
-      </FilterGroup>
+      {showDemoControls && demoData && (
+        <FilterGroup title="测试数据">
+          <button
+            type="button"
+            disabled={demoData.busy}
+            onClick={() => demoData.seed()}
+            className="h-6 border px-2.5 text-[12px] disabled:opacity-45"
+            style={buttonStyle(false)}
+          >
+            {demoData.seeding ? '生成中...' : '生成10年定投'}
+          </button>
+          <button
+            type="button"
+            disabled={demoData.busy}
+            onClick={() => demoData.clear()}
+            className="h-6 border px-2.5 text-[12px] disabled:opacity-45"
+            style={buttonStyle(false)}
+          >
+            {demoData.clearing ? '清除中...' : '清除测试'}
+          </button>
+          {demoData.message && (
+            <span className="ml-1 self-center text-[11px]" style={{ color: SECONDARY }}>{demoData.message}</span>
+          )}
+        </FilterGroup>
+      )}
     </div>
   );
 }
