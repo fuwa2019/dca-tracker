@@ -49,6 +49,13 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
   if (allEventDates.length === 0) return [];
   const startIso = allEventDates[0];
 
+  // Warn early if SPY isn't in the prices map — that means the benchmark line
+  // will be flat and any 'SPY 对照 0%' bug in the UI starts here.
+  if (!prices.has(BENCHMARK_TICKER) || (prices.get(BENCHMARK_TICKER)?.size ?? 0) === 0) {
+    // eslint-disable-next-line no-console
+    console.warn(`[history] no daily prices for ${BENCHMARK_TICKER} — SPY benchmark will be flat at 0%`);
+  }
+
   const today = asOf ?? new Date();
   const todayIso = isoUtcDate(today);
 

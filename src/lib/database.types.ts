@@ -164,6 +164,15 @@ export type SharedPortfolio = {
   generated_at: string;
 };
 
+export type SharedHistory = {
+  series: Array<{
+    date: string;
+    return_pct_user: number;
+    return_pct_spy: number;
+  }>;
+  generated_at: string;
+};
+
 export interface Database {
   public: {
     Tables: {

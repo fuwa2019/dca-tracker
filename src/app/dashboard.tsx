@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { PositionCard } from '@/components/PositionCard';
@@ -30,7 +29,6 @@ export function DashboardPage() {
   const [chartMetric, setChartMetric] = useState<ChartMetric>('returnPct');
   const [chartRange, setChartRange] = useState<RangeKey>('ALL');
   const [showBenchmark, setShowBenchmark] = useState(true);
-  const [showLegacyLines, setShowLegacyLines] = useState(false);
   const { data: txns = [] } = useTransactions();
   const { data: cashflows = [] } = useCashflows();
   const { data: settings } = useSettings();
@@ -43,7 +41,7 @@ export function DashboardPage() {
     [txns],
   );
   const symbols = useMemo(
-    () => [...new Set([...positions.map((p) => p.ticker), ...watchlist])],
+    () => [...new Set([...positions.map((p) => p.ticker), ...watchlist, BENCHMARK_TICKER])],
     [positions, watchlist],
   );
   const { data: quotes = [] } = useQuotes(symbols);
@@ -76,6 +74,21 @@ export function DashboardPage() {
       todaySpyPrice: todayQuotes.get(BENCHMARK_TICKER),
     });
   }, [dailyPrices, txns, cashflows, todayQuotes]);
+
+  // One-time diagnostic — remove once曲线确认正常。
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (history.length === 0) return;
+    // eslint-disable-next-line no-console
+    console.log('[equity-curve]', {
+      points: history.length,
+      first: history[0],
+      last: history[history.length - 1],
+      pricesTickers: dailyPrices ? [...dailyPrices.keys()] : [],
+      pricesSizes: dailyPrices ? Object.fromEntries([...dailyPrices.entries()].map(([k, v]) => [k, v.size])) : {},
+    });
+  }, [history, dailyPrices]);
+
   const ranges = useMemo(() => availableRanges(history), [history]);
   const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');
 
@@ -244,18 +257,7 @@ export function DashboardPage() {
               metric={chartMetric}
               range={effectiveRange}
               showBenchmark={showBenchmark}
-              showLegacyLines={showLegacyLines}
             />
-            <button
-              type="button"
-              onClick={() => setShowLegacyLines((v) => !v)}
-              className="mt-2 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-            >
-              <ChevronDown
-                className={`h-3 w-3 transition-transform ${showLegacyLines ? 'rotate-180' : ''}`}
-              />
-              {showLegacyLines ? '隐藏' : '显示'}累计入金/成本辅助线
-            </button>
             <AnimatePresence>
               {history.length === 0 && earliestDate && (
                 <motion.p

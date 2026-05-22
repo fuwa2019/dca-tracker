@@ -1,16 +1,27 @@
+import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/lib/supabase';
 import { pct, signedPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { SharedPortfolio } from '@/lib/database.types';
+import {
+  EquityCurveChart,
+  RangeToggle,
+  availableRanges,
+} from '@/components/EquityCurveChart';
+import type { HistoryPoint, RangeKey } from '@/lib/calc/history';
+import type { SharedPortfolio, SharedHistory } from '@/lib/database.types';
 
 export function SharePage() {
   const { token } = useParams<{ token: string }>();
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['share', token],
+  const [range, setRange] = useState<RangeKey>('ALL');
+  const [showBenchmark, setShowBenchmark] = useState(true);
+
+  const portfolio = useQuery({
+    queryKey: ['share', 'portfolio', token],
     queryFn: async () => {
       if (!token) throw new Error('no_token');
       const { data, error } = await supabase.rpc('shared_portfolio', { p_token: token });
@@ -21,9 +32,43 @@ export function SharePage() {
     refetchOnWindowFocus: true,
   });
 
+  const historyQuery = useQuery({
+    queryKey: ['share', 'history', token],
+    queryFn: async () => {
+      if (!token) throw new Error('no_token');
+      const { data, error } = await supabase.rpc('shared_history', { p_token: token });
+      if (error) throw error;
+      return data as SharedHistory | { error: string };
+    },
+    refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: true,
+  });
+
+  // Adapt SharedHistory to the HistoryPoint shape EquityCurveChart expects.
+  const history: HistoryPoint[] = useMemo(() => {
+    const raw = historyQuery.data;
+    if (!raw || 'error' in raw) return [];
+    return raw.series.map((p) => ({
+      date: p.date,
+      invested: 0,
+      costBasis: 0,
+      navUser: 0,
+      navSpy: 0,
+      returnPctUser: p.return_pct_user,
+      returnPctSpy: p.return_pct_spy,
+      pnlUser: 0,
+      pnlSpy: 0,
+      txns: [],
+    }));
+  }, [historyQuery.data]);
+
+  const ranges = useMemo(() => availableRanges(history), [history]);
+  const effectiveRange = ranges.includes(range) ? range : (ranges[ranges.length - 1] ?? 'ALL');
+
   if (!token) return <Centered>缺少 token</Centered>;
-  if (isLoading) return <Centered>加载中…</Centered>;
-  if (error) return <Centered>加载失败：{(error as Error).message}</Centered>;
+  if (portfolio.isLoading) return <Centered>加载中…</Centered>;
+  if (portfolio.error) return <Centered>加载失败：{(portfolio.error as Error).message}</Centered>;
+  const data = portfolio.data;
   if (!data || 'error' in data) return <Centered>分享链接无效或已过期</Centered>;
 
   return (
@@ -47,6 +92,39 @@ export function SharePage() {
           <div className={cn('text-4xl font-semibold tracking-tight tnum', changeColor(data.total_return_pct))}>
             {signedPct(data.total_return_pct)}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="space-y-3">
+          <div>
+            <CardTitle>资产曲线</CardTitle>
+            <CardDescription>
+              收益率 %（按本金口径）{showBenchmark && ' · 对照 SPY (资金时点对齐)'}
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <RangeToggle value={effectiveRange} onChange={setRange} available={ranges} />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>vs SPY</span>
+              <Switch checked={showBenchmark} onCheckedChange={setShowBenchmark} />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {historyQuery.isLoading ? (
+            <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">加载历史中…</div>
+          ) : history.length === 0 ? (
+            <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">暂无历史数据</div>
+          ) : (
+            <EquityCurveChart
+              history={history}
+              metric="returnPct"
+              range={effectiveRange}
+              showBenchmark={showBenchmark}
+              redacted
+            />
+          )}
         </CardContent>
       </Card>
 

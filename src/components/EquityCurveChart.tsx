@@ -29,14 +29,16 @@ interface Props {
   metric: ChartMetric;
   range: RangeKey;
   showBenchmark: boolean;
-  showLegacyLines?: boolean;
+  /** When true, suppress transaction markers + per-day transaction detail in tooltip.
+   *  Used by the public share view to avoid leaking trading dates/sizes. */
+  redacted?: boolean;
 }
 
-export function EquityCurveChart({ history, metric, range, showBenchmark, showLegacyLines = false }: Props) {
+export function EquityCurveChart({ history, metric, range, showBenchmark, redacted = false }: Props) {
   const sliced = useMemo(() => sliceByRange(history, range), [history, range]);
   const markers = useMemo(
-    () => aggregateMarkers(sliced, markerGranularityFor(range)),
-    [sliced, range],
+    () => (redacted ? [] : aggregateMarkers(sliced, markerGranularityFor(range))),
+    [sliced, range, redacted],
   );
 
   if (sliced.length === 0) {
@@ -68,13 +70,6 @@ export function EquityCurveChart({ history, metric, range, showBenchmark, showLe
           />
           <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="2 3" />
 
-          {showLegacyLines && (
-            <>
-              <Line type="monotone" dataKey="invested" stroke="hsl(var(--muted-foreground))" strokeWidth={1} dot={false} name="累计入金" strokeDasharray="3 3" />
-              <Line type="monotone" dataKey="costBasis" stroke="hsl(var(--muted-foreground))" strokeWidth={1} dot={false} name="累计成本" strokeDasharray="6 4" />
-            </>
-          )}
-
           {showBenchmark && (
             <Line
               type="monotone"
@@ -82,7 +77,7 @@ export function EquityCurveChart({ history, metric, range, showBenchmark, showLe
               stroke="hsl(var(--muted-foreground))"
               strokeWidth={1.5}
               strokeDasharray="4 3"
-              dot={false}
+              dot={sliced.length <= 14 ? { r: 2, strokeWidth: 0, fill: 'hsl(var(--muted-foreground))' } : false}
               name="SPY 对照"
               isAnimationActive={false}
             />
@@ -93,9 +88,9 @@ export function EquityCurveChart({ history, metric, range, showBenchmark, showLe
             dataKey={metric === 'returnPct' ? 'returnPctUser' : 'pnlUser'}
             stroke="hsl(var(--foreground))"
             strokeWidth={2.2}
-            dot={false}
+            dot={sliced.length <= 14 ? { r: 3, strokeWidth: 0, fill: 'hsl(var(--foreground))' } : false}
             name="我的组合"
-            activeDot={{ r: 4, strokeWidth: 0 }}
+            activeDot={{ r: 5, strokeWidth: 0 }}
             isAnimationActive={false}
           />
 
@@ -125,7 +120,7 @@ export function EquityCurveChart({ history, metric, range, showBenchmark, showLe
 
           <Tooltip
             cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '3 3' }}
-            content={<EquityTooltip metric={metric} showBenchmark={showBenchmark} />}
+            content={<EquityTooltip metric={metric} showBenchmark={showBenchmark} redacted={redacted} />}
             isAnimationActive={false}
           />
         </ComposedChart>
@@ -161,11 +156,13 @@ interface TooltipPayloadItem {
 function EquityTooltip({
   metric,
   showBenchmark,
+  redacted,
   active,
   payload,
 }: {
   metric: ChartMetric;
   showBenchmark: boolean;
+  redacted?: boolean;
   active?: boolean;
   payload?: TooltipPayloadItem[];
 }) {
@@ -195,7 +192,7 @@ function EquityTooltip({
           </div>
         </>
       )}
-      {point.txns.length > 0 && (
+      {!redacted && point.txns.length > 0 && (
         <div className="mt-2 space-y-0.5 border-t pt-1.5">
           {point.txns.map((t, i) => (
             <div key={i} className="text-[11px] tnum">
