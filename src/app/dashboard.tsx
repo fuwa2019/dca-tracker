@@ -1,19 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
 import { PositionCard } from '@/components/PositionCard';
 import { StatCard } from '@/components/StatCard';
 import { CostBasisToggle } from '@/components/CostBasisToggle';
 import { TargetProgressRing } from '@/components/TargetProgressRing';
-import {
-  EquityCurveChart,
-  MetricToggle,
-  RangeToggle,
-  availableRanges,
-  type ChartMetric,
-} from '@/components/EquityCurveChart';
+import { IbkrPerformancePanel } from '@/components/IbkrPerformancePanel';
 import { useQuotes } from '@/hooks/useQuotes';
 import { useDailyPrices } from '@/hooks/useDailyPrices';
 import { useTransactions, useCashflows, useSettings, useTotalInvested, useCashBalance, usePortfolioHistory } from '@/hooks/usePortfolio';
@@ -21,14 +14,13 @@ import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
 import { computeTwr } from '@/lib/calc/twr';
-import { buildEquityHistory, BENCHMARK_TICKER, type RangeKey } from '@/lib/calc/history';
+import { availableRanges, buildEquityHistory, BENCHMARK_TICKER, type RangeKey } from '@/lib/calc/history';
 import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
 import { isUsMarketOpen } from '@/lib/quote';
 
 export function DashboardPage() {
   const qc = useQueryClient();
   const [basis, setBasis] = useState<'avg' | 'fifo'>('avg');
-  const [chartMetric, setChartMetric] = useState<ChartMetric>('returnPct');
   const [chartRange, setChartRange] = useState<RangeKey>('ALL');
   const [showBenchmark, setShowBenchmark] = useState(true);
   const { data: txns = [] } = useTransactions();
@@ -92,13 +84,7 @@ export function DashboardPage() {
       txns: p.txns ?? [],
     }));
   }, [portfolioHistory.data]);
-  const rpcHasAmounts = useMemo(
-    () => rpcHistory.some((p) => p.invested !== 0 || p.navUser !== 0 || p.navSpy !== 0 || p.txns.length > 0),
-    [rpcHistory],
-  );
-  const history = rpcHistory.length > 0 && (chartMetric === 'returnPct' || rpcHasAmounts)
-    ? rpcHistory
-    : localHistory;
+  const history = rpcHistory.length > 0 ? rpcHistory : localHistory;
 
   useEffect(() => {
     if (!dailyPrices) return;
@@ -114,13 +100,13 @@ export function DashboardPage() {
       points: history.length,
       first: history[0],
       last: history[history.length - 1],
-      source: rpcHistory.length > 0 && (chartMetric === 'returnPct' || rpcHasAmounts) ? 'rpc' : 'local',
+      source: rpcHistory.length > 0 ? 'rpc' : 'local',
       rpcPoints: rpcHistory.length,
       localPoints: localHistory.length,
       pricesTickers: dailyPrices ? [...dailyPrices.keys()] : [],
       pricesSizes: dailyPrices ? Object.fromEntries([...dailyPrices.entries()].map(([k, v]) => [k, v.size])) : {},
     });
-  }, [history, dailyPrices, rpcHistory.length, localHistory.length, chartMetric, rpcHasAmounts]);
+  }, [history, dailyPrices, rpcHistory.length, localHistory.length]);
 
   const ranges = useMemo(() => availableRanges(history), [history]);
   const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');
@@ -188,7 +174,7 @@ export function DashboardPage() {
   const marketOpen = isUsMarketOpen();
 
   return (
-    <div className="container max-w-6xl py-6 space-y-6">
+    <div className="container max-w-[1460px] py-6 space-y-6">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <motion.h1
           initial={{ opacity: 0, y: 6 }}
@@ -263,47 +249,17 @@ export function DashboardPage() {
         />
       </div>
 
+      <IbkrPerformancePanel
+        history={history}
+        range={effectiveRange}
+        onRangeChange={setChartRange}
+        availableRanges={ranges}
+        showBenchmark={showBenchmark}
+        onShowBenchmarkChange={setShowBenchmark}
+        loading={history.length === 0 && !!earliestDate}
+      />
+
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle>资产曲线</CardTitle>
-                <CardDescription>
-                  {chartMetric === 'returnPct' ? '收益率 %' : '收益金额 $'}
-                  {showBenchmark && ' · 对照 SPY (资金时点对齐)'}
-                </CardDescription>
-              </div>
-              <MetricToggle value={chartMetric} onChange={setChartMetric} />
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <RangeToggle value={effectiveRange} onChange={setChartRange} available={ranges} />
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>vs SPY</span>
-                <Switch checked={showBenchmark} onCheckedChange={setShowBenchmark} />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <EquityCurveChart
-              history={history}
-              metric={chartMetric}
-              range={effectiveRange}
-              showBenchmark={showBenchmark}
-            />
-            <AnimatePresence>
-              {history.length === 0 && earliestDate && (
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="mt-2 text-center text-[11px] text-muted-foreground"
-                >
-                  正在拉取历史价格…
-                </motion.p>
-              )}
-            </AnimatePresence>
-          </CardContent>
-        </Card>
         <Card>
           <CardHeader>
             <CardTitle>$1M 进度</CardTitle>
