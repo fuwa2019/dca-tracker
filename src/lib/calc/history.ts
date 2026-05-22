@@ -9,8 +9,8 @@ export interface HistoryPoint {
   costBasis: number;         // cumulative buy notional minus sell notional (signed cost)
   navUser: number;           // user's portfolio NAV: Σ netShares(d) × close(d)
   navSpy: number;            // SPY benchmark NAV under "buy SPY on each cashflow date" model
-  returnPctUser: number;     // (navUser - invested) / invested
-  returnPctSpy: number;      // (navSpy - invested) / invested
+  returnPctUser: number;     // cumulative daily-linked TWR
+  returnPctSpy: number;      // cumulative daily-linked TWR for the SPY benchmark
   pnlUser: number;           // navUser - invested
   pnlSpy: number;
   /** Transactions that landed on this date (for marker rendering). */
@@ -32,7 +32,11 @@ export interface BuildHistoryInput {
  * Build the daily equity-history series with a SPY benchmark obtained by the
  * "money-time-aligned" model: every cashflow.usd_amount is virtually used to
  * buy SPY on its usd_in_date, accumulating spyShares. Daily NAV is
- * spyShares × SPY close(d).
+ * spyShares × SPY close(d) plus any cash pending for the next SPY trading day.
+ *
+ * returnPctUser / returnPctSpy are daily-linked time-weighted returns, similar
+ * to PortfolioAnalyst performance reporting: external deposits are removed from
+ * that day's return calculation, while buys/sells remain internal transfers.
  *
  * Forward-fill rule: when a ticker's price is missing for a date (e.g. between
  * trading days, holidays, or pre-data dates), we re-use the most recent prior
@@ -86,6 +90,10 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
   let pendingSpyCash = 0; // cash sitting in queue waiting for the next SPY trading day
   let invested = 0;
   let costBasis = 0;
+  let prevNavUser: number | null = null;
+  let prevNavSpy: number | null = null;
+  let cumulativeUser = 1;
+  let cumulativeSpy = 1;
 
   // Pre-compute every date's close per ticker (with forward-fill in date order)
   // We iterate day-by-day to keep lastClose monotonically updated.
@@ -145,7 +153,18 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       spyShares += pendingSpyCash / todaySpyPrice;
       pendingSpyCash = 0;
     }
-    const navSpy = spyShares * spyPxToday;
+    const navSpy = spyShares * spyPxToday + pendingSpyCash;
+
+    if (prevNavUser !== null && prevNavUser > 0) {
+      const dailyReturnUser = (navUser - (flow ?? 0)) / prevNavUser - 1;
+      if (Number.isFinite(dailyReturnUser)) cumulativeUser *= 1 + dailyReturnUser;
+    }
+    if (prevNavSpy !== null && prevNavSpy > 0) {
+      const dailyReturnSpy = (navSpy - (flow ?? 0)) / prevNavSpy - 1;
+      if (Number.isFinite(dailyReturnSpy)) cumulativeSpy *= 1 + dailyReturnSpy;
+    }
+    prevNavUser = navUser;
+    prevNavSpy = navSpy;
 
     out.push({
       date: iso,
@@ -153,8 +172,8 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       costBasis,
       navUser,
       navSpy,
-      returnPctUser: invested > 0 ? (navUser - invested) / invested : 0,
-      returnPctSpy: invested > 0 ? (navSpy - invested) / invested : 0,
+      returnPctUser: cumulativeUser - 1,
+      returnPctSpy: cumulativeSpy - 1,
       pnlUser: navUser - invested,
       pnlSpy: navSpy - invested,
       txns: dayTxns,

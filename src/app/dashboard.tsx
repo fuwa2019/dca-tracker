@@ -55,8 +55,8 @@ export function DashboardPage() {
     return all[0] ?? null;
   }, [cashflows, txns]);
   const historySymbols = useMemo(
-    () => [...new Set([...positions.map((p) => p.ticker), BENCHMARK_TICKER])],
-    [positions],
+    () => [...new Set([...txns.map((t) => t.ticker.toUpperCase()), BENCHMARK_TICKER])],
+    [txns],
   );
   const { data: dailyPrices } = useDailyPrices(historySymbols, earliestDate);
   const todayQuotes = useMemo(() => {
