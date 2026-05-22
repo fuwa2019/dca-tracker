@@ -84,7 +84,8 @@ export function DashboardPage() {
       txns: p.txns ?? [],
     }));
   }, [portfolioHistory.data]);
-  const history = rpcHistory.length > 0 ? rpcHistory : localHistory;
+  const preferLocalHistory = hasReturnMovement(localHistory) && !hasReturnMovement(rpcHistory);
+  const history = rpcHistory.length > 0 && !preferLocalHistory ? rpcHistory : localHistory;
 
   useEffect(() => {
     if (!dailyPrices) return;
@@ -100,13 +101,13 @@ export function DashboardPage() {
       points: history.length,
       first: history[0],
       last: history[history.length - 1],
-      source: rpcHistory.length > 0 ? 'rpc' : 'local',
+      source: rpcHistory.length > 0 && !preferLocalHistory ? 'rpc' : 'local',
       rpcPoints: rpcHistory.length,
       localPoints: localHistory.length,
       pricesTickers: dailyPrices ? [...dailyPrices.keys()] : [],
       pricesSizes: dailyPrices ? Object.fromEntries([...dailyPrices.entries()].map(([k, v]) => [k, v.size])) : {},
     });
-  }, [history, dailyPrices, rpcHistory.length, localHistory.length]);
+  }, [history, dailyPrices, rpcHistory.length, localHistory.length, preferLocalHistory]);
 
   const ranges = useMemo(() => availableRanges(history), [history]);
   const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');
@@ -290,4 +291,8 @@ export function DashboardPage() {
       </div>
     </div>
   );
+}
+
+function hasReturnMovement(history: Array<{ returnPctUser: number; returnPctSpy: number }>) {
+  return history.some((p) => Math.abs(p.returnPctUser) > 1e-8 || Math.abs(p.returnPctSpy) > 1e-8);
 }

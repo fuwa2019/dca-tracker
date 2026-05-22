@@ -9,6 +9,11 @@ export interface Quote {
   cachedAt: string;
 }
 
+export interface HistorySeries {
+  ticker: string;
+  points: Array<{ date: string; close: number }>;
+}
+
 const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
 
 export async function fetchQuotes(symbols: string[]): Promise<Quote[]> {
@@ -27,6 +32,16 @@ export async function fetchChart(symbol: string, range = '1y', interval = '1d') 
   const r = await fetch(url);
   if (!r.ok) throw new Error(`chart http ${r.status}`);
   return r.json();
+}
+
+export async function fetchHistory(symbols: string[], range = '10y'): Promise<HistorySeries[]> {
+  if (!WORKER_BASE) return [];
+  if (symbols.length === 0) return [];
+  const url = `${WORKER_BASE}/api/history?symbols=${encodeURIComponent(symbols.join(','))}&range=${range}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`history http ${r.status}`);
+  const data = (await r.json()) as { series?: HistorySeries[] };
+  return data.series ?? [];
 }
 
 /** Heuristic: is the US market currently open (regular hours)? Uses ET (NYC) wall-clock. */

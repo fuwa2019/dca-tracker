@@ -1,4 +1,5 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CartesianGrid,
   Line,
@@ -7,7 +8,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { supabase } from '@/lib/supabase';
 import type { HistoryPoint, RangeKey } from '@/lib/calc/history';
+import { fetchHistory, type HistorySeries } from '@/lib/quote';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
 const BLUE = '#0070C9';
@@ -18,6 +22,10 @@ const GRID = '#EEEEEE';
 const TEXT = '#111111';
 const SECONDARY = '#6B7280';
 const PANEL = '#F5F8FC';
+const DEMO_NOTE = '[DCA_TEST_10Y_60_VOO]';
+const DEMO_TICKER = 'VOO';
+const DEMO_MONTHLY_USD = 60;
+const DEMO_RATE = 7.2;
 
 interface Props {
   history: HistoryPoint[];
@@ -53,8 +61,8 @@ export function IbkrPerformancePanel({
   onShowBenchmarkChange,
   loading = false,
 }: Props) {
-  const [periodPage, setPeriodPage] = useState(0);
   const [cumulativePage, setCumulativePage] = useState(0);
+  const demoData = useDemoDcaData();
 
   const performanceRows = useMemo(() => buildPerformanceRows(history), [history]);
   const visibleRows = useMemo(() => sliceRowsByRange(performanceRows, range), [performanceRows, range]);
@@ -75,13 +83,7 @@ export function IbkrPerformancePanel({
     ? `${visibleRows[0].date} 至 ${visibleRows[visibleRows.length - 1].date}`
     : '暂无日期范围';
 
-  if (history.length === 0) {
-    return (
-      <div className="border bg-white p-10 text-center text-[13px]" style={{ borderColor: BORDER, color: SECONDARY }}>
-        {loading ? '正在拉取历史价格...' : '暂无数据 - 录入交易和资金流后会显示资产曲线'}
-      </div>
-    );
-  }
+  useEffect(() => setCumulativePage(0), [range, history.length]);
 
   return (
     <section className="space-y-6 text-[13px]" style={{ color: TEXT }}>
@@ -91,32 +93,28 @@ export function IbkrPerformancePanel({
         onRangeChange={onRangeChange}
         showBenchmark={showBenchmark}
         onShowBenchmarkChange={onShowBenchmarkChange}
+        demoData={demoData}
       />
 
-      <SummaryTable dateLabel={dateLabel} summary={summary} showBenchmark={showBenchmark} />
+      {history.length === 0 ? (
+        <div className="border bg-white p-10 text-center text-[13px]" style={{ borderColor: BORDER, color: SECONDARY }}>
+          {loading ? '正在拉取历史价格...' : '暂无数据 - 录入交易和资金流后会显示资产曲线'}
+        </div>
+      ) : (
+        <>
+          <SummaryTable dateLabel={dateLabel} summary={summary} showBenchmark={showBenchmark} />
 
-      <div className="grid gap-8 xl:grid-cols-2">
-        <PerformanceChartCard
-          title="时间段基准比较"
-          dateLabel={dateLabel}
-          rows={chartRows}
-          tableRows={visibleRows}
-          chartKind="period"
-          showBenchmark={showBenchmark}
-          page={periodPage}
-          onPageChange={setPeriodPage}
-        />
-        <PerformanceChartCard
-          title="累积基准比较"
-          dateLabel={dateLabel}
-          rows={chartRows}
-          tableRows={visibleRows}
-          chartKind="cumulative"
-          showBenchmark={showBenchmark}
-          page={cumulativePage}
-          onPageChange={setCumulativePage}
-        />
-      </div>
+          <PerformanceChartCard
+            title="累积基准比较"
+            dateLabel={dateLabel}
+            rows={chartRows}
+            tableRows={visibleRows}
+            showBenchmark={showBenchmark}
+            page={cumulativePage}
+            onPageChange={setCumulativePage}
+          />
+        </>
+      )}
 
       <div className="border px-4 py-3 text-[12px] leading-5" style={{ borderColor: BORDER, background: PANEL, color: SECONDARY }}>
         业绩表现基于已录入交易、资金流和日线价格计算；收益率采用日链接时间加权回报。历史数据仅供分析参考，不构成投资建议。
@@ -131,12 +129,14 @@ function FilterPanel({
   onRangeChange,
   showBenchmark,
   onShowBenchmarkChange,
+  demoData,
 }: {
   range: RangeKey;
   availableRanges: RangeKey[];
   onRangeChange: (range: RangeKey) => void;
   showBenchmark: boolean;
   onShowBenchmarkChange: (show: boolean) => void;
+  demoData: ReturnType<typeof useDemoDcaData>;
 }) {
   const ranges: Array<{ key: RangeKey; label: string }> = [
     { key: '1M', label: '1月' },
@@ -191,6 +191,30 @@ function FilterPanel({
 
       <FilterGroup title="实时">
         <button type="button" className="h-6 border px-2.5 text-[12px]" style={buttonStyle(false)}>日线收盘价</button>
+      </FilterGroup>
+
+      <FilterGroup title="测试数据">
+        <button
+          type="button"
+          disabled={demoData.busy}
+          onClick={() => demoData.seed()}
+          className="h-6 border px-2.5 text-[12px] disabled:opacity-45"
+          style={buttonStyle(false)}
+        >
+          {demoData.seeding ? '生成中...' : '生成10年定投'}
+        </button>
+        <button
+          type="button"
+          disabled={demoData.busy}
+          onClick={() => demoData.clear()}
+          className="h-6 border px-2.5 text-[12px] disabled:opacity-45"
+          style={buttonStyle(false)}
+        >
+          {demoData.clearing ? '清除中...' : '清除测试'}
+        </button>
+        {demoData.message && (
+          <span className="ml-1 self-center text-[11px]" style={{ color: SECONDARY }}>{demoData.message}</span>
+        )}
       </FilterGroup>
     </div>
   );
@@ -267,7 +291,6 @@ function PerformanceChartCard({
   dateLabel,
   rows,
   tableRows,
-  chartKind,
   showBenchmark,
   page,
   onPageChange,
@@ -276,7 +299,6 @@ function PerformanceChartCard({
   dateLabel: string;
   rows: ChartRow[];
   tableRows: PerfRow[];
-  chartKind: 'period' | 'cumulative';
   showBenchmark: boolean;
   page: number;
   onPageChange: (page: number) => void;
@@ -285,12 +307,9 @@ function PerformanceChartCard({
   const pageCount = Math.max(1, Math.ceil(tableRows.length / pageSize));
   const safePage = Math.min(page, pageCount - 1);
   const pageRows = tableRows.slice(safePage * pageSize, safePage * pageSize + pageSize);
-  const keys = chartKind === 'period'
-    ? ['spyPeriodPct', 'portfolioPeriodPct'] as const
-    : ['spyCumulativePct', 'portfolioCumulativePct'] as const;
   const domain = chartDomain(rows.flatMap((row) => [
-    showBenchmark ? row[keys[0]] : 0,
-    row[keys[1]],
+    showBenchmark ? row.spyCumulativePct : 0,
+    row.portfolioCumulativePct,
   ]));
 
   return (
@@ -333,7 +352,7 @@ function PerformanceChartCard({
             {showBenchmark && (
               <Line
                 type="linear"
-                dataKey={keys[0]}
+                dataKey="spyCumulativePct"
                 stroke={GREEN}
                 strokeWidth={2}
                 dot={false}
@@ -343,7 +362,7 @@ function PerformanceChartCard({
             )}
             <Line
               type="linear"
-              dataKey={keys[1]}
+              dataKey="portfolioCumulativePct"
               stroke={BLUE}
               strokeWidth={2}
               dot={false}
@@ -354,7 +373,7 @@ function PerformanceChartCard({
         </ResponsiveContainer>
       </div>
 
-      <PerformanceTable rows={pageRows} chartKind={chartKind} showBenchmark={showBenchmark} />
+      <PerformanceTable rows={pageRows} showBenchmark={showBenchmark} />
       <Pager page={safePage} pageCount={pageCount} onPageChange={onPageChange} />
     </div>
   );
@@ -362,11 +381,9 @@ function PerformanceChartCard({
 
 function PerformanceTable({
   rows,
-  chartKind,
   showBenchmark,
 }: {
   rows: PerfRow[];
-  chartKind: 'period' | 'cumulative';
   showBenchmark: boolean;
 }) {
   return (
@@ -390,13 +407,11 @@ function PerformanceTable({
       </thead>
       <tbody>
         {rows.map((row) => {
-          const spy = chartKind === 'period' ? row.spyPeriodReturn : row.spyCumulativeReturn;
-          const portfolio = chartKind === 'period' ? row.portfolioPeriodReturn : row.portfolioCumulativeReturn;
           return (
             <tr key={row.date} className="h-9 border-b" style={{ borderColor: '#E5E5E5' }}>
               <td className="px-4 text-left tabular-nums">{row.date}</td>
-              <td className="px-4 text-right tabular-nums">{showBenchmark ? formatPct(spy) : '-'}</td>
-              <td className="px-4 text-right tabular-nums" style={{ background: PANEL }}>{formatPct(portfolio)}</td>
+              <td className="px-4 text-right tabular-nums">{showBenchmark ? formatPct(row.spyCumulativeReturn) : '-'}</td>
+              <td className="px-4 text-right tabular-nums" style={{ background: PANEL }}>{formatPct(row.portfolioCumulativeReturn)}</td>
             </tr>
           );
         })}
@@ -561,4 +576,126 @@ function roundUp(value: number) {
 function formatPct(value: number) {
   if (!Number.isFinite(value)) return '-';
   return (value * 100).toFixed(2);
+}
+
+function useDemoDcaData() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function clearDemoRows() {
+    if (!user) throw new Error('请先登录');
+    const tx = await supabase
+      .from('transactions')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('note', DEMO_NOTE);
+    if (tx.error) throw tx.error;
+    const cf = await supabase
+      .from('cashflows')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('note', DEMO_NOTE);
+    if (cf.error) throw cf.error;
+  }
+
+  const clearMutation = useMutation({
+    mutationFn: clearDemoRows,
+    onSuccess: async () => {
+      setMessage('测试数据已清除');
+      await invalidatePortfolioQueries(qc);
+    },
+    onError: (err) => setMessage(err instanceof Error ? err.message : '清除失败'),
+  });
+
+  const seedMutation = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('请先登录');
+      setMessage(null);
+      await clearDemoRows();
+
+      const history = await fetchHistory([DEMO_TICKER, 'SPY'], '10y');
+      const prices = seriesToPriceMap(history, DEMO_TICKER);
+      const tradeRows = buildMonthlyDemoTrades(prices);
+      if (tradeRows.length === 0) throw new Error('没有拿到 VOO 历史价格');
+
+      const cashflows = tradeRows.map((row) => ({
+        user_id: user.id,
+        cny_out_date: row.date,
+        cny_amount: Number((DEMO_MONTHLY_USD * DEMO_RATE).toFixed(2)),
+        usd_in_date: row.date,
+        usd_amount: DEMO_MONTHLY_USD,
+        target_rate: DEMO_RATE,
+        fees_cny: 0,
+        fees_usd: 0,
+        note: DEMO_NOTE,
+      }));
+      const transactions = tradeRows.map((row) => ({
+        user_id: user.id,
+        trade_date: row.date,
+        ticker: DEMO_TICKER,
+        side: 'buy' as const,
+        price: row.close,
+        shares: Number((DEMO_MONTHLY_USD / row.close).toFixed(6)),
+        kind: 'dca' as const,
+        note: DEMO_NOTE,
+      }));
+
+      const cf = await supabase.from('cashflows').insert(cashflows);
+      if (cf.error) throw cf.error;
+      const tx = await supabase.from('transactions').insert(transactions);
+      if (tx.error) throw tx.error;
+      return tradeRows.length;
+    },
+    onSuccess: async (count) => {
+      setMessage(`已生成 ${count} 期`);
+      await invalidatePortfolioQueries(qc);
+    },
+    onError: (err) => setMessage(err instanceof Error ? err.message : '生成失败'),
+  });
+
+  return {
+    seed: () => seedMutation.mutate(),
+    clear: () => clearMutation.mutate(),
+    seeding: seedMutation.isPending,
+    clearing: clearMutation.isPending,
+    busy: seedMutation.isPending || clearMutation.isPending,
+    message,
+  };
+}
+
+async function invalidatePortfolioQueries(qc: ReturnType<typeof useQueryClient>) {
+  await Promise.all([
+    qc.invalidateQueries({ queryKey: ['transactions'] }),
+    qc.invalidateQueries({ queryKey: ['cashflows'] }),
+    qc.invalidateQueries({ queryKey: ['portfolio_history'] }),
+    qc.invalidateQueries({ queryKey: ['daily_prices'] }),
+  ]);
+}
+
+function seriesToPriceMap(series: HistorySeries[], ticker: string) {
+  const row = series.find((s) => s.ticker.toUpperCase() === ticker);
+  return new Map((row?.points ?? []).map((p) => [p.date, p.close]));
+}
+
+function buildMonthlyDemoTrades(prices: Map<string, number>) {
+  const months = buildMonthlyStarts();
+  const dates = [...prices.keys()].sort();
+  return months.flatMap((monthStart) => {
+    const month = monthStart.slice(0, 7);
+    const tradeDate = dates.find((date) => date >= monthStart && date.startsWith(month));
+    const close = tradeDate ? prices.get(tradeDate) : null;
+    return tradeDate && close ? [{ date: tradeDate, close }] : [];
+  });
+}
+
+function buildMonthlyStarts() {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear() - 10, now.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const out: string[] = [];
+  for (let d = start; d <= end; d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1))) {
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
 }
