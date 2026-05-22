@@ -37,6 +37,9 @@ export interface BuildHistoryInput {
  * returnPctUser / returnPctSpy are daily-linked time-weighted returns, similar
  * to PortfolioAnalyst performance reporting: external deposits are removed from
  * that day's return calculation, while buys/sells remain internal transfers.
+ * If no cashflows were recorded, buy transactions are treated as inferred
+ * external deposits so an imported trade-only history can still show
+ * post-purchase performance.
  *
  * Forward-fill rule: when a ticker's price is missing for a date (e.g. between
  * trading days, holidays, or pre-data dates), we re-use the most recent prior
@@ -63,6 +66,8 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
   const today = asOf ?? new Date();
   const todayIso = isoUtcDate(today);
 
+  const hasRecordedCashflows = cashflows.some((c) => !!c.usd_in_date && Number(c.usd_amount) > 0);
+
   // Pre-index events by date
   const cashByDate = new Map<string, number>();
   for (const c of cashflows) {
@@ -81,6 +86,13 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       kind: t.kind,
     });
     txnsByDate.set(t.trade_date, list);
+  }
+  if (!hasRecordedCashflows) {
+    for (const t of transactions) {
+      if (t.side !== 'buy') continue;
+      const inferredDeposit = Number(t.shares) * Number(t.price);
+      cashByDate.set(t.trade_date, (cashByDate.get(t.trade_date) ?? 0) + inferredDeposit);
+    }
   }
 
   // Per-ticker latest known close (for forward-fill)

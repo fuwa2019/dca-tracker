@@ -34,6 +34,7 @@ declare
     v_cumulative_spy numeric := 1;
     v_daily_return_user numeric;
     v_daily_return_spy numeric;
+    v_has_recorded_cashflows boolean;
     r record;
 begin
     select user_id into v_user_id
@@ -56,6 +57,14 @@ begin
         return jsonb_build_object('series', '[]'::jsonb, 'generated_at', to_jsonb(now()));
     end if;
 
+    select exists(
+        select 1
+        from public.cashflows
+        where user_id = v_user_id
+          and usd_in_date is not null
+          and usd_amount > 0
+    ) into v_has_recorded_cashflows;
+
     v_d := v_start;
     while v_d <= v_today loop
         for r in
@@ -67,6 +76,13 @@ begin
         select coalesce(sum(usd_amount), 0) into v_flow
         from public.cashflows
         where user_id = v_user_id and usd_in_date = v_d;
+        if not v_has_recorded_cashflows then
+            select v_flow + coalesce(sum(shares * price), 0) into v_flow
+            from public.transactions
+            where user_id = v_user_id
+              and trade_date = v_d
+              and side = 'buy';
+        end if;
         if v_flow > 0 then
             v_invested := v_invested + v_flow;
             v_pending_spy := v_pending_spy + v_flow;
