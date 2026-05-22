@@ -78,6 +78,7 @@ export function CashflowForm({ initial, onDone }: Props) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cashflows'] });
+      qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       onDone?.();
     },
   });

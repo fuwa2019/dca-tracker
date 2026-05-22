@@ -27,7 +27,10 @@ export function CashflowsPage() {
       const { error } = await supabase.from('cashflows').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cashflows'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cashflows'] });
+      qc.invalidateQueries({ queryKey: ['portfolio_history'] });
+    },
   });
 
   return (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -15,7 +16,7 @@ import {
 } from '@/components/EquityCurveChart';
 import { useQuotes } from '@/hooks/useQuotes';
 import { useDailyPrices } from '@/hooks/useDailyPrices';
-import { useTransactions, useCashflows, useSettings, useTotalInvested, useCashBalance } from '@/hooks/usePortfolio';
+import { useTransactions, useCashflows, useSettings, useTotalInvested, useCashBalance, usePortfolioHistory } from '@/hooks/usePortfolio';
 import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
@@ -25,6 +26,7 @@ import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
 import { isUsMarketOpen } from '@/lib/quote';
 
 export function DashboardPage() {
+  const qc = useQueryClient();
   const [basis, setBasis] = useState<'avg' | 'fifo'>('avg');
   const [chartMetric, setChartMetric] = useState<ChartMetric>('returnPct');
   const [chartRange, setChartRange] = useState<RangeKey>('ALL');
@@ -59,12 +61,13 @@ export function DashboardPage() {
     [txns],
   );
   const { data: dailyPrices } = useDailyPrices(historySymbols, earliestDate);
+  const portfolioHistory = usePortfolioHistory();
   const todayQuotes = useMemo(() => {
     const m = new Map<string, number>();
     for (const q of quotes) if (q.price != null) m.set(q.ticker, q.price);
     return m;
   }, [quotes]);
-  const history = useMemo(() => {
+  const localHistory = useMemo(() => {
     if (!dailyPrices) return [];
     return buildEquityHistory({
       transactions: txns,
@@ -74,6 +77,33 @@ export function DashboardPage() {
       todaySpyPrice: todayQuotes.get(BENCHMARK_TICKER),
     });
   }, [dailyPrices, txns, cashflows, todayQuotes]);
+  const rpcHistory = useMemo(() => {
+    const rows = portfolioHistory.data?.series ?? [];
+    return rows.map((p) => ({
+      date: p.date,
+      invested: Number(p.invested) || 0,
+      costBasis: Number(p.cost_basis) || 0,
+      navUser: Number(p.nav_user) || 0,
+      navSpy: Number(p.nav_spy) || 0,
+      returnPctUser: Number(p.return_pct_user) || 0,
+      returnPctSpy: Number(p.return_pct_spy) || 0,
+      pnlUser: Number(p.pnl_user) || 0,
+      pnlSpy: Number(p.pnl_spy) || 0,
+      txns: p.txns ?? [],
+    }));
+  }, [portfolioHistory.data]);
+  const rpcHasAmounts = useMemo(
+    () => rpcHistory.some((p) => p.invested !== 0 || p.navUser !== 0 || p.navSpy !== 0 || p.txns.length > 0),
+    [rpcHistory],
+  );
+  const history = rpcHistory.length > 0 && (chartMetric === 'returnPct' || rpcHasAmounts)
+    ? rpcHistory
+    : localHistory;
+
+  useEffect(() => {
+    if (!dailyPrices) return;
+    qc.invalidateQueries({ queryKey: ['portfolio_history'] });
+  }, [dailyPrices, qc]);
 
   // One-time diagnostic — remove once曲线确认正常。
   // eslint-disable-next-line react-hooks/rules-of-hooks
@@ -84,10 +114,13 @@ export function DashboardPage() {
       points: history.length,
       first: history[0],
       last: history[history.length - 1],
+      source: rpcHistory.length > 0 && (chartMetric === 'returnPct' || rpcHasAmounts) ? 'rpc' : 'local',
+      rpcPoints: rpcHistory.length,
+      localPoints: localHistory.length,
       pricesTickers: dailyPrices ? [...dailyPrices.keys()] : [],
       pricesSizes: dailyPrices ? Object.fromEntries([...dailyPrices.entries()].map(([k, v]) => [k, v.size])) : {},
     });
-  }, [history, dailyPrices]);
+  }, [history, dailyPrices, rpcHistory.length, localHistory.length, chartMetric, rpcHasAmounts]);
 
   const ranges = useMemo(() => availableRanges(history), [history]);
   const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');

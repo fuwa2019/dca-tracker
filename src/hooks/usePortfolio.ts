@@ -6,6 +6,10 @@ import { aggregatePositions } from '@/lib/calc/position';
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
 type SettingsRow = Database['public']['Tables']['settings']['Row'];
+type PortfolioHistoryRpc = Database['public']['Functions']['portfolio_history']['Returns'];
+type SharedHistoryRpc = Database['public']['Functions']['shared_history']['Returns'];
+type PortfolioHistory = Exclude<PortfolioHistoryRpc, { error: string }>;
+type SharedHistory = Exclude<SharedHistoryRpc, { error: string }>;
 
 export function useTransactions() {
   return useQuery<TxnRow[]>({
@@ -44,6 +48,50 @@ export function useSettings() {
       if (error) throw error;
       return data;
     },
+  });
+}
+
+export function usePortfolioHistory() {
+  return useQuery<PortfolioHistory | null>({
+    queryKey: ['portfolio_history'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('portfolio_history');
+      if (!error && data && !('error' in data)) return data as PortfolioHistory;
+
+      const { data: links } = await supabase
+        .from('share_links')
+        .select('token')
+        .eq('revoked', false)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const token = links?.[0]?.token;
+      if (!token) {
+        if (error) throw error;
+        return null;
+      }
+
+      const fallback = await supabase.rpc('shared_history', { p_token: token });
+      if (fallback.error) throw fallback.error;
+      const shared = fallback.data as SharedHistory;
+      if (!shared || 'error' in shared) return null;
+      return {
+        generated_at: shared.generated_at,
+        series: shared.series.map((p) => ({
+          date: p.date,
+          invested: 0,
+          cost_basis: 0,
+          nav_user: 0,
+          nav_spy: 0,
+          return_pct_user: p.return_pct_user,
+          return_pct_spy: p.return_pct_spy,
+          pnl_user: 0,
+          pnl_spy: 0,
+          txns: [],
+        })),
+      };
+    },
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 }
 

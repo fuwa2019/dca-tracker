@@ -173,6 +173,28 @@ export type SharedHistory = {
   generated_at: string;
 };
 
+export type PortfolioHistory = {
+  series: Array<{
+    date: string;
+    invested: number;
+    cost_basis: number;
+    nav_user: number;
+    nav_spy: number;
+    return_pct_user: number;
+    return_pct_spy: number;
+    pnl_user: number;
+    pnl_spy: number;
+    txns: Array<{
+      side: 'buy' | 'sell';
+      ticker: string;
+      shares: number;
+      price: number;
+      kind: 'dca' | 'lumpsum';
+    }>;
+  }>;
+  generated_at: string;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -189,6 +211,14 @@ export interface Database {
       shared_portfolio: {
         Args: { p_token: string };
         Returns: SharedPortfolio | { error: string };
+      };
+      shared_history: {
+        Args: { p_token: string };
+        Returns: SharedHistory | { error: string };
+      };
+      portfolio_history: {
+        Args: Record<string, never>;
+        Returns: PortfolioHistory | { error: string };
       };
     };
     Enums: Record<string, never>;

@@ -80,6 +80,7 @@ export function TxnForm({ initial, onDone }: Props) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       onDone?.();
     },
   });
