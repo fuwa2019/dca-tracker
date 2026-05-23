@@ -186,7 +186,7 @@ begin
         'dirty',
         false,
         'warnings',
-        coalesce(warnings_arr, '[]'::jsonb),
+        coalesce(max(warnings_arr), '[]'::jsonb),
         'generated_at',
         to_jsonb(now())
     ) into v_result
