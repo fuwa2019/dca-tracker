@@ -46,9 +46,9 @@ export function PerformancePage() {
     : 0;
 
   const dirty = !!cacheStatus.data?.dirty;
-  const hasCache = !!cacheStatus.data?.exists;
+  const hasCache = !!cacheStatus.data?.exists || history.length > 0;
   const cacheError = cacheStatus.data?.error;
-  const generatedAt = cacheStatus.data?.updated_at ?? cacheStatus.data?.generated_at;
+  const generatedAt = cacheStatus.data?.updated_at ?? cacheStatus.data?.generated_at ?? portfolioHistory.data?.generated_at;
 
   return (
     <div className="container max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-5">
@@ -62,6 +62,10 @@ export function PerformancePage() {
           {cacheError ? (
             <StatusBadge tone="bad" dot>
               缓存错误
+            </StatusBadge>
+          ) : refreshCache.isPending ? (
+            <StatusBadge tone="info" dot>
+              刷新中
             </StatusBadge>
           ) : !hasCache ? (
             <StatusBadge tone="warn" dot>
@@ -101,6 +105,18 @@ export function PerformancePage() {
             <p className="mt-1 text-xs text-muted-foreground break-words">{cacheError}</p>
             <p className="mt-1 text-xs text-muted-foreground">
               检查交易/资金流是否完整，必要时到「数据健康」补齐日线价格再重试。
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {refreshCache.isError && (
+        <Card className="flex items-start gap-3 border-loss/30 bg-loss/5 p-4 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-loss" />
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-loss">缓存刷新失败</div>
+            <p className="mt-1 text-xs text-muted-foreground break-words">
+              {(refreshCache.error as Error)?.message ?? '请稍后重试'}
             </p>
           </div>
         </Card>

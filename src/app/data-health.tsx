@@ -116,6 +116,7 @@ export function DataHealthPage() {
   const hasEvents = txns.length > 0 || cashflows.length > 0;
   const cacheDirty = cacheStatus.data?.dirty ?? false;
   const cacheExists = cacheStatus.data?.exists ?? false;
+  const cachePoints = cacheStatus.data?.points;
 
   const backfillPrices = useMutation({
     mutationFn: async () => {
@@ -156,9 +157,9 @@ export function DataHealthPage() {
         <HealthTile
           icon={TrendingUp}
           label="业绩缓存"
-          value={!cacheExists ? '未初始化' : cacheDirty ? '待刷新' : '最新'}
-          tone={!cacheExists ? 'warn' : cacheDirty ? 'warn' : 'ok'}
-          detail={cacheStatus.data?.points ? `${cacheStatus.data.points} 个曲线点` : '暂无缓存'}
+          value={refreshCache.isPending ? '刷新中' : !cacheExists ? '未初始化' : cacheDirty ? '待刷新' : '最新'}
+          tone={refreshCache.isPending ? 'info' : !cacheExists ? 'warn' : cacheDirty ? 'warn' : 'ok'}
+          detail={cachePoints != null ? `${cachePoints} 个曲线点` : refreshCache.isPending ? '正在重算' : '暂无缓存'}
         />
         <HealthTile
           icon={ShieldCheck}
