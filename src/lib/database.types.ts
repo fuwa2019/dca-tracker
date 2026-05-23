@@ -171,20 +171,24 @@ export type SharedHistory = {
     return_pct_spy: number;
   }>;
   generated_at: string;
+  benchmark?: string;
+  method?: string;
+  price_basis?: string;
+  dirty?: boolean;
 };
 
 export type PortfolioHistory = {
   series: Array<{
     date: string;
-    invested: number;
-    cost_basis: number;
-    nav_user: number;
-    nav_spy: number;
+    invested?: number;
+    cost_basis?: number;
+    nav_user?: number;
+    nav_spy?: number;
     return_pct_user: number;
     return_pct_spy: number;
-    pnl_user: number;
-    pnl_spy: number;
-    txns: Array<{
+    pnl_user?: number;
+    pnl_spy?: number;
+    txns?: Array<{
       side: 'buy' | 'sell';
       ticker: string;
       shares: number;
@@ -193,13 +197,21 @@ export type PortfolioHistory = {
     }>;
   }>;
   generated_at: string;
+  benchmark?: string;
+  method?: string;
+  price_basis?: string;
+  dirty?: boolean;
 };
+
+export type PerformanceHistory = SharedHistory;
 
 export type HistoryCacheRefresh = {
   ok: true;
   points: number;
   generated_at: string;
   updated_at?: string;
+  benchmark?: string;
+  method?: string;
 };
 
 export interface Database {
@@ -223,11 +235,23 @@ export interface Database {
         Args: { p_token: string };
         Returns: SharedHistory | { error: string };
       };
+      shared_performance_history: {
+        Args: { p_token: string };
+        Returns: PerformanceHistory | { error: string };
+      };
       portfolio_history: {
         Args: Record<string, never>;
         Returns: PortfolioHistory | { error: string };
       };
+      performance_history: {
+        Args: Record<string, never>;
+        Returns: PerformanceHistory | { error: string };
+      };
       refresh_portfolio_history_cache: {
+        Args: Record<string, never>;
+        Returns: HistoryCacheRefresh | { error: string };
+      };
+      refresh_performance_history_cache: {
         Args: Record<string, never>;
         Returns: HistoryCacheRefresh | { error: string };
       };

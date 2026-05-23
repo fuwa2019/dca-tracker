@@ -34,6 +34,7 @@ VITE_QUOTE_WORKER_URL=https://dca-quote.your-account.workers.dev
   }
   ```
 - `GET /api/chart?symbol=VOO&range=1y&interval=1d` — Yahoo v8 chart 透传，KV 缓存 1 小时。
+- `GET /api/history?symbols=QQQ,SPY&range=10y` — 返回 `close` 和 `adjustedClose`，并写入 Supabase `daily_prices.close / adjusted_close`。
 - `GET /health` — 健康检查。
 
 ## 注意

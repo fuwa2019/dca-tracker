@@ -8,7 +8,8 @@
  *   → Yahoo v8/chart payload (passthrough)
  *
  * GET /api/history?symbols=VOO,QQQM,SMH,SPY&range=5y
- *   → { series: [{ ticker, points: [{date, close}] }] } and upserts daily_prices
+ *   -> { series: [{ ticker, points: [{date, close, adjustedClose}] }] }
+ *      and upserts daily_prices
  *
  * CRON `15 22 * * 1-5` (UTC) — backfills latest trading day's close into daily_prices.
  *
@@ -223,6 +224,7 @@ async function handleChart(url: URL, env: Env): Promise<Response> {
 interface HistoryPoint {
   date: string; // YYYY-MM-DD
   close: number;
+  adjustedClose?: number;
 }
 interface HistorySeries {
   ticker: string;
@@ -272,16 +274,22 @@ async function fetchYahooHistory(symbol: string, range: string): Promise<History
   const result = data.chart?.result?.[0];
   const timestamps = result?.timestamp ?? [];
   const closes = result?.indicators?.quote?.[0]?.close ?? [];
+  const adjustedCloses = result?.indicators?.adjclose?.[0]?.adjclose ?? [];
 
   const points: HistoryPoint[] = [];
   for (let i = 0; i < timestamps.length; i++) {
     const ts = timestamps[i];
     const c = closes[i];
+    const adjusted = adjustedCloses[i];
     if (typeof ts !== 'number' || typeof c !== 'number' || !Number.isFinite(c)) continue;
     // Yahoo timestamps are at the trading-day open in ET; converting to UTC and
     // slicing YYYY-MM-DD gives the correct calendar date as long as the open
     // is past midnight UTC (which is always true since ET = UTC-4 / -5).
-    points.push({ date: new Date(ts * 1000).toISOString().slice(0, 10), close: c });
+    points.push({
+      date: new Date(ts * 1000).toISOString().slice(0, 10),
+      close: c,
+      adjustedClose: typeof adjusted === 'number' && Number.isFinite(adjusted) ? adjusted : c,
+    });
   }
   return { ticker: symbol, points };
 }
@@ -292,6 +300,7 @@ async function upsertDailyPrices(env: Env, ticker: string, points: HistoryPoint[
     ticker,
     trade_date: p.date,
     close: p.close,
+    adjusted_close: p.adjustedClose ?? p.close,
     source: 'yahoo',
     updated_at: new Date().toISOString(),
   }));
@@ -440,6 +449,9 @@ interface YahooV8Chart {
       indicators?: {
         quote?: Array<{
           close?: Array<number | null>;
+        }>;
+        adjclose?: Array<{
+          adjclose?: Array<number | null>;
         }>;
       };
     }>;

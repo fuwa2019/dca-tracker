@@ -1,15 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { Database } from '@/lib/database.types';
+import type { Database, PerformanceHistory, PortfolioHistory, SharedHistory } from '@/lib/database.types';
 import { aggregatePositions } from '@/lib/calc/position';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
 type SettingsRow = Database['public']['Tables']['settings']['Row'];
-type PortfolioHistoryRpc = Database['public']['Functions']['portfolio_history']['Returns'];
-type SharedHistoryRpc = Database['public']['Functions']['shared_history']['Returns'];
-type PortfolioHistory = Exclude<PortfolioHistoryRpc, { error: string }>;
-type SharedHistory = Exclude<SharedHistoryRpc, { error: string }>;
 
 export function useTransactions() {
   return useQuery<TxnRow[]>({
@@ -52,11 +49,19 @@ export function useSettings() {
 }
 
 export function usePortfolioHistory() {
-  return useQuery<PortfolioHistory | null>({
+  const qc = useQueryClient();
+  const query = useQuery<PortfolioHistory | null>({
     queryKey: ['portfolio_history'],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('portfolio_history');
-      if (!error && data && !('error' in data)) return data as PortfolioHistory;
+      const performance = await supabase.rpc('performance_history');
+      if (!performance.error && performance.data && !('error' in performance.data)) {
+        return normalizeHistory(performance.data as PerformanceHistory);
+      }
+
+      const legacy = await supabase.rpc('portfolio_history');
+      if (!legacy.error && legacy.data && !('error' in legacy.data)) {
+        return normalizeHistory(legacy.data as PortfolioHistory);
+      }
 
       const { data: links } = await supabase
         .from('share_links')
@@ -66,34 +71,83 @@ export function usePortfolioHistory() {
         .limit(1);
       const token = links?.[0]?.token;
       if (!token) {
-        if (error) throw error;
+        if (performance.error && !isMissingRpc(performance.error)) throw performance.error;
+        if (legacy.error && !isMissingRpc(legacy.error)) throw legacy.error;
         return null;
       }
 
-      const fallback = await supabase.rpc('shared_history', { p_token: token });
-      if (fallback.error) throw fallback.error;
-      const shared = fallback.data as SharedHistory;
+      const sharedPerformance = await supabase.rpc('shared_performance_history', { p_token: token });
+      if (!sharedPerformance.error && sharedPerformance.data && !('error' in sharedPerformance.data)) {
+        return normalizeHistory(sharedPerformance.data as SharedHistory);
+      }
+
+      const sharedLegacy = await supabase.rpc('shared_history', { p_token: token });
+      if (sharedLegacy.error && !isMissingRpc(sharedLegacy.error)) throw sharedLegacy.error;
+      const shared = sharedLegacy.data as SharedHistory | { error: string } | null;
       if (!shared || 'error' in shared) return null;
-      return {
-        generated_at: shared.generated_at,
-        series: shared.series.map((p) => ({
-          date: p.date,
-          invested: 0,
-          cost_basis: 0,
-          nav_user: 0,
-          nav_spy: 0,
-          return_pct_user: p.return_pct_user,
-          return_pct_spy: p.return_pct_spy,
-          pnl_user: 0,
-          pnl_spy: 0,
-          txns: [],
-        })),
-      };
+      return normalizeHistory(shared);
     },
     staleTime: 5 * 60 * 1000,
     placeholderData: (previous) => previous,
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (!query.data?.dirty) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { error } = await supabase.rpc('refresh_performance_history_cache');
+        if (cancelled) return;
+        if (!error) {
+          qc.invalidateQueries({ queryKey: ['portfolio_history'] });
+          return;
+        }
+        if (!isMissingRpc(error)) {
+          // eslint-disable-next-line no-console
+          console.warn('[performance-history] background refresh failed', error.message);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        // eslint-disable-next-line no-console
+        console.warn('[performance-history] background refresh failed', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [qc, query.data?.dirty, query.data?.generated_at]);
+
+  return query;
+}
+
+function normalizeHistory(history: PerformanceHistory | PortfolioHistory | SharedHistory): PortfolioHistory {
+  return {
+    generated_at: history.generated_at,
+    benchmark: history.benchmark,
+    method: history.method,
+    price_basis: history.price_basis,
+    dirty: history.dirty,
+    series: (history.series ?? []).map((p) => {
+      const row = p as PortfolioHistory['series'][number];
+      return {
+        date: p.date,
+        invested: Number(row.invested) || 0,
+        cost_basis: Number(row.cost_basis) || 0,
+        nav_user: Number(row.nav_user) || 0,
+        nav_spy: Number(row.nav_spy) || 0,
+        return_pct_user: Number(p.return_pct_user) || 0,
+        return_pct_spy: Number(p.return_pct_spy) || 0,
+        pnl_user: Number(row.pnl_user) || 0,
+        pnl_spy: Number(row.pnl_spy) || 0,
+        txns: Array.isArray(row.txns) ? row.txns : [],
+      };
+    }),
+  };
+}
+
+function isMissingRpc(error: { code?: string; message?: string }) {
+  return error.code === 'PGRST202' || /function .* does not exist|could not find .* function/i.test(error.message ?? '');
 }
 
 export function usePositions() {

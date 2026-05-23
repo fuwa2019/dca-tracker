@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { pct, signedPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { availableRanges, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
-import type { SharedPortfolio, SharedHistory } from '@/lib/database.types';
+import type { PerformanceHistory, SharedPortfolio, SharedHistory } from '@/lib/database.types';
 
 export function SharePage() {
   const { token } = useParams<{ token: string }>();
@@ -34,9 +34,13 @@ export function SharePage() {
     queryKey: ['share', 'history', shareToken],
     queryFn: async () => {
       if (!shareToken) throw new Error('invalid_token');
-      const { data, error } = await supabase.rpc('shared_history', { p_token: shareToken });
-      if (error) throw error;
-      return data as SharedHistory | { error: string };
+      const performance = await supabase.rpc('shared_performance_history', { p_token: shareToken });
+      if (!performance.error) return performance.data as PerformanceHistory | { error: string };
+      if (!isMissingRpc(performance.error)) throw performance.error;
+
+      const legacy = await supabase.rpc('shared_history', { p_token: shareToken });
+      if (legacy.error) throw legacy.error;
+      return legacy.data as SharedHistory | { error: string };
     },
     enabled: !!shareToken,
     staleTime: 10 * 60_000,
@@ -176,6 +180,10 @@ function normalizeDate(value: unknown) {
 function toFiniteNumber(value: unknown) {
   const number = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function isMissingRpc(error: { code?: string; message?: string }) {
+  return error.code === 'PGRST202' || /function .* does not exist|could not find .* function/i.test(error.message ?? '');
 }
 
 function Centered({ children }: { children: React.ReactNode }) {

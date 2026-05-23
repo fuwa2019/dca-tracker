@@ -11,7 +11,7 @@ export interface Quote {
 
 export interface HistorySeries {
   ticker: string;
-  points: Array<{ date: string; close: number }>;
+  points: Array<{ date: string; close: number; adjustedClose?: number }>;
 }
 
 const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';

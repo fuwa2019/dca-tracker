@@ -801,11 +801,22 @@ async function invalidatePortfolioQueries(qc: ReturnType<typeof useQueryClient>)
 }
 
 async function refreshPortfolioHistoryCache() {
+  const performance = await supabase.rpc('refresh_performance_history_cache');
+  if (!performance.error) return;
+  if (!isMissingRpc(performance.error)) {
+    // eslint-disable-next-line no-console
+    console.warn('[history-cache] refresh failed', performance.error.message);
+    return;
+  }
+
   const { error } = await supabase.rpc('refresh_portfolio_history_cache');
-  if (!error) return;
-  if (error.code === 'PGRST202' || /refresh_portfolio_history_cache/i.test(error.message)) return;
+  if (!error || isMissingRpc(error)) return;
   // eslint-disable-next-line no-console
   console.warn('[history-cache] refresh failed', error.message);
+}
+
+function isMissingRpc(error: { code?: string; message?: string }) {
+  return error.code === 'PGRST202' || /function .* does not exist|could not find .* function/i.test(error.message ?? '');
 }
 
 function seriesToPriceMap(series: HistorySeries[], ticker: string) {
