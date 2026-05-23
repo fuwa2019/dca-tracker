@@ -392,7 +392,7 @@ function PerformanceTooltip({
   const row = payload[0]?.payload;
   if (!row) return null;
   return (
-    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-[12px] shadow-md min-w-[200px]">
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-[12px] shadow-md min-w-[170px] max-w-[280px]">
       <div className="mb-1.5 text-[11px] text-muted-foreground tnum">{label ?? row.date}</div>
       <Row
         swatch={PORTFOLIO_STROKE}

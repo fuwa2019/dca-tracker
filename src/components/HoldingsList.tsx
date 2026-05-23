@@ -139,7 +139,7 @@ function HoldingsCards({ rows, basis: _basis }: { rows: Row[]; basis: 'avg' | 'f
           </div>
           <div className="mt-2 flex items-center gap-3">
             <div className="flex-1">
-              <WeightBar pctValue={r.weightPct} />
+              <WeightBar pctValue={r.weightPct} compact />
             </div>
             <div className={cn('text-right text-xs tnum', changeColor(r.unrealizedUsd))}>
               {signedUsd(r.unrealizedUsd)} ({signedPct(r.unrealizedPct)})
@@ -151,13 +151,18 @@ function HoldingsCards({ rows, basis: _basis }: { rows: Row[]; basis: 'avg' | 'f
   );
 }
 
-function WeightBar({ pctValue }: { pctValue: number }) {
+function WeightBar({ pctValue, compact }: { pctValue: number; compact?: boolean }) {
   return (
     <div className="flex items-center justify-end gap-2">
-      <span className="hidden w-16 overflow-hidden rounded-full bg-surface-elevated md:block">
+      <span
+        className={cn(
+          'overflow-hidden rounded-full bg-surface-elevated',
+          compact ? 'block h-1 w-full' : 'hidden h-1.5 w-16 md:block',
+        )}
+      >
         <span
           aria-hidden
-          className="block h-1.5 rounded-full bg-brand"
+          className={cn('block rounded-full bg-brand', compact ? 'h-1' : 'h-1.5')}
           style={{ width: `${Math.min(100, Math.max(2, pctValue * 100))}%` }}
         />
       </span>

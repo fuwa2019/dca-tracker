@@ -58,45 +58,89 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, x: -8 }}
                 transition={{ delay: i * 0.02 }}
-                className={cn(
-                  'flex items-center gap-3 border-b px-4 py-3 text-sm last:border-b-0',
-                )}
+                className="border-b px-4 py-3 text-sm last:border-b-0"
               >
-                <div className="w-14 shrink-0 text-xs text-muted-foreground tnum">{shortDate(t.trade_date)}</div>
-                <div className="w-16 shrink-0 font-semibold">{t.ticker}</div>
-                <div className="hidden w-16 shrink-0 sm:block">
-                  <span
-                    className={cn(
-                      'inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium',
-                      isSell ? 'bg-loss-soft' : 'bg-gain-soft',
-                    )}
-                  >
-                    {isSell ? '卖出' : '买入'}
-                  </span>
+                {/* Desktop: horizontal row */}
+                <div className="hidden items-center gap-3 md:flex">
+                  <div className="w-14 shrink-0 text-xs text-muted-foreground tnum">{shortDate(t.trade_date)}</div>
+                  <div className="w-16 shrink-0 font-semibold">{t.ticker}</div>
+                  <div className="hidden w-16 shrink-0 sm:block">
+                    <span
+                      className={cn(
+                        'inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium',
+                        isSell ? 'bg-loss-soft' : 'bg-gain-soft',
+                      )}
+                    >
+                      {isSell ? '卖出' : '买入'}
+                    </span>
+                  </div>
+                  <div className="hidden w-16 shrink-0 lg:block">
+                    <span
+                      className={cn(
+                        'inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium',
+                        isLump ? 'bg-warn-soft' : 'bg-surface-elevated text-muted-foreground',
+                      )}
+                    >
+                      {isLump ? '大额' : '定投'}
+                    </span>
+                  </div>
+                  <div className="flex-1 text-right text-xs tnum text-muted-foreground">
+                    {Number(t.shares).toFixed(4)} × {usd.format(Number(t.price))}
+                  </div>
+                  <div className={cn('w-24 shrink-0 text-right font-medium tnum', changeColor(isSell ? notional : -notional))}>
+                    {usd.format(notional)}
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(t)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(t)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="hidden w-16 shrink-0 lg:block">
-                  <span
-                    className={cn(
-                      'inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium',
-                      isLump ? 'bg-warn-soft' : 'bg-surface-elevated text-muted-foreground',
-                    )}
-                  >
-                    {isLump ? '大额' : '定投'}
-                  </span>
-                </div>
-                <div className="flex-1 text-right text-xs tnum text-muted-foreground">
-                  {Number(t.shares).toFixed(4)} × {usd.format(Number(t.price))}
-                </div>
-                <div className={cn('w-24 shrink-0 text-right font-medium tnum', changeColor(isSell ? notional : -notional))}>
-                  {usd.format(notional)}
-                </div>
-                <div className="flex shrink-0 gap-1">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(t)}>
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(t)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+
+                {/* Mobile: two-line card */}
+                <div className="flex flex-col gap-2 md:hidden">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{t.ticker}</span>
+                      <span
+                        className={cn(
+                          'inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium',
+                          isSell ? 'bg-loss-soft' : 'bg-gain-soft',
+                        )}
+                      >
+                        {isSell ? '卖出' : '买入'}
+                      </span>
+                    </div>
+                    <div className={cn('text-base font-medium tnum', changeColor(isSell ? notional : -notional))}>
+                      {usd.format(notional)}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground tnum">
+                      <span>{shortDate(t.trade_date)}</span>
+                      <span>{Number(t.shares).toFixed(4)} 股</span>
+                      <span>@ {usd.format(Number(t.price))}</span>
+                      <span
+                        className={cn(
+                          'inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-medium',
+                          isLump ? 'bg-warn-soft' : 'bg-surface-elevated text-muted-foreground',
+                        )}
+                      >
+                        {isLump ? '大额' : '定投'}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(t)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(t)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             );

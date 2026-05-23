@@ -175,7 +175,7 @@ function EquityTooltip({
   const diff = userValue - spyValue;
 
   return (
-    <div className="rounded-xl border bg-popover/95 px-3 py-2.5 shadow-lg backdrop-blur min-w-[180px]">
+    <div className="rounded-xl border bg-popover/95 px-3 py-2.5 shadow-lg backdrop-blur min-w-[160px] max-w-[260px]">
       <div className="text-[10px] uppercase tracking-wider text-muted-foreground tnum">{point.date}</div>
       <div className={cn('mt-1 text-base font-semibold tnum', changeColor(userValue))}>
         {metric === 'returnPct' ? signedPct(userValue) : signedUsd(userValue)}

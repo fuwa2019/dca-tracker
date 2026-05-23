@@ -140,7 +140,7 @@ function TopBar({ title }: { title: string }) {
           <Logo className="lg:hidden" />
           <h1 className="truncate text-base font-semibold tracking-tight lg:text-lg">{title}</h1>
         </div>
-        <MarketStatusBar className="hidden md:flex" />
+        <MarketStatusBar className="flex" />
         <ThemeToggle />
       </div>
     </header>
