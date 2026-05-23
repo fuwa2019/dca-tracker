@@ -240,6 +240,7 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
     .filter(Boolean)
     .slice(0, 10);
   const range = url.searchParams.get('range') ?? '5y';
+  const persist = url.searchParams.get('persist') ?? '';
   if (symbols.length === 0) return json({ error: 'missing_symbols' }, 400);
 
   const cacheKey = `history:${symbols.join(',')}:${range}`;
@@ -257,10 +258,19 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
   if (successful.length > 0) {
     await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(series), { expirationTtl: HISTORY_TTL });
     if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
-      ctx.waitUntil(
-        Promise.all(successful.map((s) => upsertDailyPrices(env, s.ticker, s.points)))
-          .catch((e) => console.warn('[history] daily_prices upsert failed:', e)),
-      );
+      if (persist === 'sync') {
+        try {
+          await Promise.all(successful.map((s) => upsertDailyPrices(env, s.ticker, s.points)));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          return json({ error: 'daily_prices_upsert_failed', message: msg }, 500);
+        }
+      } else {
+        ctx.waitUntil(
+          Promise.all(successful.map((s) => upsertDailyPrices(env, s.ticker, s.points)))
+            .catch((e) => console.warn('[history] daily_prices upsert failed:', e)),
+        );
+      }
     }
   }
 

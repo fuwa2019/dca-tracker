@@ -43,15 +43,15 @@ export function useRefreshPerformanceCache() {
       return data;
     },
     onSuccess: async () => {
-      // Always refetch the real backend status — never assume dirty=false.
       await qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
       await qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       await qc.invalidateQueries({ queryKey: ['share', 'history'] });
+      await qc.invalidateQueries({ queryKey: ['price_coverage'] });
       await qc.refetchQueries({ queryKey: ['performance_cache_status'] });
     },
     onError: async () => {
-      // Refetch status so the page can show the real backend error.
       await qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
+      await qc.invalidateQueries({ queryKey: ['price_coverage'] });
       await qc.refetchQueries({ queryKey: ['performance_cache_status'] });
     },
   });

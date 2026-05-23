@@ -121,13 +121,20 @@ export function DataHealthPage() {
   const backfillPrices = useMutation({
     mutationFn: async () => {
       if (symbols.length === 0) return 0;
-      const series = await fetchHistory(symbols, pickRange(earliestDate));
+      const series = await fetchHistory(symbols, pickRange(earliestDate), { persist: 'sync' });
       return series.reduce((sum, s) => sum + (s.points?.length ?? 0), 0);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['price_coverage'] });
-      qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
-      qc.invalidateQueries({ queryKey: ['portfolio_history'] });
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['price_coverage'] }),
+        qc.invalidateQueries({ queryKey: ['performance_cache_status'] }),
+        qc.invalidateQueries({ queryKey: ['portfolio_history'] }),
+      ]);
+      await Promise.all([
+        qc.refetchQueries({ queryKey: ['price_coverage'] }),
+        qc.refetchQueries({ queryKey: ['performance_cache_status'] }),
+        qc.refetchQueries({ queryKey: ['portfolio_history'] }),
+      ]);
     },
   });
 
@@ -199,10 +206,20 @@ export function DataHealthPage() {
               </Button>
             </div>
           </div>
+          {backfillPrices.isSuccess && (
+            <p className="text-xs text-gain">
+              日线价格已写入 {backfillPrices.data ?? 0} 个数据点。
+            </p>
+          )}
+          {backfillPrices.isError && (
+            <p className="text-xs text-loss break-words">
+              补齐失败：{(backfillPrices.error as Error)?.message ?? '未知错误'}
+            </p>
+          )}
           {refreshCache.isSuccess && (
             <p className="text-xs text-gain">
               刷新完成。
-              {cacheDirty && ' 缓存仍标记为 dirty，请确认价格覆盖完整（下方价格覆盖表）。'}
+              {cacheDirty && ' 缓存仍为 dirty，可能是日线价格刚写入或 source_hash 变化，请稍后再刷新一次。'}
             </p>
           )}
           {refreshCache.isError && (

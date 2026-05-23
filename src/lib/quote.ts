@@ -54,12 +54,22 @@ export async function fetchChart(symbol: string, range = '1y', interval = '1d') 
   return r.json();
 }
 
-export async function fetchHistory(symbols: string[], range = '10y'): Promise<HistorySeries[]> {
+export async function fetchHistory(
+  symbols: string[],
+  range = '10y',
+  options?: { persist?: 'sync' },
+): Promise<HistorySeries[]> {
   if (!WORKER_BASE) return [];
   if (symbols.length === 0) return [];
-  const url = `${WORKER_BASE}/api/history?symbols=${encodeURIComponent(symbols.join(','))}&range=${range}`;
+  const params = new URLSearchParams({ symbols: symbols.join(','), range });
+  if (options?.persist === 'sync') params.set('persist', 'sync');
+  const url = `${WORKER_BASE}/api/history?${params.toString()}`;
   const r = await fetch(url);
-  if (!r.ok) throw new Error(`history http ${r.status}`);
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    const msg = (body as { message?: string }).message ?? `http ${r.status}`;
+    throw new Error(msg);
+  }
   const data = (await r.json()) as { series?: HistorySeries[] };
   return data.series ?? [];
 }

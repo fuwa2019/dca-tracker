@@ -55,7 +55,8 @@ export function useDemoDcaData() {
       setMessage(null);
       await clearDemoRows();
 
-      const history = await fetchHistory([DEMO_TICKER, 'SPY'], '10y');
+      // Fetch prices synchronously so daily_prices is guaranteed written before we insert.
+      const history = await fetchHistory([DEMO_TICKER, 'SPY'], '10y', { persist: 'sync' });
       const prices = seriesToPriceMap(history, DEMO_TICKER);
       const tradeRows = buildMonthlyDemoTrades(prices);
       if (tradeRows.length === 0) throw new Error('没有拿到 QQQ 历史价格');
@@ -91,7 +92,7 @@ export function useDemoDcaData() {
     onSuccess: async (count) => {
       setMessage(`已生成 ${count} 期，正在刷新缓存…`);
       try {
-        await refreshPortfolioHistoryCache();
+        await refreshPerformanceHistoryCache();
         setMessage(`已生成 ${count} 期，缓存刷新完成。`);
       } catch (cacheErr) {
         setMessage(`已生成 ${count} 期，但缓存刷新失败：${cacheErr instanceof Error ? cacheErr.message : '未知错误'}`);
@@ -112,7 +113,6 @@ export function useDemoDcaData() {
 }
 
 async function invalidatePortfolioQueries(qc: ReturnType<typeof useQueryClient>) {
-  await refreshPortfolioHistoryCache();
   await Promise.all([
     qc.invalidateQueries({ queryKey: ['transactions'] }),
     qc.invalidateQueries({ queryKey: ['cashflows'] }),
@@ -122,11 +122,10 @@ async function invalidatePortfolioQueries(qc: ReturnType<typeof useQueryClient>)
   ]);
 }
 
-async function refreshPortfolioHistoryCache() {
+async function refreshPerformanceHistoryCache() {
   const performance = await supabase.rpc('refresh_performance_history_cache');
   if (performance.error) {
     if (isMissingRpc(performance.error)) {
-      // Fall back to legacy RPC
       const { error } = await supabase.rpc('refresh_portfolio_history_cache');
       if (error && !isMissingRpc(error)) throw error;
       return;
