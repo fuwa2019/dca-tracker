@@ -1,5 +1,8 @@
 -- Diagnose performance cache issues.
--- Run this in Supabase SQL Editor to check RPC existence and cache state.
+-- Run this WHOLE FILE in Supabase SQL Editor.
+
+-- 0. Show your user ID
+select 'Your user ID:' as info, auth.uid() as user_id;
 
 -- 1. Check which RPCs exist
 select proname, pronargs
@@ -33,7 +36,6 @@ where user_id = auth.uid()
   and method = 'TWR';
 
 -- 3. Run the TWR computation directly and sample the output
--- Replace 'YOUR_USER_ID' with your actual user UUID.
 select
   jsonb_array_length((result->'series')::jsonb) as series_points,
   result->>'dirty' as dirty,
@@ -42,6 +44,6 @@ select
   result->'series'->(jsonb_array_length((result->'series')::jsonb) - 1) as last_point
 from (
   select public._performance_history_for_user_fast(
-    'YOUR_USER_ID'::uuid, 'SPY'
+    auth.uid(), 'SPY'
   ) as result
 ) t;
