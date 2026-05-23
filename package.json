@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit && tsc --noEmit -p workers/quote && tsc --noEmit -p workers/email-cron",
-    "test:finance": "node scripts/verify-performance-fixtures.mjs"
+    "test:finance": "node scripts/verify-performance-fixtures.mjs",
+    "test:stress": "node scripts/generate-30y-fixtures.mjs && node scripts/verify-30y-stress.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
