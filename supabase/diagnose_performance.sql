@@ -1,48 +1,42 @@
--- Diagnose performance cache issues.
--- Run this WHOLE FILE in Supabase SQL Editor.
-
--- 0. Find user IDs that have data
-select 'Step 0: Users with data' as section;
-select distinct user_id, 'has transactions' as source
-from public.transactions
-union all
-select distinct user_id, 'has cashflows'
-from public.cashflows
-union all
-select distinct user_id, 'has cache'
-from public.performance_history_cache;
-
--- 1. Check which RPCs exist
-select 'Step 1: RPC check' as section;
-select proname, pronargs
-from pg_proc
-where pronamespace = 'public'::regnamespace
-  and proname in (
-    'performance_cache_status',
-    'performance_history',
-    'refresh_performance_history_cache',
-    'shared_portfolio',
-    'shared_performance_history',
-    'portfolio_history',
-    '_performance_history_for_user_fast',
-    '_refresh_performance_history_cache_for_user'
-  )
-order by proname;
-
--- 2. Check ALL cache rows (not filtered by auth.uid())
-select 'Step 2: Cache state (all users)' as section;
+-- Find the user_id from data
+with uid as (
+  select user_id from public.transactions limit 1
+)
 select
-  user_id,
-  benchmark,
-  method,
-  dirty,
-  public._history_points_count(history) as points,
-  generated_at,
-  error
-from public.performance_history_cache;
+  'Step 1: direct function call' as section,
+  jsonb_array_length((result->'series')::jsonb) as series_points,
+  result->>'dirty' as dirty,
+  result->>'benchmark' as benchmark,
+  result->'series'->0 as first_point,
+  result->'series'->(jsonb_array_length((result->'series')::jsonb) - 1) as last_point
+from uid, lateral (
+  select public._performance_history_for_user_fast(uid.user_id, 'SPY') as result
+) t;
 
--- 3. Count your raw data
-select 'Step 3: Raw data counts' as section;
-select count(*) as transaction_count from public.transactions;
-select count(*) as cashflow_count from public.cashflows;
-select count(*) as price_count from public.daily_prices;
+-- Step 2: trace v_start
+select 'Step 2: trace v_start' as section,
+  (select min(usd_in_date) from public.cashflows where usd_in_date is not null) as min_cashflow,
+  (select min(trade_date) from public.transactions) as min_trade,
+  least(
+    (select min(usd_in_date) from public.cashflows where usd_in_date is not null),
+    (select min(trade_date) from public.transactions)
+  ) as v_start;
+
+-- Step 3: check SPY prices (needed for benchmark)
+select 'Step 3: SPY price check' as section,
+  count(*) as spy_price_count,
+  min(trade_date) as spy_first,
+  max(trade_date) as spy_last
+from public.daily_prices
+where ticker = 'SPY';
+
+-- Step 4: check user ticker prices
+select 'Step 4: user ticker prices' as section,
+  upper(ticker) as ticker,
+  count(*) as points,
+  min(trade_date) as first_date,
+  max(trade_date) as last_date
+from public.transactions
+group by upper(ticker)
+order by count(*) desc
+limit 5;
