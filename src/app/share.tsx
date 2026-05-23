@@ -97,7 +97,7 @@ export function SharePage() {
     : 0;
   const dateRange = last ? `${history[0].date} 至 ${last.date}` : '等待业绩缓存';
 
-  const hasSnapshotPrices = data.positions.some((p) => p.day_change_pct !== null);
+  const hasSnapshotPrices = data.has_snapshot_price;
 
   return (
     <div className="min-h-full bg-background text-foreground">

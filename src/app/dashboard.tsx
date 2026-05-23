@@ -65,7 +65,11 @@ export function DashboardPage() {
   );
   const { data: quotes = [], isLoading: quotesLoading, isError: quotesError } = useQuotes(symbols);
   const quoteByTicker = useMemo(() => new Map(quotes.map((q) => [q.ticker, q])), [quotes]);
-  const quotesUnavailable = !quotesLoading && quotes.length === 0 && positions.length > 0;
+  const quotesNone = !quotesLoading && quotes.length === 0 && positions.length > 0;
+  const quotesPartial = !quotesLoading && positions.length > 0 && positions.some((p) => {
+    const q = quoteByTicker.get(p.ticker);
+    return !q || q.price == null;
+  });
 
   const portfolioHistory = usePortfolioHistory();
   const history: HistoryPoint[] = useMemo(() => {
@@ -147,15 +151,19 @@ export function DashboardPage() {
             cacheDirty={!!cacheStatus.data?.dirty}
           />
 
-          {(quotesUnavailable || quotesError) && (
+          {(quotesNone || quotesPartial || quotesError) && (
             <Card className="flex items-start gap-3 border-warn/30 bg-warn/5 p-3 text-sm">
               <Wifi className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-foreground">行情未连接</div>
+                <div className="font-medium text-foreground">
+                  {quotesError ? '行情接口异常' : quotesNone ? '行情未连接' : '部分行情缺失'}
+                </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {quotesError
                     ? '行情接口请求失败，请检查网络或稍后重试。'
-                    : '未配置 Quote Worker 地址，当前按成本价估算，盈亏可能显示为 0。'}
+                    : quotesNone
+                      ? '未配置 Quote Worker 地址，当前按成本价估算。'
+                      : '部分持仓现价缺失，相关盈亏可能按成本估算，请稍后刷新。'}
                 </p>
               </div>
             </Card>

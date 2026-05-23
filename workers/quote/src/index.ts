@@ -349,11 +349,11 @@ async function fetchV7Quotes(symbols: string[]): Promise<QuoteOut[]> {
   if (!r.ok) throw new Error(`v7 ${r.status}`);
   const data = (await r.json()) as YahooV7Quote;
   return (data.quoteResponse?.result ?? []).map((row) => ({
-    ticker: row.symbol,
+    ticker: (row.symbol ?? '').trim().toUpperCase(),
     price: numOrNull(row.regularMarketPrice),
     prevClose: numOrNull(row.regularMarketPreviousClose),
     change: numOrNull(row.regularMarketChange),
-    changePct: normalizePct(numOrNull(row.regularMarketChangePercent)),
+    changePct: pctFromV7(row.regularMarketChangePercent),
     marketState: row.marketState ?? null,
     source: 'yahoo-v7' as const,
     cachedAt: new Date().toISOString(),
@@ -374,11 +374,11 @@ async function fetchV8Quote(symbol: string): Promise<QuoteOut | null> {
   const change = price !== null && prev !== null ? price - prev : null;
   const changePct = price !== null && prev !== null && prev !== 0 ? (price - prev) / prev : null;
   return {
-    ticker: symbol,
+    ticker: symbol.trim().toUpperCase(),
     price: numOrNull(price),
     prevClose: numOrNull(prev),
     change: numOrNull(change),
-    changePct: normalizePct(changePct),
+    changePct: numOrNull(changePct),
     marketState: meta.marketState ?? null,
     source: 'yahoo-v8',
     cachedAt: new Date().toISOString(),
@@ -391,17 +391,10 @@ function numOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Yahoo sometimes returns changePct as a percentage (e.g. 1.5 = 1.5%),
- *  sometimes as a decimal (e.g. 0.015 = 1.5%). Normalize to decimal:
- *    null → null
- *    abs > 1 → divide by 100 (was a percentage)
- *    otherwise → keep as-is (already a decimal)
- */
-function normalizePct(value: number | null): number | null {
-  if (value === null || value === undefined) return null;
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return null;
-  return Math.abs(n) > 1 ? n / 100 : n;
+/** Yahoo v7 returns changePct as a percentage (e.g. 0.39 = 0.39%). Divide by 100. */
+function pctFromV7(v: unknown): number | null {
+  const n = numOrNull(v);
+  return n !== null ? n / 100 : null;
 }
 
 function json(body: unknown, status = 200): Response {

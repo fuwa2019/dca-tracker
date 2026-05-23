@@ -165,6 +165,7 @@ export type SharedPortfolio = {
     day_change_pct: number | null;
   }>;
   total_return_pct: number;
+  has_snapshot_price: boolean;
   generated_at: string;
 };
 
