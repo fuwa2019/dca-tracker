@@ -174,6 +174,9 @@ export function SettingsPage() {
               return (
                 <div key={s.token} className={`flex items-center gap-2 rounded-lg border bg-card px-3 py-2 text-xs ${s.revoked ? 'opacity-50' : ''}`}>
                   <code className="flex-1 truncate font-mono">{url}</code>
+                  <span className="hidden text-[10px] text-muted-foreground sm:inline">
+                    访问 {s.access_count ?? 0} 次
+                  </span>
                   {!s.revoked && (
                     <>
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigator.clipboard.writeText(url)}>

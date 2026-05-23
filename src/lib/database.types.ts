@@ -107,6 +107,8 @@ export interface ShareLinkRow {
   expires_at: string | null;
   revoked: boolean;
   created_at: string;
+  access_count?: number;
+  last_accessed_at?: string | null;
 }
 export interface ShareLinkInsert {
   token: string;
@@ -114,6 +116,8 @@ export interface ShareLinkInsert {
   expires_at?: string | null;
   revoked?: boolean;
   created_at?: string;
+  access_count?: number;
+  last_accessed_at?: string | null;
 }
 export type ShareLinkUpdate = Partial<ShareLinkInsert>;
 
@@ -214,6 +218,19 @@ export type HistoryCacheRefresh = {
   method?: string;
 };
 
+export type PerformanceCacheStatus = {
+  exists: boolean;
+  benchmark?: string;
+  method?: string;
+  dirty?: boolean;
+  points?: number;
+  generated_at?: string;
+  updated_at?: string;
+  last_refresh_attempt_at?: string | null;
+  refresh_ms?: number | null;
+  error?: string | null;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -254,6 +271,14 @@ export interface Database {
       refresh_performance_history_cache: {
         Args: Record<string, never>;
         Returns: HistoryCacheRefresh | { error: string };
+      };
+      refresh_due_performance_caches: {
+        Args: { p_limit?: number };
+        Returns: { ok: true; refreshed: number; limit: number; generated_at: string } | { error: string };
+      };
+      performance_cache_status: {
+        Args: Record<string, never>;
+        Returns: PerformanceCacheStatus | { error: string };
       };
       refresh_shared_history_cache: {
         Args: { p_token: string };

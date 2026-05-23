@@ -71,6 +71,13 @@ Source changes mark cache dirty:
 
 The next authenticated refresh regenerates the cache.
 
+The Data Health page exposes the operational checks used before trusting a
+curve: input counts, price coverage, adjusted-close coverage, cache dirty
+status, refresh errors, and share-link access audit fields.
+
+Nightly price sync can call `refresh_due_performance_caches()` with the
+service-role key to refresh dirty caches in bounded batches.
+
 ## Required Regression Fixtures
 
 Use these cases when comparing against IBKR or changing SQL:
@@ -83,3 +90,7 @@ Use these cases when comparing against IBKR or changing SQL:
 - weekend cashflow with next trading-day benchmark purchase
 - missing daily price between two available closes
 - public share token reading the same curve as the dashboard
+
+`npm run test:finance` covers the smallest invariant fixtures for TWR and
+Modified Dietz math. CI runs this fixture script, TypeScript checks, and the
+production build on every push and pull request.

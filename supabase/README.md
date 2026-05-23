@@ -7,7 +7,7 @@
    - `migrations/0002_daily_prices.sql`（资产曲线和 SPY 对照所需的历史价表）
    - `migrations/0003_shared_portfolio_v2.sql`（修复卖出后均价虚高，覆盖旧函数）
    - 后续已部署项目继续按编号运行新增 migration，当前性能曲线最新版本到
-     `migrations/0013_performance_history_cache.sql`
+     `migrations/0014_performance_ops_and_security.sql`
 
    新部署只需按顺序跑一次；已部署的项目跑新增的 sql 即可（idempotent）。
 

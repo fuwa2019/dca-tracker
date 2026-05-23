@@ -26,6 +26,8 @@ select
     benchmark,
     method,
     dirty,
+    refresh_ms,
+    error,
     public._history_points_count(history) as points,
     generated_at,
     updated_at
@@ -36,3 +38,14 @@ where user_id = (
     where token = 'YOUR_SHARE_TOKEN_HERE'
     limit 1
 );
+
+select public.performance_cache_status() as cache_status;
+
+select
+    token,
+    revoked,
+    expires_at,
+    access_count,
+    last_accessed_at
+from public.share_links
+where token = 'YOUR_SHARE_TOKEN_HERE';

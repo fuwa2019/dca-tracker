@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, ListOrdered, ArrowLeftRight, Scale, Settings } from 'lucide-react';
+import { Activity, LayoutDashboard, ListOrdered, ArrowLeftRight, Scale, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV = [
@@ -8,6 +8,7 @@ const NAV = [
   { to: '/transactions', label: '交易', icon: ListOrdered },
   { to: '/cashflows', label: '资金流', icon: ArrowLeftRight },
   { to: '/rebalance', label: '再平衡', icon: Scale },
+  { to: '/health', label: '健康', icon: Activity },
   { to: '/settings', label: '设置', icon: Settings },
 ] as const;
 

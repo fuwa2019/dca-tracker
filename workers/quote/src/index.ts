@@ -103,6 +103,7 @@ async function runDailyPriceSync(env: Env): Promise<void> {
       console.error(`[cron] failed ${ticker}:`, err);
     }
   }
+  await refreshDuePerformanceCaches(env);
 }
 
 async function collectCronTickers(env: Env): Promise<string[]> {
@@ -319,6 +320,24 @@ async function upsertDailyPrices(env: Env, ticker: string, points: HistoryPoint[
       body: JSON.stringify(slice),
     });
     if (!r.ok) throw new Error(`supabase daily_prices upsert ${r.status}: ${await r.text()}`);
+  }
+}
+
+async function refreshDuePerformanceCaches(env: Env): Promise<void> {
+  try {
+    const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/refresh_due_performance_caches`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: env.SUPABASE_SERVICE_ROLE_KEY!,
+        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY!}`,
+      },
+      body: JSON.stringify({ p_limit: 25 }),
+    });
+    if (!r.ok) throw new Error(`refresh_due_performance_caches ${r.status}: ${await r.text()}`);
+    console.log('[cron] refreshed performance caches:', await r.text());
+  } catch (err) {
+    console.warn('[cron] performance cache refresh failed:', err);
   }
 }
 
