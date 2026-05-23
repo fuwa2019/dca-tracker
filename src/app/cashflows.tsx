@@ -32,6 +32,7 @@ export function CashflowsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cashflows'] });
       qc.invalidateQueries({ queryKey: ['portfolio_history'] });
+      qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
     },
   });
 
@@ -93,27 +94,57 @@ export function CashflowsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -8 }}
                   transition={{ delay: i * 0.02 }}
-                  className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 text-sm last:border-b-0"
+                  className="border-b border-border px-4 py-3 text-sm last:border-b-0"
                 >
-                  <div className="w-14 shrink-0 text-xs text-muted-foreground tnum">{shortDate(c.cny_out_date)}</div>
-                  <div className="min-w-[180px] flex-1">
-                    <div className="font-medium tnum">
-                      {cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}
+                  {/* Desktop: horizontal row */}
+                  <div className="hidden items-center gap-3 md:flex">
+                    <div className="w-14 shrink-0 text-xs text-muted-foreground tnum">{shortDate(c.cny_out_date)}</div>
+                    <div className="min-w-[180px] flex-1">
+                      <div className="font-medium tnum">
+                        {cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground tnum">
+                        汇率 {rate.toFixed(4)} {c.note ? `· ${c.note}` : ''}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-muted-foreground tnum">
-                      汇率 {rate.toFixed(4)} {c.note ? `· ${c.note}` : ''}
+                    <div className={cn('w-24 shrink-0 text-right text-xs tnum', changeColor(-loss))}>
+                      {usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                   </div>
-                  <div className={cn('w-24 text-right text-xs tnum', changeColor(-loss))}>
-                    {usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+
+                  {/* Mobile: two-line card */}
+                  <div className="flex flex-col gap-2 md:hidden">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1 font-medium tnum truncate">
+                        {cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}
+                      </div>
+                      <div className={cn('ml-2 shrink-0 text-right text-xs tnum', changeColor(-loss))}>
+                        {usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground tnum min-w-0">
+                        <span>{shortDate(c.cny_out_date)}</span>
+                        <span>汇率 {rate.toFixed(4)}</span>
+                        {c.note && <span className="truncate">· {c.note}</span>}
+                      </div>
+                      <div className="ml-2 flex shrink-0 gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </motion.div>
               );

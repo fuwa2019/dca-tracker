@@ -27,13 +27,23 @@ export interface UsMarketSession {
 }
 
 export async function fetchQuotes(symbols: string[]): Promise<Quote[]> {
-  if (!WORKER_BASE) return [];
+  if (!WORKER_BASE) {
+    if (import.meta.env.DEV) console.warn('[quote] VITE_QUOTE_WORKER_URL missing — quotes unavailable');
+    return [];
+  }
   if (symbols.length === 0) return [];
   const url = `${WORKER_BASE}/api/quote?symbols=${encodeURIComponent(symbols.join(','))}`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`quote http ${r.status}`);
-  const data = (await r.json()) as { quotes: Quote[] };
-  return data.quotes ?? [];
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`quote http ${r.status}`);
+    const data = (await r.json()) as { quotes: Quote[] };
+    const result = data.quotes ?? [];
+    if (import.meta.env.DEV && result.length === 0) console.warn('[quote] Worker returned 0 quotes — Yahoo upstream may be failing');
+    return result;
+  } catch (err) {
+    if (import.meta.env.DEV) console.warn('[quote] fetch failed:', err);
+    throw err;
+  }
 }
 
 export async function fetchChart(symbol: string, range = '1y', interval = '1d') {

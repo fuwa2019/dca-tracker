@@ -11,6 +11,7 @@ import {
   Wallet,
   Briefcase,
   TrendingUp,
+  Wifi,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -62,8 +63,9 @@ export function DashboardPage() {
     () => [...new Set([...positions.map((p) => p.ticker), ...watchlist, BENCHMARK_TICKER])],
     [positions, watchlist],
   );
-  const { data: quotes = [] } = useQuotes(symbols);
+  const { data: quotes = [], isLoading: quotesLoading, isError: quotesError } = useQuotes(symbols);
   const quoteByTicker = useMemo(() => new Map(quotes.map((q) => [q.ticker, q])), [quotes]);
+  const quotesUnavailable = !quotesLoading && quotes.length === 0 && positions.length > 0;
 
   const portfolioHistory = usePortfolioHistory();
   const history: HistoryPoint[] = useMemo(() => {
@@ -97,7 +99,7 @@ export function DashboardPage() {
     }
     const nav = stockMv + cash;
     return { nav, stockMv, cash, costBasis, dayPL, totalPL: nav - totalInvested };
-  }, [positions, quoteByTicker, totalInvested, cash]);
+  }, [positions, quoteByTicker, totalInvested, cash, costBasisMode]);
 
   const prevNav = aggregates.nav - aggregates.dayPL;
   const dayChangePct = prevNav > 0 ? aggregates.dayPL / prevNav : 0;
@@ -144,6 +146,20 @@ export function DashboardPage() {
             totalReturnPct={totalReturnPct}
             cacheDirty={!!cacheStatus.data?.dirty}
           />
+
+          {(quotesUnavailable || quotesError) && (
+            <Card className="flex items-start gap-3 border-warn/30 bg-warn/5 p-3 text-sm">
+              <Wifi className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-foreground">行情未连接</div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {quotesError
+                    ? '行情接口请求失败，请检查网络或稍后重试。'
+                    : '未配置 Quote Worker 地址，当前按成本价估算，盈亏可能显示为 0。'}
+                </p>
+              </div>
+            </Card>
+          )}
 
           <div className="grid gap-3 md:grid-cols-3">
             <StatCard

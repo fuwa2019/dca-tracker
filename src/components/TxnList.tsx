@@ -31,6 +31,7 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['portfolio_history'] });
+      qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
     },
   });
 

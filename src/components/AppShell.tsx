@@ -135,13 +135,26 @@ class RouteErrorBoundary extends Component<
 function TopBar({ title }: { title: string }) {
   return (
     <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 lg:px-8">
+      <div className="flex flex-col gap-y-1 px-4 py-2.5 lg:flex-row lg:items-center lg:gap-x-3 lg:px-8 lg:py-3">
+        {/* Row 1 (mobile): Logo + title + ThemeToggle; Row 1 (desktop): title only */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Logo className="lg:hidden" />
-          <h1 className="truncate text-base font-semibold tracking-tight lg:text-lg">{title}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight lg:text-lg">{title}</h1>
+          <div className="lg:hidden">
+            <ThemeToggle />
+          </div>
         </div>
-        <MarketStatusBar className="flex" />
-        <ThemeToggle />
+
+        {/* Row 2 (mobile): MarketStatusBar */}
+        <div className="lg:hidden">
+          <MarketStatusBar className="flex" />
+        </div>
+
+        {/* Desktop right side: MarketStatusBar + ThemeToggle */}
+        <div className="hidden items-center gap-3 lg:flex lg:shrink-0">
+          <MarketStatusBar className="flex" />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
