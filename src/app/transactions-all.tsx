@@ -44,7 +44,7 @@ export function TransactionsAllPage() {
 
   return (
     <div className="container max-w-5xl px-4 py-5 sm:px-6 sm:py-6 space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative min-w-0 flex-1 sm:min-w-[260px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -54,14 +54,16 @@ export function TransactionsAllPage() {
             className="pl-9"
           />
         </div>
-        <SegmentedControl
-          value={filter}
-          onChange={(v) => setFilter(v)}
-          name="txn-filter"
-          ariaLabel="交易筛选"
-          options={FILTERS}
-          size="sm"
-        />
+        <div className="overflow-x-auto -mx-1 px-1">
+          <SegmentedControl
+            value={filter}
+            onChange={(v) => setFilter(v)}
+            name="txn-filter"
+            ariaLabel="交易筛选"
+            options={FILTERS}
+            size="sm"
+          />
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground tnum">{filtered.length} / {txns.length} 条</p>

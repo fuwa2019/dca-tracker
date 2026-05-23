@@ -97,6 +97,8 @@ export function SharePage() {
     : 0;
   const dateRange = last ? `${history[0].date} 至 ${last.date}` : '等待业绩缓存';
 
+  const hasSnapshotPrices = data.positions.some((p) => p.day_change_pct !== null);
+
   return (
     <div className="min-h-full bg-background text-foreground">
       <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
@@ -111,6 +113,17 @@ export function SharePage() {
       </header>
 
       <div className="container max-w-[1200px] space-y-5 px-4 py-5 sm:px-6 sm:py-7">
+        {!hasSnapshotPrices && (
+          <Card className="flex items-start gap-3 border-warn/30 bg-warn/5 p-3 text-sm">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+            <div className="min-w-0 flex-1">
+              <div className="font-medium text-foreground">行情快照未更新</div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                分享页行情快照未更新，收益率可能按成本估算，与实际市值存在偏差。
+              </p>
+            </div>
+          </Card>
+        )}
         <Card className="overflow-hidden p-0">
           <div className={cn('grid gap-0', showBenchmark ? 'md:grid-cols-3' : 'md:grid-cols-1')}>
             <SummaryCell

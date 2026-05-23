@@ -25,11 +25,11 @@ begin
           and (
               trade_date < new.trade_date
               or (trade_date = new.trade_date and created_at < coalesce(new.created_at, now()))
-              or (tg_op = 'UPDATE' and id <> new.id)
-          );
+          )
+          and not (tg_op = 'UPDATE' and id = new.id);
 
         if v_net < new.shares - 1e-9 then
-            raise exception 'oversell: % shares of % on % exceeds available %',
+            raise exception 'oversell: % shares of % on % exceeds available % (only trades on or before this date are counted)',
                 new.shares, upper(new.ticker), new.trade_date, v_net;
         end if;
     end if;

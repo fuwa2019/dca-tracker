@@ -353,7 +353,7 @@ async function fetchV7Quotes(symbols: string[]): Promise<QuoteOut[]> {
     price: numOrNull(row.regularMarketPrice),
     prevClose: numOrNull(row.regularMarketPreviousClose),
     change: numOrNull(row.regularMarketChange),
-    changePct: numOrNull(row.regularMarketChangePercent),
+    changePct: normalizePct(numOrNull(row.regularMarketChangePercent)),
     marketState: row.marketState ?? null,
     source: 'yahoo-v7' as const,
     cachedAt: new Date().toISOString(),
@@ -378,7 +378,7 @@ async function fetchV8Quote(symbol: string): Promise<QuoteOut | null> {
     price: numOrNull(price),
     prevClose: numOrNull(prev),
     change: numOrNull(change),
-    changePct: numOrNull(changePct),
+    changePct: normalizePct(changePct),
     marketState: meta.marketState ?? null,
     source: 'yahoo-v8',
     cachedAt: new Date().toISOString(),
@@ -389,6 +389,19 @@ function numOrNull(v: unknown): number | null {
   if (v === null || v === undefined) return null;
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Yahoo sometimes returns changePct as a percentage (e.g. 1.5 = 1.5%),
+ *  sometimes as a decimal (e.g. 0.015 = 1.5%). Normalize to decimal:
+ *    null → null
+ *    abs > 1 → divide by 100 (was a percentage)
+ *    otherwise → keep as-is (already a decimal)
+ */
+function normalizePct(value: number | null): number | null {
+  if (value === null || value === undefined) return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.abs(n) > 1 ? n / 100 : n;
 }
 
 function json(body: unknown, status = 200): Response {

@@ -34,6 +34,8 @@ export function SettingsPage() {
     monthly_dca_usd: '',
     email_enabled: true,
     email_to: '',
+    cost_basis_default: 'avg' as 'avg' | 'fifo',
+    watchlist: 'VOO,QQQM,SMH',
   });
   const [savedFlash, setSavedFlash] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
@@ -46,6 +48,8 @@ export function SettingsPage() {
         monthly_dca_usd: settings.monthly_dca_usd ? String(settings.monthly_dca_usd) : '',
         email_enabled: settings.email_enabled,
         email_to: settings.email_to ?? '',
+        cost_basis_default: (settings.cost_basis_default as 'avg' | 'fifo') ?? 'avg',
+        watchlist: (settings.watchlist ?? ['VOO', 'QQQM', 'SMH']).join(','),
       });
     }
   }, [settings]);
@@ -53,6 +57,11 @@ export function SettingsPage() {
   const save = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('not_authed');
+      const watchlist = form.watchlist
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean)
+        .filter((v, i, arr) => arr.indexOf(v) === i);
       const payload = {
         user_id: user.id,
         target_usd: Number(form.target_usd),
@@ -60,6 +69,8 @@ export function SettingsPage() {
         monthly_dca_usd: form.monthly_dca_usd ? Number(form.monthly_dca_usd) : null,
         email_enabled: form.email_enabled,
         email_to: form.email_to || null,
+        cost_basis_default: form.cost_basis_default,
+        watchlist,
       };
       const { error } = await supabase.from('settings').upsert(payload);
       if (error) throw error;
@@ -143,6 +154,38 @@ export function SettingsPage() {
             <Label htmlFor="mail">收件邮箱</Label>
             <Input id="mail" type="email" value={form.email_to} onChange={(e) => setForm((f) => ({ ...f, email_to: e.target.value }))} placeholder="you@gmail.com" />
             <p className="text-[11px] text-muted-foreground">建议 Gmail / iCloud / Outlook（Resend 直发可达）</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">持仓与自选</CardTitle>
+          <CardDescription className="text-xs">控制盈亏计算口径和首页自选股列表</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="costBasis">成本口径</Label>
+            <select
+              id="costBasis"
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              value={form.cost_basis_default}
+              onChange={(e) => setForm((f) => ({ ...f, cost_basis_default: e.target.value as 'avg' | 'fifo' }))}
+            >
+              <option value="avg">平均成本 (AVG)</option>
+              <option value="fifo">先进先出 (FIFO)</option>
+            </select>
+            <p className="text-[11px] text-muted-foreground">AVG 按持仓均价；FIFO 按最早买入批次</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="watchlist">自选股</Label>
+            <Input
+              id="watchlist"
+              value={form.watchlist}
+              onChange={(e) => setForm((f) => ({ ...f, watchlist: e.target.value }))}
+              placeholder="VOO,QQQM,SMH"
+            />
+            <p className="text-[11px] text-muted-foreground">逗号分隔，保存时自动大写去重</p>
           </div>
         </CardContent>
       </Card>
