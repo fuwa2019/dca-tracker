@@ -195,6 +195,13 @@ export type PortfolioHistory = {
   generated_at: string;
 };
 
+export type HistoryCacheRefresh = {
+  ok: true;
+  points: number;
+  generated_at: string;
+  updated_at?: string;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -222,7 +229,11 @@ export interface Database {
       };
       refresh_portfolio_history_cache: {
         Args: Record<string, never>;
-        Returns: PortfolioHistory | { error: string };
+        Returns: HistoryCacheRefresh | { error: string };
+      };
+      refresh_shared_history_cache: {
+        Args: { p_token: string };
+        Returns: HistoryCacheRefresh | { error: string };
       };
     };
     Enums: Record<string, never>;
