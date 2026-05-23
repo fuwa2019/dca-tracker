@@ -1,10 +1,19 @@
 -- Diagnose performance cache issues.
 -- Run this WHOLE FILE in Supabase SQL Editor.
 
--- 0. Show your user ID
-select 'Your user ID:' as info, auth.uid() as user_id;
+-- 0. Find user IDs that have data
+select 'Step 0: Users with data' as section;
+select distinct user_id, 'has transactions' as source
+from public.transactions
+union all
+select distinct user_id, 'has cashflows'
+from public.cashflows
+union all
+select distinct user_id, 'has cache'
+from public.performance_history_cache;
 
 -- 1. Check which RPCs exist
+select 'Step 1: RPC check' as section;
 select proname, pronargs
 from pg_proc
 where pronamespace = 'public'::regnamespace
@@ -20,30 +29,20 @@ where pronamespace = 'public'::regnamespace
   )
 order by proname;
 
--- 2. Check your cache state
+-- 2. Check ALL cache rows (not filtered by auth.uid())
+select 'Step 2: Cache state (all users)' as section;
 select
+  user_id,
   benchmark,
   method,
   dirty,
   public._history_points_count(history) as points,
   generated_at,
-  updated_at,
-  error,
-  refresh_ms
-from public.performance_history_cache
-where user_id = auth.uid()
-  and benchmark = 'SPY'
-  and method = 'TWR';
+  error
+from public.performance_history_cache;
 
--- 3. Run the TWR computation directly and sample the output
-select
-  jsonb_array_length((result->'series')::jsonb) as series_points,
-  result->>'dirty' as dirty,
-  jsonb_array_length((result->'warnings')::jsonb) as warning_count,
-  result->'series'->0 as first_point,
-  result->'series'->(jsonb_array_length((result->'series')::jsonb) - 1) as last_point
-from (
-  select public._performance_history_for_user_fast(
-    auth.uid(), 'SPY'
-  ) as result
-) t;
+-- 3. Count your raw data
+select 'Step 3: Raw data counts' as section;
+select count(*) as transaction_count from public.transactions;
+select count(*) as cashflow_count from public.cashflows;
+select count(*) as price_count from public.daily_prices;
