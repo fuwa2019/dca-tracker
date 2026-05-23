@@ -36,12 +36,12 @@ export function MarketStatusBar({ className, compact = false }: Props) {
   const session = getUsMarketSession(now);
 
   return (
-    <div className={cn('flex items-center gap-2 text-xs text-muted-foreground tnum', className)}>
+    <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground tnum', className)}>
       <StatusBadge tone={sessionTone[session.key]} dot>
         美股{session.label}
       </StatusBadge>
       {!compact && (
-        <span className="hidden items-center gap-1 sm:inline-flex">
+        <span className="inline-flex items-center gap-1">
           <Clock className="h-3 w-3" />
           NYC {formatEtClock(now)} ET
         </span>

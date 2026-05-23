@@ -92,7 +92,7 @@ export function CashflowForm({ initial, onDone }: Props) {
   return (
     <form onSubmit={submit} className="space-y-4">
       <Section title="CNY 出账" hint="把人民币从国内账户转出的那一笔">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field id="cny-date" label="出账日">
             <Input id="cny-date" type="date" value={cnyOutDate} onChange={(e) => setCnyOutDate(e.target.value)} required />
           </Field>
@@ -103,7 +103,7 @@ export function CashflowForm({ initial, onDone }: Props) {
       </Section>
 
       <Section title="USD 到账" hint="Schwab 实际收到的美元金额（净额，扣完手续费）">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field id="usd-date" label="到账日">
             <Input id="usd-date" type="date" value={usdInDate} onChange={(e) => setUsdInDate(e.target.value)} />
           </Field>
@@ -114,7 +114,7 @@ export function CashflowForm({ initial, onDone }: Props) {
       </Section>
 
       <Section title="汇率与手续费" hint="汇率写「CNY/USD」（例如 7.20）。CNY 手续费会计入损耗，USD 手续费仅作展示。">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field id="rate" label="参考汇率">
             <Input id="rate" type="number" step="0.0001" inputMode="decimal" value={targetRate} onChange={(e) => setTargetRate(e.target.value)} required />
           </Field>
@@ -175,7 +175,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
 
 function Field({ id, label, children }: { id: string; label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5 min-w-0">
       <Label htmlFor={id}>{label}</Label>
       {children}
     </div>

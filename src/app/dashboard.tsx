@@ -168,14 +168,14 @@ export function DashboardPage() {
 
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2 overflow-hidden p-0">
-              <div className="flex items-baseline justify-between border-b border-border px-4 py-3">
-                <div>
+              <div className="flex items-baseline justify-between gap-2 border-b border-border px-4 py-3">
+                <div className="min-w-0">
                   <div className="text-sm font-semibold">业绩曲线</div>
-                  <div className="text-[11px] text-muted-foreground tnum">
+                  <div className="truncate text-[11px] text-muted-foreground tnum">
                     {last ? `${history[0].date} 至 ${last.date}` : '暂无'}
                   </div>
                 </div>
-                <Button asChild variant="ghost" size="sm">
+                <Button asChild variant="ghost" size="sm" className="shrink-0">
                   <Link to="/performance">
                     查看完整 <ArrowUpRight className="h-3.5 w-3.5" />
                   </Link>
@@ -206,14 +206,14 @@ export function DashboardPage() {
           </div>
 
           <section>
-            <div className="mb-3 flex items-baseline justify-between">
-              <div>
+            <div className="mb-3 flex items-baseline justify-between gap-2">
+              <div className="min-w-0">
                 <h2 className="text-base font-semibold tracking-tight">持仓</h2>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="truncate text-[11px] text-muted-foreground">
                   {positions.length} 只 · {costBasisMode === 'avg' ? '平均成本' : 'FIFO'}口径
                 </p>
               </div>
-              <Button asChild variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="sm" className="shrink-0">
                 <Link to="/transactions">
                   全部交易 <ArrowUpRight className="h-3.5 w-3.5" />
                 </Link>
@@ -281,7 +281,7 @@ function NavHero({
             组合净值 (NAV)
             {cacheDirty && <StatusBadge tone="warn" dot>缓存待刷新</StatusBadge>}
           </div>
-          <div className="mt-1 text-[34px] font-semibold leading-tight tracking-tight tnum">
+          <div className="mt-1 text-[30px] font-semibold leading-tight tracking-tight tnum sm:text-[34px] whitespace-nowrap overflow-hidden text-ellipsis">
             {usd.format(nav)}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground tnum">
@@ -406,19 +406,20 @@ function MiniEquityCurve({ history }: { history: HistoryPoint[] }) {
 
 function QuickActions() {
   const actions = [
-    { to: '/transactions', label: '添加交易', icon: Plus },
-    { to: '/cashflows', label: '记一笔入金', icon: ArrowLeftRight },
-    { to: '/rebalance', label: '再平衡计算', icon: BarChart3 },
-    { to: '/health', label: '数据健康', icon: Activity },
+    { to: '/transactions', label: '添加交易', short: '交易', icon: Plus },
+    { to: '/cashflows', label: '记一笔入金', short: '入金', icon: ArrowLeftRight },
+    { to: '/rebalance', label: '再平衡计算', short: '再平衡', icon: BarChart3 },
+    { to: '/health', label: '数据健康', short: '健康', icon: Activity },
   ];
   return (
     <Card className="p-3">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {actions.map(({ to, label, icon: Icon }) => (
-          <Button key={to} asChild variant="ghost" className="h-12 justify-start text-sm">
-            <Link to={to}>
-              <Icon className="h-4 w-4 text-muted-foreground" />
-              {label}
+        {actions.map(({ to, label, short, icon: Icon }) => (
+          <Button key={to} asChild variant="ghost" className="h-12 justify-start text-xs sm:text-sm">
+            <Link to={to} className="whitespace-nowrap">
+              <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="hidden sm:inline">{label}</span>
+              <span className="sm:hidden">{short}</span>
             </Link>
           </Button>
         ))}

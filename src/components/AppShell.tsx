@@ -135,7 +135,7 @@ class RouteErrorBoundary extends Component<
 function TopBar({ title }: { title: string }) {
   return (
     <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-      <div className="flex items-center gap-3 px-4 py-3 lg:px-8">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 lg:px-8">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Logo className="lg:hidden" />
           <h1 className="truncate text-base font-semibold tracking-tight lg:text-lg">{title}</h1>

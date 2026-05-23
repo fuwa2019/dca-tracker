@@ -106,9 +106,37 @@ export function PerformancePanel({
   return (
     <div className="space-y-4">
       <Card className="overflow-hidden p-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface-elevated/50 px-4 py-3">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 border-b border-border bg-surface-elevated/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Mobile: label + controls row */}
+          <div className="flex items-center justify-between gap-2 sm:hidden">
             <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              时间段
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="查看业绩计算说明"
+                aria-expanded={infoOpen}
+                onClick={() => setInfoOpen((v) => !v)}
+                className={cn(
+                  'inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground',
+                  infoOpen && 'border-brand/40 text-brand',
+                )}
+              >
+                <Info className="h-3.5 w-3.5" />
+              </button>
+              {!hideBenchmarkToggle && (
+                <BenchmarkToggle
+                  checked={showBenchmark}
+                  onCheckedChange={onShowBenchmarkChange}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Desktop: label + segmented control */}
+          <div className="hidden items-center gap-3 sm:flex">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground shrink-0">
               时间段
             </span>
             {filteredRanges.length > 0 ? (
@@ -124,7 +152,25 @@ export function PerformancePanel({
               <span className="text-xs text-muted-foreground">暂无数据</span>
             )}
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Mobile: scrollable segmented control */}
+          <div className="overflow-x-auto sm:hidden">
+            {filteredRanges.length > 0 ? (
+              <SegmentedControl
+                value={safeRange}
+                onChange={(v) => onRangeChange(v as RangeKey)}
+                options={filteredRanges}
+                size="sm"
+                name="perf-range-mobile"
+                ariaLabel="选择时间段"
+              />
+            ) : (
+              <span className="text-xs text-muted-foreground">暂无数据</span>
+            )}
+          </div>
+
+          {/* Desktop: info + SPY toggle */}
+          <div className="hidden items-center gap-2 sm:flex">
             <button
               type="button"
               aria-label="查看业绩计算说明"
@@ -235,12 +281,12 @@ function SummaryTable({
       </div>
       <div className="px-4 pb-3 pt-3">
         <div className="overflow-x-auto">
-          <table className="w-full border-separate border-spacing-0 text-[13px]">
+          <table className="w-full min-w-[360px] border-separate border-spacing-0 text-[13px]">
             <thead>
               <tr className="text-muted-foreground">
-                <th className="w-40 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wider"></th>
+                <th className="w-40 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wider whitespace-nowrap"></th>
                 {headers.map((h) => (
-                  <th key={h} className="px-2 py-2 text-right text-[11px] font-medium uppercase tracking-wider">
+                  <th key={h} className="px-2 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
                 ))}
@@ -502,16 +548,16 @@ function PerformanceDetailTable({
   return (
     <div className="border-t border-border">
       <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
+        <table className="w-full min-w-[520px] text-[13px]">
           <thead>
             <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
-              <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">日期</th>
+              <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">日期</th>
               {showBenchmark && (
-                <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">SPY 累计 %</th>
+                <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">SPY 累计 %</th>
               )}
-              <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">组合 累计 %</th>
+              <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">组合 累计 %</th>
               {showBenchmark && (
-                <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">超额 %</th>
+                <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">超额 %</th>
               )}
             </tr>
           </thead>

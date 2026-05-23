@@ -96,19 +96,19 @@ export function TxnForm({ initial, onDone }: Props) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5 min-w-0">
           <Label htmlFor="date">日期</Label>
           <Input id="date" type="date" value={tradeDate} onChange={(e) => setTradeDate(e.target.value)} required />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <Label htmlFor="ticker">股票代码</Label>
           <Input id="ticker" value={ticker} onChange={(e) => setTicker(e.target.value.toUpperCase())} required />
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <Label>方向</Label>
           <SegmentedControl
             value={side}
@@ -122,7 +122,7 @@ export function TxnForm({ initial, onDone }: Props) {
             ]}
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <Label>类型</Label>
           <SegmentedControl
             value={kind}
@@ -137,12 +137,12 @@ export function TxnForm({ initial, onDone }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5 min-w-0">
           <Label htmlFor="price">成交价 (USD)</Label>
           <Input id="price" type="number" step="0.0001" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} required />
         </div>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 min-w-0">
           <Label htmlFor="shares">股数</Label>
           <Input
             id="shares"
@@ -163,7 +163,7 @@ export function TxnForm({ initial, onDone }: Props) {
         </div>
       </div>
 
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 min-w-0">
         <Label htmlFor="note">备注（可选）</Label>
         <Input id="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="例：换仓 / Q4 大额" />
       </div>
