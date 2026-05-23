@@ -9,19 +9,20 @@ interface DailyPriceRow {
   ticker: string;
   trade_date: string;
   close: number;
+  adjusted_close: number | null;
 }
 
 interface WorkerHistoryResponse {
   series?: Array<{
     ticker: string;
-    points: Array<{ date: string; close: number }>;
+    points: Array<{ date: string; close: number; adjustedClose?: number | null }>;
   }>;
 }
 
 async function readFromSupabase(symbols: string[], earliestDate: string): Promise<PriceMap> {
   const { data, error } = await supabase
     .from('daily_prices')
-    .select('ticker,trade_date,close')
+    .select('ticker,trade_date,close,adjusted_close')
     .in('ticker', symbols)
     .gte('trade_date', earliestDate)
     .order('trade_date', { ascending: true });
@@ -33,7 +34,7 @@ async function readFromSupabase(symbols: string[], earliestDate: string): Promis
       m = new Map();
       map.set(row.ticker, m);
     }
-    m.set(row.trade_date, Number(row.close));
+    m.set(row.trade_date, Number(row.adjusted_close ?? row.close));
   }
   return map;
 }
@@ -83,7 +84,8 @@ function workerHistoryToMap(data: WorkerHistoryResponse): PriceMap {
       map.set(ticker, prices);
     }
     for (const point of row.points ?? []) {
-      if (point.date && Number.isFinite(point.close)) prices.set(point.date, Number(point.close));
+      const px = point.adjustedClose ?? point.close;
+      if (point.date && Number.isFinite(px)) prices.set(point.date, Number(px));
     }
   }
   return map;

@@ -171,11 +171,21 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
 
     if (prevNavUser !== null && prevNavUser > 0) {
       const dailyReturnUser = (navUser - (flow ?? 0)) / prevNavUser - 1;
-      if (Number.isFinite(dailyReturnUser)) cumulativeUser *= 1 + dailyReturnUser;
+      if (Number.isFinite(dailyReturnUser) && 1 + dailyReturnUser > 0) {
+        cumulativeUser *= 1 + dailyReturnUser;
+      } else if (Number.isFinite(dailyReturnUser)) {
+        // eslint-disable-next-line no-console
+        console.warn(`[history] skipping extreme daily return for user on ${iso}: dailyReturn=${dailyReturnUser} (1+r <= 0 would contaminate cumulative product)`);
+      }
     }
     if (prevNavSpy !== null && prevNavSpy > 0) {
       const dailyReturnSpy = (navSpy - (flow ?? 0)) / prevNavSpy - 1;
-      if (Number.isFinite(dailyReturnSpy)) cumulativeSpy *= 1 + dailyReturnSpy;
+      if (Number.isFinite(dailyReturnSpy) && 1 + dailyReturnSpy > 0) {
+        cumulativeSpy *= 1 + dailyReturnSpy;
+      } else if (Number.isFinite(dailyReturnSpy)) {
+        // eslint-disable-next-line no-console
+        console.warn(`[history] skipping extreme daily return for SPY on ${iso}: dailyReturn=${dailyReturnSpy} (1+r <= 0 would contaminate cumulative product)`);
+      }
     }
     prevNavUser = navUser;
     prevNavSpy = navSpy;
