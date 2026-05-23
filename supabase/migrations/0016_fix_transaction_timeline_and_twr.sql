@@ -1,4 +1,4 @@
--- DCA Tracker — combined fixes for sell validation and TWR factor handling
+-- DCA Tracker — transaction timeline validation and TWR factor handling
 --
 -- 1. Sell validation: full timeline-based running-shares check.
 --    Replaces the simpler net-shares query in 0015 with a row-by-row
@@ -156,6 +156,8 @@ begin
         'adjusted_close_total_return_proxy',
         'dirty',
         false,
+        'warnings',
+        coalesce(max(warnings), '[]'::jsonb),
         'generated_at',
         to_jsonb(now())
     ) into v_result
@@ -375,6 +377,17 @@ begin
                 end as benchmark_factor
             from nav_with_prev
         ),
+        skipped_days as (
+            select coalesce(jsonb_agg(date order by date), '[]'::jsonb) as dates
+            from daily_factors df
+            join nav_with_prev np on np.date = df.date
+            where df.date > v_start
+              and (
+                (df.user_factor is null and np.prev_nav_user > 0 and (np.nav_user - np.flow) <= 0)
+                or
+                (df.benchmark_factor is null and np.prev_nav_benchmark > 0 and (np.nav_benchmark - np.flow) <= 0)
+              )
+        ),
         cumulative as (
             select
                 date,
@@ -388,7 +401,8 @@ begin
                 ) as return_pct_benchmark
             from daily_factors
         )
-        select date, return_pct_user, return_pct_benchmark
+        select date, return_pct_user, return_pct_benchmark,
+               (select dates from skipped_days) as warnings
         from cumulative
     ) cum;
 
