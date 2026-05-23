@@ -83,12 +83,15 @@ function generatePrices() {
       if (!isWeekday(iso)) continue;
 
       const z = normalRand(priceRng);
-      // close price via GBM
+      // close price via GBM (raw market price, no dividend adjustment)
       price *= Math.exp((cfg.drift - 0.5 * cfg.vol * cfg.vol) * dt + cfg.vol * Math.sqrt(dt) * z);
       if (price < 0.01) price = 0.01;
 
-      // adjusted_close: same path but with dividend drag
-      adjPrice *= Math.exp((cfg.drift - cfg.divYield - 0.5 * cfg.vol * cfg.vol) * dt + cfg.vol * Math.sqrt(dt) * z);
+      // adjusted_close: total-return proxy for testing.
+      // Uses drift + divYield so adjusted_close >= close (reinvested dividends).
+      // This is NOT Yahoo's backward adjustment; it's a synthetic total-return index
+      // that lets stress tests verify TWR against a "price + reinvested dividends" benchmark.
+      adjPrice *= Math.exp((cfg.drift + cfg.divYield - 0.5 * cfg.vol * cfg.vol) * dt + cfg.vol * Math.sqrt(dt) * z);
       if (adjPrice < 0.01) adjPrice = 0.01;
 
       rows.push({

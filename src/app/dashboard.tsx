@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, YAxis, Tooltip } from 'recharts';
@@ -29,7 +29,7 @@ import {
   useCashBalance,
   usePortfolioHistory,
 } from '@/hooks/usePortfolio';
-import { usePerformanceCacheStatus, useRefreshPerformanceCache } from '@/hooks/usePerformanceCache';
+import { usePerformanceCacheStatus } from '@/hooks/usePerformanceCache';
 import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
@@ -46,13 +46,7 @@ export function DashboardPage() {
   const { total: totalInvested } = useTotalInvested();
   const { cash } = useCashBalance();
   const cacheStatus = usePerformanceCacheStatus();
-  const refreshCache = useRefreshPerformanceCache();
-
-  useEffect(() => {
-    if (cacheStatus.data?.dirty && !refreshCache.isPending) {
-      refreshCache.mutate();
-    }
-  }, [cacheStatus.data?.dirty, refreshCache.isPending]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auto-refresh removed: cache status is shown, user refreshes via Data Health.
 
   const watchlist = settings?.watchlist ?? ['VOO', 'QQQM', 'SMH'];
   const positions = useMemo(

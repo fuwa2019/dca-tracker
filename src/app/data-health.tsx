@@ -199,6 +199,17 @@ export function DataHealthPage() {
               </Button>
             </div>
           </div>
+          {refreshCache.isSuccess && (
+            <p className="text-xs text-gain">
+              刷新完成。
+              {cacheDirty && ' 缓存仍标记为 dirty，请确认价格覆盖完整（下方价格覆盖表）。'}
+            </p>
+          )}
+          {refreshCache.isError && (
+            <p className="text-xs text-loss break-words">
+              刷新失败：{(refreshCache.error as Error)?.message ?? '未知错误'}
+            </p>
+          )}
         </CardHeader>
         <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <StatusLine label="最早计算日期" value={earliestDate ?? '暂无'} />
@@ -386,6 +397,7 @@ function StatusLine({
 function DemoDataPanel() {
   const demo = useDemoDcaData();
   const [open, setOpen] = useState(false);
+  const [confirmSeed, setConfirmSeed] = useState(false);
   return (
     <Card>
       <button
@@ -409,14 +421,32 @@ function DemoDataPanel() {
       {open && (
         <div className="border-t border-border px-5 py-4">
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={demo.seed} disabled={demo.busy}>
-              {demo.seeding ? '生成中…' : '生成 10 年定投'}
-            </Button>
+            {confirmSeed ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => { demo.seed(); setConfirmSeed(false); }}
+                  disabled={demo.busy}
+                >
+                  {demo.seeding ? '生成中…' : '确认写入数据库'}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmSeed(false)} disabled={demo.busy}>
+                  取消
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" onClick={() => setConfirmSeed(true)} disabled={demo.busy}>
+                {demo.seeding ? '生成中…' : '生成 10 年定投'}
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={demo.clear} disabled={demo.busy}>
               {demo.clearing ? '清除中…' : '清除测试数据'}
             </Button>
             {demo.message && (
-              <span className="text-xs text-muted-foreground">{demo.message}</span>
+              <span className={cn('text-xs', demo.message.includes('失败') ? 'text-loss' : 'text-muted-foreground')}>
+                {demo.message}
+              </span>
             )}
           </div>
           <p className="mt-3 text-[11px] text-muted-foreground">
@@ -489,7 +519,9 @@ function pickRange(earliestDate: string | null) {
   if (days <= 200) return '1y';
   if (days <= 500) return '2y';
   if (days <= 1500) return '5y';
-  return '10y';
+  if (days <= 3650) return '10y';
+  // Yahoo v8 supports 'max' for full history (20-30+ years).
+  return 'max';
 }
 
 function addDays(iso: string, n: number): string {

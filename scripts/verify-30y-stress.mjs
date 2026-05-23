@@ -71,12 +71,16 @@ function computeDailyLinkedTwr(dailyNavs) {
 // ---------------------------------------------------------------------------
 function downsampleChartRows(rows, maxPoints) {
   if (rows.length <= maxPoints) return rows;
-  const step = Math.ceil(rows.length / maxPoints);
-  const sampled = [];
-  for (let i = 0; i < rows.length; i += step) sampled.push(rows[i]);
-  const last = rows[rows.length - 1];
-  if (sampled[sampled.length - 1] !== last) sampled.push(last);
-  return sampled;
+  // Always keep first and last point, sample evenly from the middle.
+  // Guarantees result.length <= maxPoints (mirrors IbkrPerformancePanel).
+  const result = [rows[0]];
+  const n = rows.length;
+  const step = (n - 1) / (maxPoints - 1);
+  for (let i = 1; i < maxPoints - 1; i++) {
+    result.push(rows[Math.round(i * step)]);
+  }
+  result.push(rows[n - 1]);
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +92,7 @@ function computeXirr(cashflows, transactions, finalMarketValue, asOfDate) {
   // Outflows: cashflows (money put in = negative for XIRR)
   for (const cf of cashflows) {
     if (cf.usd_in_date && cf.usd_amount > 0) {
-      events.push({ amount: -cf.usd_amount, date: cf.usd_in_date });
+      events.push({ amount: -cf.usd_amount, when: new Date(cf.usd_in_date) });
     }
   }
 
@@ -97,20 +101,20 @@ function computeXirr(cashflows, transactions, finalMarketValue, asOfDate) {
   if (!hasFlows) {
     for (const t of transactions) {
       if (t.side === 'buy') {
-        events.push({ amount: -(t.shares * t.price), date: t.trade_date });
+        events.push({ amount: -(t.shares * t.price), when: new Date(t.trade_date) });
       }
     }
   }
 
   // Terminal value (what you'd get if you sold everything today)
-  events.push({ amount: finalMarketValue, date: asOfDate });
+  events.push({ amount: finalMarketValue, when: new Date(asOfDate) });
 
   // Need at least one negative and one positive on different days
   const negatives = events.filter(e => e.amount < 0);
   const positives = events.filter(e => e.amount > 0);
   if (negatives.length === 0 || positives.length === 0) return null;
 
-  const dates = [...new Set(events.map(e => e.date))].sort();
+  const dates = [...new Set(events.map(e => e.when.toISOString().slice(0, 10)))].sort();
   if (dates.length < 2) return null;
 
   try {
@@ -519,14 +523,10 @@ const t6 = performance.now();
 const xirrResult = computeXirr(cashflows, transactions, finalMarketValue, asOfDate);
 const xirrMs = performance.now() - t6;
 
-if (xirrResult !== null) {
-  assertFinite(xirrResult, 'XIRR');
-  assertNotNaN(xirrResult, 'XIRR');
-  console.log(`  ✓ XIRR: ${(xirrResult * 100).toFixed(2)}% (${xirrMs.toFixed(0)} ms)`);
-} else {
-  // XIRR can legitimately fail to converge for edge cases
-  console.log(`  ⚠ XIRR did not converge (expected for extreme cashflow patterns) (${xirrMs.toFixed(0)} ms)`);
-}
+assert.ok(xirrResult !== null, 'XIRR must converge for 30-year normal fixture');
+assertFinite(xirrResult, 'XIRR');
+assertNotNaN(xirrResult, 'XIRR');
+console.log(`  ✓ XIRR: ${(xirrResult * 100).toFixed(2)}% (${xirrMs.toFixed(0)} ms)`);
 
 // --- Invariant 7: avg / fifo cost basis ---
 console.log('\n--- Invariant 7: avg / fifo cost basis ---');

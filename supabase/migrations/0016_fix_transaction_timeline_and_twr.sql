@@ -3,11 +3,12 @@
 -- 1. Sell validation: full timeline-based running-shares check.
 --    Replaces the simpler net-shares query in 0015 with a row-by-row
 --    walk that catches any point in time where shares go negative.
---    Covers INSERT, UPDATE, and DELETE.
+--    Three separate branches (INSERT/UPDATE/DELETE) — never cross-
+--    reference OLD/NEW incorrectly.
 --
 -- 2. TWR factor: replaces greatest(...,0) clamp and bool_or(factor=0)→-1
 --    cascade. Factors <= 0 or non-finite become null and are skipped
---    (no-change day). Returns a warnings array when days are skipped.
+--    (no-change day). Returns structured warnings for skipped days.
 
 -- ============================================================================
 -- PART 1: Sell validation — timeline-based running shares
@@ -25,28 +26,52 @@ declare
     v_uid uuid;
     v_ticker text;
 begin
-    if tg_op = 'DELETE' then
-        v_uid := old.user_id;
-        v_ticker := upper(old.ticker);
-    else
+    -- Three separate branches — never reference OLD during INSERT,
+    -- never reference NEW during DELETE.
+    if tg_op = 'INSERT' then
         v_uid := new.user_id;
         v_ticker := upper(new.ticker);
-    end if;
 
-    if tg_op in ('INSERT', 'UPDATE') then
         for v_txn in
             select id, side, shares, trade_date, created_at
             from (
-                -- existing rows (exclude OLD on UPDATE)
                 select id, side, shares, trade_date, created_at
                 from public.transactions
                 where user_id = v_uid
                   and upper(ticker) = v_ticker
-                  and not (tg_op = 'UPDATE' and id = old.id)
 
                 union all
 
-                -- NEW row
+                select new.id, new.side, new.shares, new.trade_date, coalesce(new.created_at, now())
+            ) t
+            order by trade_date, created_at, id
+        loop
+            v_running := v_running
+                + case when v_txn.side = 'buy' then v_txn.shares else -v_txn.shares end;
+
+            if v_running < -1e-9 then
+                raise exception 'oversell: running shares became negative (%) at % % of % on %',
+                    v_running, v_txn.side, v_txn.shares, v_ticker, v_txn.trade_date;
+            end if;
+        end loop;
+
+    elsif tg_op = 'UPDATE' then
+        v_uid := new.user_id;
+        v_ticker := upper(new.ticker);
+
+        for v_txn in
+            select id, side, shares, trade_date, created_at
+            from (
+                -- existing rows, excluding the row being updated
+                select id, side, shares, trade_date, created_at
+                from public.transactions
+                where user_id = v_uid
+                  and upper(ticker) = v_ticker
+                  and id <> old.id
+
+                union all
+
+                -- NEW version of the row
                 select new.id, new.side, new.shares, new.trade_date, coalesce(new.created_at, now())
             ) t
             order by trade_date, created_at, id
@@ -61,6 +86,9 @@ begin
         end loop;
 
     else  -- DELETE
+        v_uid := old.user_id;
+        v_ticker := upper(old.ticker);
+
         for v_txn in
             select id, side, shares, trade_date, created_at
             from public.transactions
@@ -123,6 +151,7 @@ begin
             'method', 'TWR',
             'price_basis', 'adjusted_close_total_return_proxy',
             'dirty', false,
+            'warnings', '[]'::jsonb,
             'generated_at', to_jsonb(now())
         );
     end if;
@@ -157,7 +186,7 @@ begin
         'dirty',
         false,
         'warnings',
-        coalesce(max(warnings), '[]'::jsonb),
+        coalesce(warnings_arr, '[]'::jsonb),
         'generated_at',
         to_jsonb(now())
     ) into v_result
@@ -365,6 +394,11 @@ begin
         daily_factors as (
             select
                 date,
+                flow,
+                nav_user,
+                nav_benchmark,
+                prev_nav_user,
+                prev_nav_benchmark,
                 case
                     when prev_nav_user > 0 and (nav_user - flow) > 0
                         then (nav_user - flow) / prev_nav_user
@@ -377,15 +411,31 @@ begin
                 end as benchmark_factor
             from nav_with_prev
         ),
-        skipped_days as (
-            select coalesce(jsonb_agg(date order by date), '[]'::jsonb) as dates
-            from daily_factors df
-            join nav_with_prev np on np.date = df.date
-            where df.date > v_start
+        -- Structured warnings: record each skipped day with context
+        warnings_rows as (
+            select jsonb_agg(
+                jsonb_build_object(
+                    'date', date,
+                    'type', case
+                        when user_factor is null and prev_nav_user > 0 and (nav_user - flow) <= 0
+                         and benchmark_factor is null and prev_nav_benchmark > 0 and (nav_benchmark - flow) <= 0
+                        then 'both'
+                        when user_factor is null and prev_nav_user > 0 and (nav_user - flow) <= 0
+                        then 'user'
+                        else 'benchmark'
+                    end,
+                    'nav_user', nav_user,
+                    'nav_benchmark', nav_benchmark,
+                    'flow', flow
+                )
+                order by date
+            ) as items
+            from daily_factors
+            where date > v_start
               and (
-                (df.user_factor is null and np.prev_nav_user > 0 and (np.nav_user - np.flow) <= 0)
+                (user_factor is null and prev_nav_user > 0 and (nav_user - flow) <= 0)
                 or
-                (df.benchmark_factor is null and np.prev_nav_benchmark > 0 and (np.nav_benchmark - np.flow) <= 0)
+                (benchmark_factor is null and prev_nav_benchmark > 0 and (nav_benchmark - flow) <= 0)
               )
         ),
         cumulative as (
@@ -400,9 +450,12 @@ begin
                     null
                 ) as return_pct_benchmark
             from daily_factors
+        ),
+        warnings_arr as (
+            select coalesce((select items from warnings_rows), '[]'::jsonb) as val
         )
         select date, return_pct_user, return_pct_benchmark,
-               (select dates from skipped_days) as warnings
+               (select val from warnings_arr) as warnings_arr
         from cumulative
     ) cum;
 

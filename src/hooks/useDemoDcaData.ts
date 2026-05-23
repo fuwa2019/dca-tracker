@@ -89,10 +89,16 @@ export function useDemoDcaData() {
       return tradeRows.length;
     },
     onSuccess: async (count) => {
-      setMessage(`已生成 ${count} 期`);
+      setMessage(`已生成 ${count} 期，正在刷新缓存…`);
+      try {
+        await refreshPortfolioHistoryCache();
+        setMessage(`已生成 ${count} 期，缓存刷新完成。`);
+      } catch (cacheErr) {
+        setMessage(`已生成 ${count} 期，但缓存刷新失败：${cacheErr instanceof Error ? cacheErr.message : '未知错误'}`);
+      }
       await invalidatePortfolioQueries(qc);
     },
-    onError: (err) => setMessage(err instanceof Error ? err.message : '生成失败'),
+    onError: (err) => setMessage(`生成失败：${err instanceof Error ? err.message : '未知错误'}`),
   });
 
   return {
@@ -118,16 +124,18 @@ async function invalidatePortfolioQueries(qc: ReturnType<typeof useQueryClient>)
 
 async function refreshPortfolioHistoryCache() {
   const performance = await supabase.rpc('refresh_performance_history_cache');
-  if (!performance.error) return;
-  if (!isMissingRpc(performance.error)) {
-    // eslint-disable-next-line no-console
-    console.warn('[history-cache] refresh failed', performance.error.message);
-    return;
+  if (performance.error) {
+    if (isMissingRpc(performance.error)) {
+      // Fall back to legacy RPC
+      const { error } = await supabase.rpc('refresh_portfolio_history_cache');
+      if (error && !isMissingRpc(error)) throw error;
+      return;
+    }
+    throw performance.error;
   }
-  const { error } = await supabase.rpc('refresh_portfolio_history_cache');
-  if (!error || isMissingRpc(error)) return;
-  // eslint-disable-next-line no-console
-  console.warn('[history-cache] refresh failed', error.message);
+  if (performance.data && 'error' in performance.data) {
+    throw new Error(String(performance.data.error));
+  }
 }
 
 function seriesToPriceMap(series: HistorySeries[], ticker: string) {

@@ -107,7 +107,8 @@ function pickRange(earliestDate: string): string {
   if (days <= 200) return '1y';
   if (days <= 500) return '2y';
   if (days <= 1500) return '5y';
-  return '10y';
+  if (days <= 3650) return '10y';
+  return 'max';
 }
 
 async function backfillViaWorker(symbols: string[], earliestDate: string): Promise<PriceMap> {

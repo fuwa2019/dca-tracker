@@ -753,10 +753,14 @@ function formatSignedPct(value: number) {
 
 function downsampleChartRows(rows: ChartRow[], maxPoints: number) {
   if (rows.length <= maxPoints) return rows;
-  const step = Math.ceil(rows.length / maxPoints);
-  const sampled: ChartRow[] = [];
-  for (let i = 0; i < rows.length; i += step) sampled.push(rows[i]);
-  const last = rows[rows.length - 1];
-  if (sampled[sampled.length - 1] !== last) sampled.push(last);
-  return sampled;
+  // Always keep first and last point, sample evenly from the middle.
+  // Guarantees result.length <= maxPoints.
+  const result: ChartRow[] = [rows[0]];
+  const n = rows.length;
+  const step = (n - 1) / (maxPoints - 1);
+  for (let i = 1; i < maxPoints - 1; i++) {
+    result.push(rows[Math.round(i * step)]);
+  }
+  result.push(rows[n - 1]);
+  return result;
 }

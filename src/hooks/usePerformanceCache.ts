@@ -40,18 +40,17 @@ export function useRefreshPerformanceCache() {
       if (data && 'error' in data) throw new Error(String(data.error));
       return data;
     },
-    onSuccess: async (data) => {
-      const refreshedStatus = statusFromRefreshResult(data);
-      if (refreshedStatus) {
-        qc.setQueryData<PerformanceCacheStatus | null>(['performance_cache_status'], refreshedStatus);
-      }
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ['portfolio_history'] }),
-        qc.invalidateQueries({ queryKey: ['share', 'history'] }),
-      ]);
-      if (!refreshedStatus) {
-        await qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
-      }
+    onSuccess: async () => {
+      // Always refetch the real backend status — never assume dirty=false.
+      await qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
+      await qc.invalidateQueries({ queryKey: ['portfolio_history'] });
+      await qc.invalidateQueries({ queryKey: ['share', 'history'] });
+      await qc.refetchQueries({ queryKey: ['performance_cache_status'] });
+    },
+    onError: async () => {
+      // Refetch status so the page can show the real backend error.
+      await qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
+      await qc.refetchQueries({ queryKey: ['performance_cache_status'] });
     },
   });
 }
@@ -82,37 +81,6 @@ function statusFromHistory(history: PerformanceHistory | PortfolioHistory): Perf
     points,
     generated_at: history.generated_at,
     updated_at: history.generated_at,
-    error: null,
-  };
-}
-
-function statusFromRefreshResult(data: unknown): PerformanceCacheStatus | null {
-  if (!data || typeof data !== 'object' || 'error' in data) return null;
-  const record = data as {
-    points?: unknown;
-    series?: unknown;
-    benchmark?: unknown;
-    method?: unknown;
-    generated_at?: unknown;
-    updated_at?: unknown;
-    refresh_ms?: unknown;
-  };
-  const points = typeof record.points === 'number'
-    ? record.points
-    : Array.isArray(record.series)
-      ? record.series.length
-      : undefined;
-  const generatedAt = typeof record.generated_at === 'string' ? record.generated_at : new Date().toISOString();
-  const updatedAt = typeof record.updated_at === 'string' ? record.updated_at : generatedAt;
-  return {
-    exists: (points ?? 0) > 0,
-    benchmark: typeof record.benchmark === 'string' ? record.benchmark : 'SPY',
-    method: typeof record.method === 'string' ? record.method : 'TWR',
-    dirty: false,
-    points,
-    generated_at: generatedAt,
-    updated_at: updatedAt,
-    refresh_ms: typeof record.refresh_ms === 'number' ? record.refresh_ms : null,
     error: null,
   };
 }

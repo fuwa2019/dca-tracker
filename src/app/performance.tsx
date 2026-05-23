@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { RefreshCw, Database, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -19,11 +19,7 @@ export function PerformancePage() {
   const cacheStatus = usePerformanceCacheStatus();
   const refreshCache = useRefreshPerformanceCache();
 
-  useEffect(() => {
-    if (cacheStatus.data?.dirty && !refreshCache.isPending) {
-      refreshCache.mutate();
-    }
-  }, [cacheStatus.data?.dirty, refreshCache.isPending]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auto-refresh removed: dirty status is shown to the user who decides when to refresh.
 
   const history: HistoryPoint[] = useMemo(() => {
     const rows = portfolioHistory.data?.series ?? [];

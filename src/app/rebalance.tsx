@@ -26,7 +26,18 @@ export function RebalancePage() {
     [positions, watchlist],
   );
   const { data: quotes = [] } = useQuotes(symbols);
-  const priceMap = useMemo(() => new Map(quotes.map((q) => [q.ticker, q.price ?? 0])), [quotes]);
+  const quoteByTicker = useMemo(() => new Map(quotes.map((q) => [q.ticker, q])), [quotes]);
+  const priceMap = useMemo(() => new Map(quotes.map((q) => [q.ticker, q.price])), [quotes]);
+  const missingPrices = useMemo(
+    () => {
+      const allTickers = [...new Set([...positions.map((p) => p.ticker), ...watchlist])];
+      return allTickers.filter((t) => {
+        const q = quoteByTicker.get(t);
+        return !q || q.price == null;
+      });
+    },
+    [positions, watchlist, quoteByTicker],
+  );
 
   const [newCash, setNewCash] = useState('3000');
   const [weights, setWeights] = useState<Record<string, string>>(() => defaultWeights(watchlist));
@@ -42,21 +53,25 @@ export function RebalancePage() {
 
   const holdings = useMemo(
     () =>
-      positions.map((p) => ({
-        ticker: p.ticker,
-        marketValue: p.shares * (priceMap.get(p.ticker) ?? 0),
-        price: priceMap.get(p.ticker) ?? 0,
-      })),
+      positions.map((p) => {
+        const price = priceMap.get(p.ticker) ?? null;
+        return {
+          ticker: p.ticker,
+          marketValue: price != null ? p.shares * price : 0,
+          price: price ?? 0,
+        };
+      }),
     [positions, priceMap],
   );
 
   const result = useMemo(() => {
     if (!weightSumOk) return null;
     if (cash <= 0) return null;
+    if (missingPrices.length > 0) return null;
     const tw: Record<string, number> = {};
     for (const [k, v] of Object.entries(weights)) tw[k] = (Number(v) || 0) / 100;
     return rebalance({ holdings, targetWeights: tw, newCashUsd: cash });
-  }, [holdings, weights, cash, weightSumOk]);
+  }, [holdings, weights, cash, weightSumOk, missingPrices]);
 
   return (
     <div className="container max-w-4xl px-4 py-5 sm:px-6 sm:py-6 space-y-5">
@@ -140,6 +155,17 @@ export function RebalancePage() {
         </CardContent>
       </Card>
 
+      {missingPrices.length > 0 && (
+        <Card className="flex items-start gap-3 border-warn/30 bg-warn/5 p-4 text-sm">
+          <Scale className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-foreground">缺少行情价格</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              以下 ticker 缺少有效价格，无法生成再平衡建议：{missingPrices.join(', ')}
+            </p>
+          </div>
+        </Card>
+      )}
       {result ? (
         <Card className="overflow-hidden p-0">
           <div className="border-b border-border px-4 py-3">
