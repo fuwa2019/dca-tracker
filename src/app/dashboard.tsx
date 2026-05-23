@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, YAxis, Tooltip } from 'recharts';
@@ -28,7 +28,7 @@ import {
   useCashBalance,
   usePortfolioHistory,
 } from '@/hooks/usePortfolio';
-import { usePerformanceCacheStatus } from '@/hooks/usePerformanceCache';
+import { usePerformanceCacheStatus, useRefreshPerformanceCache } from '@/hooks/usePerformanceCache';
 import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
@@ -36,7 +36,6 @@ import { BENCHMARK_TICKER, type HistoryPoint } from '@/lib/calc/history';
 import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-const COST_BASIS_MODE = 'avg' as const;
 const MINI_CHART_POINTS = 180;
 
 export function DashboardPage() {
@@ -46,6 +45,13 @@ export function DashboardPage() {
   const { total: totalInvested } = useTotalInvested();
   const { cash } = useCashBalance();
   const cacheStatus = usePerformanceCacheStatus();
+  const refreshCache = useRefreshPerformanceCache();
+
+  useEffect(() => {
+    if (cacheStatus.data?.dirty && !refreshCache.isPending) {
+      refreshCache.mutate();
+    }
+  }, [cacheStatus.data?.dirty, refreshCache.isPending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const watchlist = settings?.watchlist ?? ['VOO', 'QQQM', 'SMH'];
   const positions = useMemo(
@@ -76,13 +82,15 @@ export function DashboardPage() {
     }));
   }, [portfolioHistory.data]);
 
+  const costBasisMode = (settings?.cost_basis_default as 'avg' | 'fifo') ?? 'avg';
+
   const aggregates = useMemo(() => {
     let stockMv = 0;
     let costBasis = 0;
     let dayPL = 0;
     for (const p of positions) {
       const q = quoteByTicker.get(p.ticker);
-      const { marketValue, costBasis: cb } = unrealizedPL(p, q?.price ?? null, COST_BASIS_MODE);
+      const { marketValue, costBasis: cb } = unrealizedPL(p, q?.price ?? null, costBasisMode);
       stockMv += marketValue;
       costBasis += cb;
       if (q?.change != null) dayPL += p.shares * q.change;
@@ -91,7 +99,8 @@ export function DashboardPage() {
     return { nav, stockMv, cash, costBasis, dayPL, totalPL: nav - totalInvested };
   }, [positions, quoteByTicker, totalInvested, cash]);
 
-  const dayChangePct = aggregates.stockMv > 0 ? aggregates.dayPL / aggregates.stockMv : 0;
+  const prevNav = aggregates.nav - aggregates.dayPL;
+  const dayChangePct = prevNav > 0 ? aggregates.dayPL / prevNav : 0;
   const totalReturnPct = totalInvested > 0 ? aggregates.totalPL / totalInvested : 0;
 
   const target = Number(settings?.target_usd ?? 1_000_000);
@@ -201,7 +210,7 @@ export function DashboardPage() {
               <div>
                 <h2 className="text-base font-semibold tracking-tight">持仓</h2>
                 <p className="text-[11px] text-muted-foreground">
-                  {positions.length} 只 · 平均成本口径
+                  {positions.length} 只 · {costBasisMode === 'avg' ? '平均成本' : 'FIFO'}口径
                 </p>
               </div>
               <Button asChild variant="ghost" size="sm">
@@ -228,7 +237,7 @@ export function DashboardPage() {
                 positions={positions}
                 quoteByTicker={quoteByTicker}
                 totalMarketValue={aggregates.stockMv}
-                basis={COST_BASIS_MODE}
+                basis={costBasisMode}
               />
             )}
           </section>

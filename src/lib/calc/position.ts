@@ -28,9 +28,10 @@ export interface Position {
 export function aggregatePositions(transactions: TxnRow[]): Position[] {
   const byTicker = new Map<string, TxnRow[]>();
   for (const t of transactions) {
-    const list = byTicker.get(t.ticker) ?? [];
+    const tk = t.ticker.toUpperCase();
+    const list = byTicker.get(tk) ?? [];
     list.push(t);
-    byTicker.set(t.ticker, list);
+    byTicker.set(tk, list);
   }
 
   const out: Position[] = [];
@@ -62,18 +63,9 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
         buyCount += 1;
       } else {
         // sell — drain fifo queue, accumulate realized P/L.
-        // If the sell exceeds current holdings (data corruption / form bypass),
-        // we cap at available shares and warn rather than producing negative
-        // net positions silently.
-        const fifoAvailable = fifoQueue.reduce((acc, l) => acc + l.shares, 0);
-        const capped = Math.min(sh, fifoAvailable);
-        if (capped < sh - 1e-9) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            `[position] oversell on ${tx.ticker} on ${tx.trade_date}: tried to sell ${sh}, only ${fifoAvailable} available — capped`,
-          );
-        }
-        let remaining = capped;
+        // Oversells are rejected at the DB layer (trigger), so by the time we
+        // reach this code the sell is always covered by available shares.
+        let remaining = sh;
         while (remaining > 1e-9 && fifoQueue.length > 0) {
           const lot = fifoQueue[0];
           const take = Math.min(remaining, lot.shares);
@@ -83,11 +75,10 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
           if (lot.shares <= 1e-9) fifoQueue.shift();
         }
         // avg-cost: keep per-share basis, subtract proportional cost
-        const avgSell = Math.min(capped, avgShares);
         if (avgShares > 1e-9) {
           const avgBasis = avgCostTotal / avgShares;
-          avgCostTotal -= avgBasis * avgSell;
-          avgShares -= avgSell;
+          avgCostTotal -= avgBasis * sh;
+          avgShares -= sh;
           if (avgShares < 1e-9) {
             avgShares = 0;
             avgCostTotal = 0;
@@ -117,7 +108,8 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
     });
   }
 
-  return out.sort((a, b) => b.shares * Math.max(a.avgCost, 1) - a.shares * Math.max(b.avgCost, 1));
+  const estValue = (p: Position) => p.shares * Math.max(p.avgCost, 1);
+  return out.sort((a, b) => estValue(b) - estValue(a));
 }
 
 export function unrealizedPL(pos: Position, currentPrice: number | null, basis: 'avg' | 'fifo'): {
