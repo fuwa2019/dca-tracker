@@ -2,10 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { PerformanceCacheStatus, PerformanceHistory, PortfolioHistory } from '@/lib/database.types';
 
-function isMissingRpc(error: { code?: string; message?: string }) {
+function isMissingRpc(error: { code?: string; message?: string; status?: number }) {
   return (
     error.code === 'PGRST202' ||
-    /function .* does not exist|could not find .* function/i.test(error.message ?? '')
+    error.code === '404' ||
+    (error as { status?: number }).status === 404 ||
+    /function .* does not exist|could not find .* function|Not Found/i.test(error.message ?? '')
   );
 }
 

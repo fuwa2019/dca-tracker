@@ -11,7 +11,7 @@ const DEMO_MONTHLY_USD = 60;
 const DEMO_RATE = 7.2;
 
 function isMissingRpc(error: { code?: string; message?: string }) {
-  return error.code === 'PGRST202' || /function .* does not exist|could not find .* function/i.test(error.message ?? '');
+  return error.code === 'PGRST202' || error.code === '404' || /function .* does not exist|could not find .* function/i.test(error.message ?? '');
 }
 
 /**

@@ -116,8 +116,8 @@ function normalizeHistory(history: PerformanceHistory | PortfolioHistory | Share
   };
 }
 
-function isMissingRpc(error: { code?: string; message?: string }) {
-  return error.code === 'PGRST202' || /function .* does not exist|could not find .* function/i.test(error.message ?? '');
+function isMissingRpc(error: { code?: string; message?: string; status?: number }) {
+  return error.code === 'PGRST202' || error.code === '404' || /function .* does not exist|could not find .* function/i.test(error.message ?? '');
 }
 
 export function usePositions() {
