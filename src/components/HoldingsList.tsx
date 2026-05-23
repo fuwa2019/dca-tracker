@@ -133,7 +133,10 @@ function HoldingsCards({ rows, basis: _basis }: { rows: Row[]; basis: 'avg' | 'f
             <div className="text-right">
               <div className="text-base font-medium tnum">{usd.format(r.marketValue)}</div>
               <div className={cn('text-[11px] tnum', changeColor(r.dayChangePct))}>
-                {r.dayChangePct !== null ? signedPct(r.dayChangePct) : '—'} 今日
+                <span className="inline-flex items-center gap-1">
+                  <DayArrow value={r.dayChangePct} />
+                  {r.dayChangePct !== null ? signedPct(r.dayChangePct) : '—'} 今日
+                </span>
               </div>
             </div>
           </div>

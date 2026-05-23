@@ -26,7 +26,8 @@ export default defineConfig({
       workbox: {
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/quote'),
+            urlPattern: ({ url, sameOrigin }) =>
+              sameOrigin && url.pathname.startsWith('/api/quote'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'quote-cache',
