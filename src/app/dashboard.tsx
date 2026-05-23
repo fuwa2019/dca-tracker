@@ -1,29 +1,51 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { PositionCard } from '@/components/PositionCard';
+import { ResponsiveContainer, AreaChart, Area, YAxis, Tooltip } from 'recharts';
+import {
+  ArrowUpRight,
+  BarChart3,
+  Plus,
+  ArrowLeftRight,
+  Activity,
+  Wallet,
+  Briefcase,
+  TrendingUp,
+} from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { StatCard } from '@/components/StatCard';
+import { StatusBadge } from '@/components/StatusBadge';
+import { EmptyState } from '@/components/EmptyState';
+import { HoldingsList } from '@/components/HoldingsList';
 import { TargetProgressRing } from '@/components/TargetProgressRing';
-import { IbkrPerformancePanel } from '@/components/IbkrPerformancePanel';
 import { useQuotes } from '@/hooks/useQuotes';
-import { useTransactions, useCashflows, useSettings, useTotalInvested, useCashBalance, usePortfolioHistory } from '@/hooks/usePortfolio';
+import {
+  useTransactions,
+  useCashflows,
+  useSettings,
+  useTotalInvested,
+  useCashBalance,
+  usePortfolioHistory,
+} from '@/hooks/usePortfolio';
+import { usePerformanceCacheStatus } from '@/hooks/usePerformanceCache';
 import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
-import { availableRanges, BENCHMARK_TICKER, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
+import { BENCHMARK_TICKER, type HistoryPoint } from '@/lib/calc/history';
 import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
-import { isUsMarketOpen } from '@/lib/quote';
+import { cn } from '@/lib/utils';
 
 const COST_BASIS_MODE = 'avg' as const;
+const MINI_CHART_POINTS = 180;
 
 export function DashboardPage() {
-  const [chartRange, setChartRange] = useState<RangeKey>('ALL');
-  const [showBenchmark, setShowBenchmark] = useState(true);
   const { data: txns = [] } = useTransactions();
   const { data: cashflows = [] } = useCashflows();
   const { data: settings } = useSettings();
   const { total: totalInvested } = useTotalInvested();
   const { cash } = useCashBalance();
+  const cacheStatus = usePerformanceCacheStatus();
 
   const watchlist = settings?.watchlist ?? ['VOO', 'QQQM', 'SMH'];
   const positions = useMemo(
@@ -37,15 +59,8 @@ export function DashboardPage() {
   const { data: quotes = [] } = useQuotes(symbols);
   const quoteByTicker = useMemo(() => new Map(quotes.map((q) => [q.ticker, q])), [quotes]);
 
-  // --- Equity-history data plumbing ----------------------------
-  const earliestDate = useMemo(() => {
-    const cashDates = cashflows.map((c) => c.usd_in_date).filter((d): d is string => !!d);
-    const tradeDates = txns.map((t) => t.trade_date);
-    const all = [...cashDates, ...tradeDates].sort();
-    return all[0] ?? null;
-  }, [cashflows, txns]);
   const portfolioHistory = usePortfolioHistory();
-  const rpcHistory = useMemo(() => {
+  const history: HistoryPoint[] = useMemo(() => {
     const rows = portfolioHistory.data?.series ?? [];
     return rows.map((p) => ({
       date: p.date,
@@ -60,10 +75,6 @@ export function DashboardPage() {
       txns: p.txns ?? [],
     }));
   }, [portfolioHistory.data]);
-  const history = rpcHistory;
-
-  const ranges = useMemo(() => availableRanges(history), [history]);
-  const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');
 
   const aggregates = useMemo(() => {
     let stockMv = 0;
@@ -76,175 +87,366 @@ export function DashboardPage() {
       costBasis += cb;
       if (q?.change != null) dayPL += p.shares * q.change;
     }
-    // NAV = stocks + uninvested cash sitting in Schwab.
     const nav = stockMv + cash;
-    return { mv: nav, stockMv, cash, costBasis, dayPL, totalPL: nav - totalInvested };
+    return { nav, stockMv, cash, costBasis, dayPL, totalPL: nav - totalInvested };
   }, [positions, quoteByTicker, totalInvested, cash]);
+
+  const dayChangePct = aggregates.stockMv > 0 ? aggregates.dayPL / aggregates.stockMv : 0;
+  const totalReturnPct = totalInvested > 0 ? aggregates.totalPL / totalInvested : 0;
 
   const target = Number(settings?.target_usd ?? 1_000_000);
   const annualRet = Number(settings?.expected_annual_ret ?? 0.08);
   const monthlyDca = Number(settings?.monthly_dca_usd ?? 0);
   const { months } = monthsToTarget({
-    currentValueUsd: aggregates.mv,
+    currentValueUsd: aggregates.nav,
     monthlyContributionUsd: monthlyDca,
     annualReturn: annualRet,
     targetUsd: target,
   });
 
   const xirrEvents = useMemo(
-    () => buildXirrEvents({ cashflows, currentMarketValueUsd: aggregates.mv }),
-    [cashflows, aggregates.mv],
+    () => buildXirrEvents({ cashflows, currentMarketValueUsd: aggregates.nav }),
+    [cashflows, aggregates.nav],
   );
   const xirr = useMemo(() => computeXirr(xirrEvents), [xirrEvents]);
-  const xirrHint = useMemo(() => {
-    if (xirr !== null) return '按每笔入金时点和金额精确折现';
-    const usableDeposits = xirrEvents.filter((e) => e.amount < 0).length;
-    if (aggregates.mv <= 0) return '需要先有当前持仓市值';
-    if (usableDeposits === 0) return '需要至少 1 笔填好"USD 到账日"的入金';
-    if (usableDeposits < 2 && new Set(xirrEvents.map((e) => e.when.toISOString().slice(0, 10))).size < 2) {
-      return '需要至少 2 笔不同日期的入金';
-    }
-    return '数据条件不足以计算';
-  }, [xirr, xirrEvents, aggregates.mv]);
-  const twrResult = useMemo(() => summarizeTwrFromHistory(history), [history]);
 
-  const marketOpen = isUsMarketOpen();
+  const last = history[history.length - 1];
+  const twrCumulative = last?.returnPctUser ?? 0;
+  const spyCumulative = last?.returnPctSpy ?? 0;
+  const excessVsSpy = Number.isFinite((1 + twrCumulative) / (1 + spyCumulative) - 1)
+    ? (1 + twrCumulative) / (1 + spyCumulative) - 1
+    : 0;
+
+  const isEmpty = positions.length === 0 && cashflows.length === 0 && txns.length === 0;
 
   return (
-    <div className="container max-w-[1460px] py-6 space-y-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <motion.h1
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="text-3xl font-semibold tracking-tight"
-        >
-          总览
-        </motion.h1>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">
-            {marketOpen ? '🟢 美股盘中 · 行情延迟 ~15min' : '⚪️ 盘后 / 休市'}
-          </span>
-        </div>
-      </div>
+    <div className="container max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-6">
+      {isEmpty ? (
+        <EmptyDashboard />
+      ) : (
+        <>
+          <NavHero
+            nav={aggregates.nav}
+            stockMv={aggregates.stockMv}
+            cash={aggregates.cash}
+            dayPL={aggregates.dayPL}
+            dayChangePct={dayChangePct}
+            totalPL={aggregates.totalPL}
+            totalReturnPct={totalReturnPct}
+            cacheDirty={!!cacheStatus.data?.dirty}
+          />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <StatCard
-          label="组合净值 (NAV)"
-          value={usd.format(aggregates.mv)}
-          sub={`持仓 ${usd.format(aggregates.stockMv)} · 现金 ${usd.format(aggregates.cash)}`}
-          delay={0}
-        />
-        <StatCard
-          label="今日盈亏"
-          value={signedUsd(aggregates.dayPL)}
-          sub={aggregates.stockMv > 0 ? signedPct(aggregates.dayPL / aggregates.stockMv) : '—'}
-          className={changeColor(aggregates.dayPL)}
-          delay={0.05}
-        />
-        <StatCard
-          label="累计盈亏 (NAV vs 本金)"
-          value={signedUsd(aggregates.totalPL)}
-          sub={totalInvested > 0 ? signedPct(aggregates.totalPL / totalInvested) : '—'}
-          className={changeColor(aggregates.totalPL)}
-          delay={0.1}
-        />
-        <StatCard
-          label="开仓盈亏（持仓口径）"
-          value={signedUsd(aggregates.stockMv - aggregates.costBasis)}
-          sub={aggregates.costBasis > 0 ? signedPct((aggregates.stockMv - aggregates.costBasis) / aggregates.costBasis) : '—'}
-          className={changeColor(aggregates.stockMv - aggregates.costBasis)}
-          delay={0.15}
-        />
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <StatCard
-          label="年化收益率 (XIRR · 钱加权)"
-          value={xirr !== null ? signedPct(xirr) : '—'}
-          sub={xirrHint}
-          className={changeColor(xirr)}
-        />
-        <StatCard
-          label={`时间加权 TWR · 年化 ${twrResult?.approximated ? '(粗估)' : ''}`}
-          value={
-            twrResult?.annualized != null
-              ? signedPct(twrResult.annualized)
-              : twrResult
-                ? signedPct(twrResult.twr)
-                : '—'
-          }
-          sub={
-            twrResult
-              ? twrResult.annualized != null
-                ? `累计 ${signedPct(twrResult.twr)} · ${twrResult.periodDays} 天`
-                : `累计区间 · ${twrResult.periodDays} 天 (不足 90 天不年化，避免噪声)`
-              : '录入交易后显示'
-          }
-          className={changeColor(twrResult?.annualized ?? twrResult?.twr ?? 0)}
-        />
-      </div>
-
-      <IbkrPerformancePanel
-        history={history}
-        range={effectiveRange}
-        onRangeChange={setChartRange}
-        availableRanges={ranges}
-        showBenchmark={showBenchmark}
-        onShowBenchmarkChange={setShowBenchmark}
-        loading={portfolioHistory.isLoading || (history.length === 0 && !!earliestDate)}
-      />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>$1M 进度</CardTitle>
-            <CardDescription>预设 {(annualRet * 100).toFixed(0)}% 年化 · 月供 {usd.format(monthlyDca)}</CardDescription>
-          </CardHeader>
-          <CardContent className="flex justify-center pb-6">
-            <TargetProgressRing current={aggregates.mv} target={target} monthsToTarget={months} />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold tracking-tight">持仓</h2>
-          <span className="text-xs text-muted-foreground">{positions.length} 只</span>
-        </div>
-        {positions.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-muted-foreground">
-            还没有持仓 — 去「交易」页录入第一笔买入
-          </Card>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {positions.map((p, i) => (
-              <PositionCard key={p.ticker} position={p} quote={quoteByTicker.get(p.ticker)} basis={COST_BASIS_MODE} index={i} />
-            ))}
+          <div className="grid gap-3 md:grid-cols-3">
+            <StatCard
+              label="XIRR · 钱加权"
+              value={xirr !== null ? signedPct(xirr) : '—'}
+              tone={xirr === null ? 'muted' : xirr >= 0 ? 'gain' : 'loss'}
+              sub={xirr !== null ? '按每笔到账时点精确折现' : '至少需 2 笔不同日期入金'}
+            />
+            <StatCard
+              label="TWR · 累计"
+              value={signedPct(twrCumulative)}
+              tone={twrCumulative >= 0 ? 'gain' : 'loss'}
+              sub={last ? `${history[0].date} 至 ${last.date} · ${history.length} 个交易日` : '录入后显示'}
+            />
+            <StatCard
+              label="超额 vs SPY"
+              value={signedPct(excessVsSpy)}
+              className={changeColor(excessVsSpy)}
+              sub="组合 − SPY 同期"
+            />
           </div>
-        )}
-      </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2 overflow-hidden p-0">
+              <div className="flex items-baseline justify-between border-b border-border px-4 py-3">
+                <div>
+                  <div className="text-sm font-semibold">业绩曲线</div>
+                  <div className="text-[11px] text-muted-foreground tnum">
+                    {last ? `${history[0].date} 至 ${last.date}` : '暂无'}
+                  </div>
+                </div>
+                <Button asChild variant="ghost" size="sm">
+                  <Link to="/performance">
+                    查看完整 <ArrowUpRight className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              </div>
+              <MiniEquityCurve history={history} />
+            </Card>
+
+            <Card className="overflow-hidden p-0">
+              <div className="flex items-baseline justify-between border-b border-border px-4 py-3">
+                <div>
+                  <div className="text-sm font-semibold">$1M 进度</div>
+                  <div className="text-[11px] text-muted-foreground tnum">
+                    {(annualRet * 100).toFixed(0)}% 年化 · 月供 {usd.format(monthlyDca)}
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-center px-4 py-4">
+                <TargetProgressRing
+                  current={aggregates.nav}
+                  target={target}
+                  monthsToTarget={months}
+                  size={186}
+                  strokeWidth={12}
+                />
+              </div>
+            </Card>
+          </div>
+
+          <section>
+            <div className="mb-3 flex items-baseline justify-between">
+              <div>
+                <h2 className="text-base font-semibold tracking-tight">持仓</h2>
+                <p className="text-[11px] text-muted-foreground">
+                  {positions.length} 只 · 平均成本口径
+                </p>
+              </div>
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/transactions">
+                  全部交易 <ArrowUpRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
+            {positions.length === 0 ? (
+              <EmptyState
+                icon={Briefcase}
+                title="还没有持仓"
+                description="去「交易」录入第一笔买入，持仓会自动出现在这里。"
+                action={
+                  <Button asChild size="sm">
+                    <Link to="/transactions">
+                      <Plus className="h-3.5 w-3.5" /> 添加交易
+                    </Link>
+                  </Button>
+                }
+              />
+            ) : (
+              <HoldingsList
+                positions={positions}
+                quoteByTicker={quoteByTicker}
+                totalMarketValue={aggregates.stockMv}
+                basis={COST_BASIS_MODE}
+              />
+            )}
+          </section>
+
+          <QuickActions />
+        </>
+      )}
     </div>
   );
 }
 
-function summarizeTwrFromHistory(history: HistoryPoint[]) {
-  const first = history[0];
-  const last = history[history.length - 1];
-  if (!first || !last) return null;
-  const periodDays = Math.max(0, daysBetween(first.date, last.date));
-  const twr = last.returnPctUser;
-  const canAnnualize = periodDays >= 90 && Number.isFinite(twr) && 1 + twr > 0;
-  return {
-    twr,
-    annualized: canAnnualize ? Math.pow(1 + twr, 365 / periodDays) - 1 : null,
-    periodDays,
-    approximated: false,
-  };
+function NavHero({
+  nav,
+  stockMv,
+  cash,
+  dayPL,
+  dayChangePct,
+  totalPL,
+  totalReturnPct,
+  cacheDirty,
+}: {
+  nav: number;
+  stockMv: number;
+  cash: number;
+  dayPL: number;
+  dayChangePct: number;
+  totalPL: number;
+  totalReturnPct: number;
+  cacheDirty: boolean;
+}) {
+  return (
+    <Card className="overflow-hidden p-0">
+      <div className="grid gap-0 md:grid-cols-[1.6fr_1fr_1fr]">
+        <motion.div
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          className="px-5 py-5"
+        >
+          <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+            组合净值 (NAV)
+            {cacheDirty && <StatusBadge tone="warn" dot>缓存待刷新</StatusBadge>}
+          </div>
+          <div className="mt-1 text-[34px] font-semibold leading-tight tracking-tight tnum">
+            {usd.format(nav)}
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground tnum">
+            <span className="inline-flex items-center gap-1">
+              <Briefcase className="h-3 w-3" /> 持仓 {usd.format(stockMv)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Wallet className="h-3 w-3" /> 现金 {usd.format(cash)}
+            </span>
+          </div>
+        </motion.div>
+        <div className="border-t border-border md:border-l md:border-t-0">
+          <KpiCell
+            label="今日盈亏"
+            value={signedUsd(dayPL)}
+            sub={Number.isFinite(dayChangePct) && stockMv > 0 ? signedPct(dayChangePct) : '—'}
+            valueClass={changeColor(dayPL)}
+          />
+        </div>
+        <div className="border-t border-border md:border-l md:border-t-0">
+          <KpiCell
+            label="累计盈亏 (NAV vs 本金)"
+            value={signedUsd(totalPL)}
+            sub={Number.isFinite(totalReturnPct) ? signedPct(totalReturnPct) : '—'}
+            valueClass={changeColor(totalPL)}
+          />
+        </div>
+      </div>
+    </Card>
+  );
 }
 
-function daysBetween(startIso: string, endIso: string) {
-  const [sy, sm, sd] = startIso.split('-').map(Number);
-  const [ey, em, ed] = endIso.split('-').map(Number);
-  return Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86_400_000);
+function KpiCell({
+  label,
+  value,
+  sub,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  valueClass: string;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: 0.05 }}
+      className="px-5 py-5"
+    >
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={cn('mt-1 text-2xl font-semibold leading-tight tnum', valueClass)}>{value}</div>
+      <div className={cn('mt-1 text-[11px] tnum', valueClass)}>{sub}</div>
+    </motion.div>
+  );
+}
+
+function MiniEquityCurve({ history }: { history: HistoryPoint[] }) {
+  const rows = useMemo(() => {
+    if (history.length === 0) return [];
+    const step = Math.max(1, Math.floor(history.length / MINI_CHART_POINTS));
+    const out: { date: string; value: number }[] = [];
+    for (let i = 0; i < history.length; i += step) {
+      out.push({ date: history[i].date, value: history[i].returnPctUser * 100 });
+    }
+    const last = history[history.length - 1];
+    if (out[out.length - 1]?.date !== last.date) {
+      out.push({ date: last.date, value: last.returnPctUser * 100 });
+    }
+    return out;
+  }, [history]);
+
+  if (rows.length < 2) {
+    return (
+      <div className="flex h-[180px] items-center justify-center px-4 text-xs text-muted-foreground">
+        <TrendingUp className="mr-2 h-4 w-4 opacity-60" />
+        曲线数据待生成
+      </div>
+    );
+  }
+
+  const positive = rows[rows.length - 1].value >= 0;
+  const colorVar = positive ? 'var(--gain)' : 'var(--loss)';
+
+  return (
+    <div className="h-[180px] px-2 pb-2 pt-3">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={rows} margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+          <defs>
+            <linearGradient id="mini-perf-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={`hsl(${colorVar})`} stopOpacity={0.32} />
+              <stop offset="100%" stopColor={`hsl(${colorVar})`} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <YAxis hide domain={['dataMin', 'dataMax']} />
+          <Tooltip
+            cursor={{ stroke: 'hsl(var(--crosshair))', strokeDasharray: '3 3' }}
+            content={({ active, payload }) =>
+              active && payload && payload[0]?.payload ? (
+                <div className="rounded-lg border border-border bg-popover px-2.5 py-1.5 text-[11px] tnum shadow">
+                  <div className="text-muted-foreground">{payload[0].payload.date}</div>
+                  <div className={cn('font-semibold', changeColor(payload[0].payload.value))}>
+                    {signedPct(payload[0].payload.value / 100)}
+                  </div>
+                </div>
+              ) : null
+            }
+          />
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke={`hsl(${colorVar})`}
+            strokeWidth={2}
+            fill="url(#mini-perf-fill)"
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function QuickActions() {
+  const actions = [
+    { to: '/transactions', label: '添加交易', icon: Plus },
+    { to: '/cashflows', label: '记一笔入金', icon: ArrowLeftRight },
+    { to: '/rebalance', label: '再平衡计算', icon: BarChart3 },
+    { to: '/health', label: '数据健康', icon: Activity },
+  ];
+  return (
+    <Card className="p-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {actions.map(({ to, label, icon: Icon }) => (
+          <Button key={to} asChild variant="ghost" className="h-12 justify-start text-sm">
+            <Link to={to}>
+              <Icon className="h-4 w-4 text-muted-foreground" />
+              {label}
+            </Link>
+          </Button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function EmptyDashboard() {
+  return (
+    <div className="flex flex-col items-center gap-4 py-12">
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/10 text-brand"
+      >
+        <Briefcase className="h-6 w-6" />
+      </motion.div>
+      <div className="text-center space-y-1">
+        <h2 className="text-lg font-semibold">还没有任何数据</h2>
+        <p className="max-w-md text-sm text-muted-foreground">
+          先录入一笔入金（CNY → USD），再录一笔买入交易，业绩曲线和持仓就会自动出现。
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button asChild size="sm">
+          <Link to="/cashflows">
+            <ArrowLeftRight className="h-3.5 w-3.5" /> 添加入金
+          </Link>
+        </Button>
+        <Button asChild size="sm" variant="outline">
+          <Link to="/transactions">
+            <Plus className="h-3.5 w-3.5" /> 添加交易
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
 }

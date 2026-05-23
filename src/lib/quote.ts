@@ -16,6 +16,16 @@ export interface HistorySeries {
 
 const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
 
+export type UsMarketSessionKey = 'pre_market' | 'regular' | 'after_hours' | 'overnight' | 'closed';
+
+export interface UsMarketSession {
+  key: UsMarketSessionKey;
+  label: string;
+  detail: string;
+  isTrading: boolean;
+  isRegular: boolean;
+}
+
 export async function fetchQuotes(symbols: string[]): Promise<Quote[]> {
   if (!WORKER_BASE) return [];
   if (symbols.length === 0) return [];
@@ -44,9 +54,7 @@ export async function fetchHistory(symbols: string[], range = '10y'): Promise<Hi
   return data.series ?? [];
 }
 
-/** Heuristic: is the US market currently open (regular hours)? Uses ET (NYC) wall-clock. */
-export function isUsMarketOpen(now = new Date()): boolean {
-  // Convert to ET (handles DST automatically via Intl)
+function getEtClockParts(now: Date) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     hour12: false,
@@ -54,10 +62,45 @@ export function isUsMarketOpen(now = new Date()): boolean {
     hour: '2-digit',
     minute: '2-digit',
   }).formatToParts(now);
-  const wd = parts.find((p) => p.type === 'weekday')?.value ?? '';
-  const h = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
+  const weekday = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  const rawHour = Number(parts.find((p) => p.type === 'hour')?.value ?? '0');
   const m = Number(parts.find((p) => p.type === 'minute')?.value ?? '0');
-  if (wd === 'Sat' || wd === 'Sun') return false;
-  const mins = h * 60 + m;
-  return mins >= 9 * 60 + 30 && mins < 16 * 60; // 09:30 — 16:00 ET
+  const hour = rawHour === 24 ? 0 : rawHour;
+  return { weekday, minutes: hour * 60 + m };
+}
+
+/** US stock-session heuristic in New York time. It includes common extended-hours windows. */
+export function getUsMarketSession(now = new Date()): UsMarketSession {
+  const { weekday, minutes } = getEtClockParts(now);
+  const isWeekend = weekday === 'Sat' || weekday === 'Sun';
+  const isWeekday = !isWeekend;
+  const isSundayNight = weekday === 'Sun' && minutes >= 20 * 60;
+  const isOvernightMorning = isWeekday && minutes < 4 * 60;
+  const isWeeknight = isWeekday && weekday !== 'Fri' && minutes >= 20 * 60;
+
+  if (isWeekend && !isSundayNight) {
+    return { key: 'closed', label: '休市', detail: '周末休市', isTrading: false, isRegular: false };
+  }
+  if (isSundayNight || isOvernightMorning || isWeeknight) {
+    return { key: 'overnight', label: '夜盘', detail: '20:00-04:00 ET', isTrading: true, isRegular: false };
+  }
+  if (minutes >= 4 * 60 && minutes < 9 * 60 + 30) {
+    return { key: 'pre_market', label: '早盘', detail: '04:00-09:30 ET', isTrading: true, isRegular: false };
+  }
+  if (minutes >= 9 * 60 + 30 && minutes < 16 * 60) {
+    return { key: 'regular', label: '盘中', detail: '09:30-16:00 ET', isTrading: true, isRegular: true };
+  }
+  if (minutes >= 16 * 60 && minutes < 20 * 60) {
+    return { key: 'after_hours', label: '盘后', detail: '16:00-20:00 ET', isTrading: true, isRegular: false };
+  }
+  return { key: 'closed', label: '休市', detail: '非交易时段', isTrading: false, isRegular: false };
+}
+
+/** Heuristic: is the US market currently open (regular hours)? Uses ET (NYC) wall-clock. */
+export function isUsMarketOpen(now = new Date()): boolean {
+  return getUsMarketSession(now).isRegular;
+}
+
+export function isUsMarketDataActive(now = new Date()): boolean {
+  return getUsMarketSession(now).isTrading;
 }

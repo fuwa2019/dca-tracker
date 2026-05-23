@@ -35,12 +35,16 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
   });
 
   if (rows.length === 0) {
-    return <div className="rounded-2xl border bg-card p-6 text-center text-sm text-muted-foreground">{emptyText}</div>;
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-card/40 p-6 text-center text-sm text-muted-foreground">
+        {emptyText}
+      </div>
+    );
   }
 
   return (
     <>
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden p-0">
         <AnimatePresence initial={false}>
           {rows.map((t, i) => {
             const notional = Number(t.shares) * Number(t.price);
@@ -61,18 +65,22 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                 <div className="w-14 shrink-0 text-xs text-muted-foreground tnum">{shortDate(t.trade_date)}</div>
                 <div className="w-16 shrink-0 font-semibold">{t.ticker}</div>
                 <div className="hidden w-16 shrink-0 sm:block">
-                  <span className={cn(
-                    'rounded-md px-2 py-0.5 text-[10px] font-medium',
-                    isSell ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success',
-                  )}>
+                  <span
+                    className={cn(
+                      'inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium',
+                      isSell ? 'bg-loss-soft' : 'bg-gain-soft',
+                    )}
+                  >
                     {isSell ? '卖出' : '买入'}
                   </span>
                 </div>
                 <div className="hidden w-16 shrink-0 lg:block">
-                  <span className={cn(
-                    'rounded-md px-2 py-0.5 text-[10px] font-medium',
-                    isLump ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-muted text-muted-foreground',
-                  )}>
+                  <span
+                    className={cn(
+                      'inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium',
+                      isLump ? 'bg-warn-soft' : 'bg-surface-elevated text-muted-foreground',
+                    )}
+                  >
                     {isLump ? '大额' : '定投'}
                   </span>
                 </div>
@@ -86,7 +94,7 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(t)}>
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-danger" onClick={() => setDeleting(t)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(t)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>

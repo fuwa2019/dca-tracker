@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Database, PerformanceHistory, PortfolioHistory, SharedHistory } from '@/lib/database.types';
 import { aggregatePositions } from '@/lib/calc/position';
@@ -49,8 +48,7 @@ export function useSettings() {
 }
 
 export function usePortfolioHistory() {
-  const qc = useQueryClient();
-  const query = useQuery<PortfolioHistory | null>({
+  return useQuery<PortfolioHistory | null>({
     queryKey: ['portfolio_history'],
     queryFn: async () => {
       const performance = await supabase.rpc('performance_history');
@@ -91,34 +89,6 @@ export function usePortfolioHistory() {
     placeholderData: (previous) => previous,
     refetchOnWindowFocus: false,
   });
-
-  useEffect(() => {
-    if (!query.data?.dirty) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { error } = await supabase.rpc('refresh_performance_history_cache');
-        if (cancelled) return;
-        if (!error) {
-          qc.invalidateQueries({ queryKey: ['portfolio_history'] });
-          return;
-        }
-        if (!isMissingRpc(error)) {
-          // eslint-disable-next-line no-console
-          console.warn('[performance-history] background refresh failed', error.message);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        // eslint-disable-next-line no-console
-        console.warn('[performance-history] background refresh failed', err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [qc, query.data?.dirty, query.data?.generated_at]);
-
-  return query;
 }
 
 function normalizeHistory(history: PerformanceHistory | PortfolioHistory | SharedHistory): PortfolioHistory {

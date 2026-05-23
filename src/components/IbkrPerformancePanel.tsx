@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CartesianGrid,
   Tooltip,
@@ -9,26 +8,22 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { supabase } from '@/lib/supabase';
-import type { HistoryPoint, RangeKey } from '@/lib/calc/history';
-import { fetchHistory, type HistorySeries } from '@/lib/quote';
-import { useAuth } from '@/hooks/useAuth';
+import { ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { EmptyState } from '@/components/EmptyState';
+import { changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import type { HistoryPoint, RangeKey } from '@/lib/calc/history';
 
-const BLUE = '#0070C9';
-const DEEP_BLUE = '#0057D8';
-const GREEN = '#8BC34A';
-const BORDER = '#DCDCDC';
-const GRID = '#EEEEEE';
-const TEXT = '#111111';
-const SECONDARY = '#6B7280';
-const PANEL = '#F5F8FC';
-const DEMO_NOTE = '[DCA_TEST_10Y_60_QQQ]';
-const LEGACY_DEMO_NOTE = '[DCA_TEST_10Y_60_VOO]';
-const DEMO_TICKER = 'QQQ';
-const DEMO_MONTHLY_USD = 60;
-const DEMO_RATE = 7.2;
 const MAX_CHART_POINTS = 720;
+
+// Chart line colors come from CSS variables so dark/light themes pick up automatically.
+const PORTFOLIO_STROKE = 'hsl(var(--brand))';
+const BENCHMARK_STROKE = 'hsl(var(--benchmark))';
+const GRID_STROKE = 'hsl(var(--chart-grid))';
+const AXIS_FILL = 'hsl(var(--chart-axis))';
+const CROSSHAIR_STROKE = 'hsl(var(--crosshair))';
 
 interface Props {
   history: HistoryPoint[];
@@ -38,7 +33,8 @@ interface Props {
   showBenchmark: boolean;
   onShowBenchmarkChange: (show: boolean) => void;
   loading?: boolean;
-  showDemoControls?: boolean;
+  /** Hide the SPY toggle entirely (used by Share view where the toggle adds noise). */
+  hideBenchmarkToggle?: boolean;
   emptyMessage?: string;
 }
 
@@ -48,31 +44,28 @@ type PerfRow = {
   portfolioPeriodReturn: number;
   spyCumulativeReturn: number;
   portfolioCumulativeReturn: number;
+  excessCumulativeReturn: number;
 };
 
 type ChartRow = PerfRow & {
-  spyPeriodPct: number;
-  portfolioPeriodPct: number;
   spyCumulativePct: number;
   portfolioCumulativePct: number;
+  excessCumulativePct: number;
 };
 
-export function IbkrPerformancePanel({
-  showDemoControls = true,
-  ...props
-}: Props) {
-  if (!showDemoControls) {
-    return <IbkrPerformancePanelView {...props} showDemoControls={false} demoData={null} />;
-  }
-  return <IbkrPerformancePanelWithDemo {...props} showDemoControls={showDemoControls} />;
+const RANGE_OPTIONS: ReadonlyArray<{ value: RangeKey; label: string }> = [
+  { value: '1M', label: '1M' },
+  { value: '3M', label: '3M' },
+  { value: '6M', label: '6M' },
+  { value: '1Y', label: '1Y' },
+  { value: 'ALL', label: '开仓至今' },
+];
+
+export function IbkrPerformancePanel(props: Props) {
+  return <PerformancePanel {...props} />;
 }
 
-function IbkrPerformancePanelWithDemo(props: Omit<Props, 'showDemoControls'> & { showDemoControls: boolean }) {
-  const demoData = useDemoDcaData();
-  return <IbkrPerformancePanelView {...props} demoData={demoData} />;
-}
-
-function IbkrPerformancePanelView({
+export function PerformancePanel({
   history,
   range,
   onRangeChange,
@@ -80,172 +73,147 @@ function IbkrPerformancePanelView({
   showBenchmark,
   onShowBenchmarkChange,
   loading = false,
+  hideBenchmarkToggle = false,
   emptyMessage,
-  showDemoControls,
-  demoData,
-}: Props & { showDemoControls: boolean; demoData: ReturnType<typeof useDemoDcaData> | null }) {
-  const [cumulativePage, setCumulativePage] = useState(0);
+}: Props) {
+  const [page, setPage] = useState(0);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   const performanceRows = useMemo(() => buildPerformanceRows(history), [history]);
-  const visibleRows = useMemo(() => sliceRowsByRange(performanceRows, range), [performanceRows, range]);
+  const filteredRanges = RANGE_OPTIONS.filter((r) => availableRanges.includes(r.value));
+  const safeRange = filteredRanges.find((r) => r.value === range)
+    ? range
+    : (filteredRanges[filteredRanges.length - 1]?.value ?? range);
+  const visibleRows = useMemo(() => sliceRowsByRange(performanceRows, safeRange), [performanceRows, safeRange]);
   const fullChartRows = useMemo<ChartRow[]>(
     () =>
       visibleRows.map((row) => ({
         ...row,
-        spyPeriodPct: row.spyPeriodReturn * 100,
-        portfolioPeriodPct: row.portfolioPeriodReturn * 100,
         spyCumulativePct: row.spyCumulativeReturn * 100,
         portfolioCumulativePct: row.portfolioCumulativeReturn * 100,
+        excessCumulativePct: row.excessCumulativeReturn * 100,
       })),
     [visibleRows],
   );
   const chartRows = useMemo(() => downsampleChartRows(fullChartRows, MAX_CHART_POINTS), [fullChartRows]);
-
   const summary = useMemo(() => buildSummary(performanceRows), [performanceRows]);
   const dateLabel = visibleRows.length > 0
     ? `${visibleRows[0].date} 至 ${visibleRows[visibleRows.length - 1].date}`
     : '暂无日期范围';
 
-  useEffect(() => setCumulativePage(0), [range, history.length]);
+  useEffect(() => setPage(0), [safeRange, history.length]);
 
   return (
-    <section className="space-y-6 text-[13px]" style={{ color: TEXT }}>
-      <FilterPanel
-        range={range}
-        availableRanges={availableRanges}
-        onRangeChange={onRangeChange}
-        showBenchmark={showBenchmark}
-        onShowBenchmarkChange={onShowBenchmarkChange}
-        demoData={demoData}
-        showDemoControls={showDemoControls}
-      />
-
-      {history.length === 0 ? (
-        <div className="border bg-white p-10 text-center text-[13px]" style={{ borderColor: BORDER, color: SECONDARY }}>
-          {loading ? '正在拉取历史价格...' : (emptyMessage ?? '暂无数据 - 录入交易和资金流后会显示资产曲线')}
-        </div>
-      ) : (
-        <>
-          <SummaryTable dateLabel={dateLabel} summary={summary} showBenchmark={showBenchmark} />
-
-          <PerformanceChartCard
-            title="累积基准比较"
-            dateLabel={dateLabel}
-            rows={chartRows}
-            tableRows={visibleRows}
-            showBenchmark={showBenchmark}
-            page={cumulativePage}
-            onPageChange={setCumulativePage}
-          />
-        </>
-      )}
-
-      <div className="border px-4 py-3 text-[12px] leading-5" style={{ borderColor: BORDER, background: PANEL, color: SECONDARY }}>
-        业绩表现基于已录入交易、资金流和日线价格计算；收益率采用日链接时间加权回报。历史数据仅供分析参考，不构成投资建议。
-      </div>
-    </section>
-  );
-}
-
-function FilterPanel({
-  range,
-  availableRanges,
-  onRangeChange,
-  showBenchmark,
-  onShowBenchmarkChange,
-  demoData,
-  showDemoControls,
-}: {
-  range: RangeKey;
-  availableRanges: RangeKey[];
-  onRangeChange: (range: RangeKey) => void;
-  showBenchmark: boolean;
-  onShowBenchmarkChange: (show: boolean) => void;
-  demoData: ReturnType<typeof useDemoDcaData> | null;
-  showDemoControls: boolean;
-}) {
-  const ranges: Array<{ key: RangeKey; label: string }> = [
-    { key: '1M', label: '1月' },
-    { key: '3M', label: '3月' },
-    { key: '6M', label: '6月' },
-    { key: '1Y', label: '1年' },
-    { key: 'ALL', label: '开仓至今' },
-  ];
-
-  return (
-    <div className="flex min-h-[110px] flex-wrap items-start gap-x-8 gap-y-4 px-5 py-4" style={{ background: PANEL }}>
-      <FilterGroup title="时间段">
-        {ranges.map(({ key, label }) => {
-          const ok = availableRanges.includes(key);
-          return (
+    <div className="space-y-4">
+      <Card className="overflow-hidden p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-surface-elevated/50 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              时间段
+            </span>
+            {filteredRanges.length > 0 ? (
+              <SegmentedControl
+                value={safeRange}
+                onChange={(v) => onRangeChange(v as RangeKey)}
+                options={filteredRanges}
+                size="sm"
+                name="perf-range"
+                ariaLabel="选择时间段"
+              />
+            ) : (
+              <span className="text-xs text-muted-foreground">暂无数据</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              key={key}
               type="button"
-              disabled={!ok}
-              onClick={() => ok && onRangeChange(key)}
-              className={cn('h-6 border px-2.5 text-[12px] disabled:opacity-35')}
-              style={buttonStyle(range === key)}
+              aria-label="查看业绩计算说明"
+              aria-expanded={infoOpen}
+              onClick={() => setInfoOpen((v) => !v)}
+              className={cn(
+                'inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground',
+                infoOpen && 'border-brand/40 text-brand',
+              )}
             >
-              {label}
+              <Info className="h-3.5 w-3.5" />
             </button>
-          );
-        })}
-      </FilterGroup>
+            {!hideBenchmarkToggle && (
+              <BenchmarkToggle
+                checked={showBenchmark}
+                onCheckedChange={onShowBenchmarkChange}
+              />
+            )}
+          </div>
+        </div>
 
-      <FilterGroup title="业绩表现衡量">
-        <button type="button" className="h-6 border px-2.5 text-[12px]" style={buttonStyle(true)}>时间加权回报</button>
-      </FilterGroup>
+        {infoOpen && (
+          <div className="border-b border-border bg-surface px-4 py-3 text-[12px] leading-5 text-muted-foreground">
+            累积基准比较采用日链接时间加权回报 (TWR)。组合线来自已录入交易、资金流和复权日线；SPY 基准线假设每次可投资现金流在同日买入 SPY。超额收益按
+            {' '}(1+组合)/(1+SPY)-1 计算。
+          </div>
+        )}
 
-      <FilterGroup title="基准">
-        <button
-          type="button"
-          onClick={() => onShowBenchmarkChange(!showBenchmark)}
-          className="h-6 rounded-full border px-3 text-[12px]"
-          style={{
-            background: '#FFFFFF',
-            borderColor: showBenchmark ? '#B8D8C0' : BORDER,
-            color: showBenchmark ? '#1B7F3A' : SECONDARY,
-          }}
-        >
-          {showBenchmark ? '✓ SPY' : 'SPY'}
-        </button>
-      </FilterGroup>
+        {history.length === 0 ? (
+          <div className="px-4 py-8">
+            <EmptyState
+              icon={Info}
+              title={loading ? '正在拉取历史数据...' : (emptyMessage ?? '暂无业绩数据')}
+              description={loading ? undefined : '录入交易和资金流后会自动生成时间加权收益率曲线。'}
+            />
+          </div>
+        ) : (
+          <>
+            <SummaryTable dateLabel={dateLabel} summary={summary} showBenchmark={showBenchmark} />
+            <PerformanceChart rows={chartRows} showBenchmark={showBenchmark} />
+            <PerformanceDetailTable
+              tableRows={visibleRows}
+              showBenchmark={showBenchmark}
+              page={page}
+              onPageChange={setPage}
+            />
+          </>
+        )}
+      </Card>
 
-      {showDemoControls && demoData && (
-        <FilterGroup title="测试数据">
-          <button
-            type="button"
-            disabled={demoData.busy}
-            onClick={() => demoData.seed()}
-            className="h-6 border px-2.5 text-[12px] disabled:opacity-45"
-            style={buttonStyle(false)}
-          >
-            {demoData.seeding ? '生成中...' : '生成10年定投'}
-          </button>
-          <button
-            type="button"
-            disabled={demoData.busy}
-            onClick={() => demoData.clear()}
-            className="h-6 border px-2.5 text-[12px] disabled:opacity-45"
-            style={buttonStyle(false)}
-          >
-            {demoData.clearing ? '清除中...' : '清除测试'}
-          </button>
-          {demoData.message && (
-            <span className="ml-1 self-center text-[11px]" style={{ color: SECONDARY }}>{demoData.message}</span>
-          )}
-        </FilterGroup>
-      )}
+      <p className="text-[11px] leading-5 text-muted-foreground">
+        业绩基于已录入交易、资金流和日线复权价；曲线采用日链接时间加权回报 (TWR)。历史数据仅供分析参考，不构成投资建议。
+      </p>
     </div>
   );
 }
 
-function FilterGroup({ title, children }: { title: string; children: ReactNode }) {
+function BenchmarkToggle({
+  checked,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}) {
   return (
-    <div className="space-y-2">
-      <div className="text-[12px]" style={{ color: '#333333' }}>{title}</div>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
-    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onCheckedChange(!checked)}
+      className="inline-flex items-center gap-2 text-xs"
+    >
+      <span
+        className={cn(
+          'relative inline-flex h-4 w-7 items-center rounded-full transition-colors',
+          checked ? 'bg-benchmark' : 'bg-muted',
+        )}
+      >
+        <span
+          className={cn(
+            'inline-block h-3 w-3 rounded-full bg-white shadow transition-transform',
+            checked ? 'translate-x-3.5' : 'translate-x-0.5',
+          )}
+        />
+      </span>
+      <span className={cn(checked ? 'text-foreground' : 'text-muted-foreground')}>
+        显示 SPY 基准
+      </span>
+    </button>
   );
 }
 
@@ -258,155 +226,153 @@ function SummaryTable({
   summary: ReturnType<typeof buildSummary>;
   showBenchmark: boolean;
 }) {
+  const headers = ['本月', '本季', '本年', '开仓至今'];
   return (
-    <div className="border bg-white" style={{ borderColor: BORDER, borderRadius: 3 }}>
-      <div className="flex items-start justify-between px-4 py-3">
-        <div>
-          <div className="text-[16px] font-semibold" style={{ color: TEXT }}>历史业绩</div>
-          <div className="mt-1 text-[11px]" style={{ color: SECONDARY }}>{dateLabel}</div>
+    <div className="border-b border-border">
+      <div className="flex items-baseline justify-between px-4 pt-4">
+        <div className="text-sm font-semibold tracking-tight">历史业绩</div>
+        <div className="text-[11px] text-muted-foreground tnum">{dateLabel}</div>
+      </div>
+      <div className="px-4 pb-3 pt-3">
+        <div className="overflow-x-auto">
+          <table className="w-full border-separate border-spacing-0 text-[13px]">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="w-40 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wider"></th>
+                {headers.map((h) => (
+                  <th key={h} className="px-2 py-2 text-right text-[11px] font-medium uppercase tracking-wider">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {showBenchmark && (
+                <SummaryRow name="SPY 基准" swatch={BENCHMARK_STROKE} values={summary.spy} muted />
+              )}
+              <SummaryRow name="组合 NAV" swatch={PORTFOLIO_STROKE} values={summary.portfolio} bold />
+              {showBenchmark && (
+                <SummaryRow name="超额 vs SPY" values={summary.excess} dashed />
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
-      <table className="w-full border-collapse text-[13px]">
-        <thead>
-          <tr className="border-t border-b" style={{ borderColor: '#E5E5E5' }}>
-            <th className="px-4 py-2 text-left font-medium" />
-            {['MTD %', 'QTD %', 'YTD %', '开仓至今 %'].map((h) => (
-              <th key={h} className="px-4 py-2 text-right font-medium" style={{ color: TEXT }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {showBenchmark && <SummaryRow name="SPY" color={GREEN} values={summary.spy} />}
-          <SummaryRow name="Consolidated" color={BLUE} values={summary.portfolio} />
-        </tbody>
-      </table>
     </div>
   );
 }
 
-function SummaryRow({ name, color, values }: { name: string; color: string; values: number[] }) {
+function SummaryRow({
+  name,
+  values,
+  swatch,
+  bold = false,
+  muted = false,
+  dashed = false,
+}: {
+  name: string;
+  values: number[];
+  swatch?: string;
+  bold?: boolean;
+  muted?: boolean;
+  dashed?: boolean;
+}) {
   return (
-    <tr className="border-b last:border-b-0" style={{ borderColor: '#E5E5E5' }}>
-      <td className="px-4 py-2.5">
+    <tr>
+      <td className="px-2 py-2">
         <span className="inline-flex items-center gap-2">
-          <span className="h-2.5 w-2.5" style={{ background: color }} />
-          {name}
+          {swatch ? (
+            <span
+              aria-hidden
+              className="inline-block h-2.5 w-2.5 rounded-sm"
+              style={{ background: swatch }}
+            />
+          ) : (
+            <span
+              aria-hidden
+              className={cn(
+                'inline-block h-0.5 w-3 rounded-sm bg-muted-foreground/40',
+                dashed && 'border-t border-dashed border-muted-foreground/60 bg-transparent',
+              )}
+            />
+          )}
+          <span className={cn('text-foreground', muted && 'text-muted-foreground')}>{name}</span>
         </span>
       </td>
       {values.map((value, i) => (
-        <td key={i} className="px-4 py-2.5 text-right tabular-nums" style={{ color: TEXT }}>
-          {formatPct(value)}
+        <td
+          key={i}
+          className={cn(
+            'px-2 py-2 text-right tnum',
+            bold && 'font-semibold',
+            changeColor(value),
+          )}
+        >
+          {formatSignedPct(value)}
         </td>
       ))}
     </tr>
   );
 }
 
-function PerformanceChartCard({
-  title,
-  dateLabel,
-  rows,
-  tableRows,
-  showBenchmark,
-  page,
-  onPageChange,
-}: {
-  title: string;
-  dateLabel: string;
-  rows: ChartRow[];
-  tableRows: PerfRow[];
-  showBenchmark: boolean;
-  page: number;
-  onPageChange: (page: number) => void;
-}) {
-  const pageSize = 10;
-  const pageCount = Math.max(1, Math.ceil(tableRows.length / pageSize));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageRows = tableRows.slice(safePage * pageSize, safePage * pageSize + pageSize);
-  const [infoOpen, setInfoOpen] = useState(false);
-  const domain = chartDomain(rows.flatMap((row) => [
-    showBenchmark ? row.spyCumulativePct : 0,
-    row.portfolioCumulativePct,
-  ]));
+function PerformanceChart({ rows, showBenchmark }: { rows: ChartRow[]; showBenchmark: boolean }) {
+  const domain = chartDomain(
+    rows.flatMap((row) => [showBenchmark ? row.spyCumulativePct : 0, row.portfolioCumulativePct]),
+  );
 
   return (
-    <div className="overflow-hidden border bg-white" style={{ borderColor: BORDER, borderRadius: 3 }}>
-      <div className="relative flex h-[72px] items-start justify-between border-b px-4 py-3" style={{ borderColor: '#E5E5E5' }}>
-        <div>
-          <div className="text-[16px] font-semibold" style={{ color: TEXT }}>{title}</div>
-          <div className="mt-1 text-[11px]" style={{ color: SECONDARY }}>{dateLabel}</div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setInfoOpen((open) => !open)}
-          className="flex h-4 w-4 items-center justify-center rounded-full text-[11px] leading-none text-white"
-          style={{ background: DEEP_BLUE }}
-          aria-label="查看累积基准比较说明"
+    <div className="h-[340px] px-2 pb-1 pt-4 sm:h-[400px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart
+          key={showBenchmark ? 'with-benchmark' : 'portfolio-only'}
+          data={rows}
+          margin={{ top: 8, right: 14, left: 6, bottom: 24 }}
         >
-          ?
-        </button>
-        {infoOpen && (
-          <div
-            className="absolute right-4 top-10 z-20 w-[320px] border bg-white p-3 text-[12px] leading-5"
-            style={{ borderColor: BORDER, color: TEXT }}
-          >
-            累积基准比较展示从当前筛选起点开始，组合与 SPY 基准的累计时间加权收益率。今日点优先使用实时行情；历史日期使用日线收盘价。
-          </div>
-        )}
-      </div>
-
-      <div className="h-[380px] bg-white px-3 pb-2 pt-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={rows} margin={{ top: 12, right: 18, left: 6, bottom: 28 }}>
-            <CartesianGrid stroke={GRID} strokeWidth={1} vertical={false} />
-            <Tooltip
-              cursor={<CrosshairCursor domain={domain} />}
-              content={<PerformanceTooltip showBenchmark={showBenchmark} />}
-              isAnimationActive={false}
-            />
-            <XAxis
-              dataKey="date"
-              axisLine={false}
-              tickLine={false}
-              minTickGap={28}
-              tick={<IbkrXAxisTick />}
-              interval="preserveStartEnd"
-              height={42}
-            />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              tick={{ fontSize: 11, fill: SECONDARY }}
-              width={56}
-              domain={domain}
-              tickFormatter={(value) => `${Number(value).toFixed(2)}%`}
-            />
-            {showBenchmark && (
-              <Line
-                type="linear"
-                dataKey="spyCumulativePct"
-                stroke={GREEN}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 3, strokeWidth: 0, fill: GREEN }}
-                isAnimationActive={false}
-              />
-            )}
+          <CartesianGrid stroke={GRID_STROKE} strokeWidth={1} vertical={false} />
+          <Tooltip
+            cursor={<CrosshairCursor domain={domain} />}
+            content={<PerformanceTooltip showBenchmark={showBenchmark} />}
+            isAnimationActive={false}
+          />
+          <XAxis
+            dataKey="date"
+            axisLine={false}
+            tickLine={false}
+            minTickGap={28}
+            tick={<AxisTick />}
+            interval="preserveStartEnd"
+            height={36}
+          />
+          <YAxis
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 11, fill: AXIS_FILL }}
+            width={48}
+            domain={domain}
+            tickFormatter={(value) => `${Number(value).toFixed(1)}%`}
+          />
+          {showBenchmark && (
             <Line
               type="linear"
-              dataKey="portfolioCumulativePct"
-              stroke={BLUE}
+              dataKey="spyCumulativePct"
+              stroke={BENCHMARK_STROKE}
               strokeWidth={2}
               dot={false}
-              activeDot={{ r: 3, strokeWidth: 0, fill: BLUE }}
+              activeDot={{ r: 3, strokeWidth: 0, fill: BENCHMARK_STROKE }}
               isAnimationActive={false}
             />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      <PerformanceTable rows={pageRows} showBenchmark={showBenchmark} />
-      <Pager page={safePage} pageCount={pageCount} onPageChange={onPageChange} />
+          )}
+          <Line
+            type="linear"
+            dataKey="portfolioCumulativePct"
+            stroke={PORTFOLIO_STROKE}
+            strokeWidth={2.2}
+            dot={false}
+            activeDot={{ r: 3.5, strokeWidth: 0, fill: PORTFOLIO_STROKE }}
+            isAnimationActive={false}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -426,28 +392,55 @@ function PerformanceTooltip({
   const row = payload[0]?.payload;
   if (!row) return null;
   return (
-    <div className="border bg-white px-3 py-2 text-[12px] shadow-none" style={{ borderColor: BORDER, color: TEXT }}>
-      <div className="mb-1 tabular-nums" style={{ color: SECONDARY }}>日期 {label ?? row.date}</div>
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-[12px] shadow-md min-w-[200px]">
+      <div className="mb-1.5 text-[11px] text-muted-foreground tnum">{label ?? row.date}</div>
+      <Row
+        swatch={PORTFOLIO_STROKE}
+        label="组合累计"
+        value={row.portfolioCumulativeReturn}
+        bold
+      />
       {showBenchmark && (
-        <div className="flex min-w-[230px] justify-between gap-4 tabular-nums">
-          <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5" style={{ background: GREEN }} />SPY</span>
-          <span>累计 {formatPct(row.spyCumulativeReturn)}%</span>
-        </div>
+        <Row swatch={BENCHMARK_STROKE} label="SPY累计" value={row.spyCumulativeReturn} />
       )}
       {showBenchmark && (
-        <div className="flex min-w-[230px] justify-between gap-4 tabular-nums" style={{ color: SECONDARY }}>
-          <span>SPY 当日</span>
-          <span>{formatPct(row.spyPeriodReturn)}%</span>
-        </div>
+        <Row label="超额" value={row.excessCumulativeReturn} dashed />
       )}
-      <div className="flex min-w-[230px] justify-between gap-4 tabular-nums">
-        <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5" style={{ background: BLUE }} />Consolidated</span>
-        <span>累计 {formatPct(row.portfolioCumulativeReturn)}%</span>
-      </div>
-      <div className="flex min-w-[230px] justify-between gap-4 tabular-nums" style={{ color: SECONDARY }}>
-        <span>Consolidated 当日</span>
-        <span>{formatPct(row.portfolioPeriodReturn)}%</span>
-      </div>
+      <div className="my-1 border-t border-border" />
+      <Row label="组合当日" value={row.portfolioPeriodReturn} />
+      {showBenchmark && (
+        <Row label="SPY当日" value={row.spyPeriodReturn} />
+      )}
+    </div>
+  );
+}
+
+function Row({
+  swatch,
+  label,
+  value,
+  bold,
+  dashed,
+}: {
+  swatch?: string;
+  label: string;
+  value: number;
+  bold?: boolean;
+  dashed?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-0.5 text-[12px]">
+      <span className="inline-flex items-center gap-2">
+        {swatch ? (
+          <span aria-hidden className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: swatch }} />
+        ) : (
+          <span aria-hidden className={cn('inline-block h-0.5 w-3', dashed ? 'border-t border-dashed border-muted-foreground' : 'bg-muted-foreground/40')} />
+        )}
+        <span className="text-muted-foreground">{label}</span>
+      </span>
+      <span className={cn('tnum', bold && 'font-semibold', changeColor(value))}>
+        {formatSignedPct(value)}
+      </span>
     </div>
   );
 }
@@ -481,52 +474,71 @@ function CrosshairCursor({
 
   return (
     <g pointerEvents="none">
-      <line x1={x} x2={x} y1={top} y2={top + height} stroke="#9CA3AF" strokeWidth={1} strokeDasharray="3 3" />
+      <line x1={x} x2={x} y1={top} y2={top + height} stroke={CROSSHAIR_STROKE} strokeWidth={1} strokeDasharray="3 3" opacity={0.6} />
       {typeof y === 'number' && (
-        <line x1={left} x2={left + width} y1={y} y2={y} stroke="#9CA3AF" strokeWidth={1} strokeDasharray="3 3" />
+        <line x1={left} x2={left + width} y1={y} y2={y} stroke={CROSSHAIR_STROKE} strokeWidth={1} strokeDasharray="3 3" opacity={0.45} />
       )}
     </g>
   );
 }
 
-function PerformanceTable({
-  rows,
+function PerformanceDetailTable({
+  tableRows,
   showBenchmark,
+  page,
+  onPageChange,
 }: {
-  rows: PerfRow[];
+  tableRows: PerfRow[];
   showBenchmark: boolean;
+  page: number;
+  onPageChange: (page: number) => void;
 }) {
+  const pageSize = 10;
+  const orderedRows = useMemo(() => tableRows.slice().reverse(), [tableRows]);
+  const pageCount = Math.max(1, Math.ceil(orderedRows.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageRows = orderedRows.slice(safePage * pageSize, safePage * pageSize + pageSize);
+
   return (
-    <table className="w-full border-collapse text-[13px]">
-      <thead>
-        <tr className="border-t border-b" style={{ borderColor: '#E5E5E5' }}>
-          <th className="px-4 py-2 text-left font-medium" style={{ color: TEXT }}>日期</th>
-          <th className="px-4 py-2 text-right font-medium" style={{ color: TEXT }}>
-            <span className="inline-flex items-center justify-end gap-2">
-              <span className="h-2.5 w-2.5" style={{ background: GREEN }} />
-              SPY %
-            </span>
-          </th>
-          <th className="px-4 py-2 text-right font-medium" style={{ color: TEXT, background: PANEL }}>
-            <span className="inline-flex items-center justify-end gap-2">
-              <span className="h-2.5 w-2.5" style={{ background: BLUE }} />
-              Consolidated %
-            </span>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => {
-          return (
-            <tr key={row.date} className="h-9 border-b" style={{ borderColor: '#E5E5E5' }}>
-              <td className="px-4 text-left tabular-nums">{row.date}</td>
-              <td className="px-4 text-right tabular-nums">{showBenchmark ? formatPct(row.spyCumulativeReturn) : '-'}</td>
-              <td className="px-4 text-right tabular-nums" style={{ background: PANEL }}>{formatPct(row.portfolioCumulativeReturn)}</td>
+    <div className="border-t border-border">
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
+              <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">日期</th>
+              {showBenchmark && (
+                <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">SPY 累计 %</th>
+              )}
+              <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">组合 累计 %</th>
+              {showBenchmark && (
+                <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">超额 %</th>
+              )}
             </tr>
-          );
-        })}
-      </tbody>
-    </table>
+          </thead>
+          <tbody>
+            {pageRows.map((row) => (
+              <tr key={row.date} className="border-b border-border last:border-0 hover:bg-surface-elevated/40">
+                <td className="px-4 py-2 text-left tnum">{row.date}</td>
+                {showBenchmark && (
+                  <td className={cn('px-4 py-2 text-right tnum', changeColor(row.spyCumulativeReturn))}>
+                    {formatSignedPct(row.spyCumulativeReturn)}
+                  </td>
+                )}
+                <td className={cn('px-4 py-2 text-right font-medium tnum', changeColor(row.portfolioCumulativeReturn))}>
+                  {formatSignedPct(row.portfolioCumulativeReturn)}
+                </td>
+                {showBenchmark && (
+                  <td className={cn('px-4 py-2 text-right tnum', changeColor(row.excessCumulativeReturn))}>
+                    {formatSignedPct(row.excessCumulativeReturn)}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager page={safePage} pageCount={pageCount} onPageChange={onPageChange} />
+    </div>
   );
 }
 
@@ -540,56 +552,44 @@ function Pager({
   onPageChange: (page: number) => void;
 }) {
   return (
-    <div className="flex h-8 items-center justify-between px-4 text-[12px]" style={{ color: '#333333' }}>
-      <button type="button" className="h-6 border bg-white px-2" style={{ borderColor: BORDER, borderRadius: 3 }}>10结果</button>
-      <div className="flex items-center gap-2">
-        <span>页面</span>
-        <span className="border bg-white px-2 py-0.5 tabular-nums" style={{ borderColor: BORDER, borderRadius: 3 }}>{page + 1}</span>
-        <span>/</span>
-        <span className="tabular-nums">{pageCount}</span>
-        <button
-          type="button"
-          className="h-6 w-6 border bg-white disabled:opacity-35"
-          style={{ borderColor: BORDER, borderRadius: 3 }}
-          disabled={page === 0}
-          onClick={() => onPageChange(Math.max(0, page - 1))}
-        >
-          &lt;
-        </button>
-        <button
-          type="button"
-          className="h-6 w-6 border bg-white disabled:opacity-35"
-          style={{ borderColor: BORDER, borderRadius: 3 }}
-          disabled={page >= pageCount - 1}
-          onClick={() => onPageChange(Math.min(pageCount - 1, page + 1))}
-        >
-          &gt;
-        </button>
-      </div>
+    <div className="flex items-center justify-end gap-2 px-4 py-2 text-[11px] text-muted-foreground">
+      <span>第</span>
+      <span className="tnum text-foreground">{page + 1}</span>
+      <span>/</span>
+      <span className="tnum">{pageCount}</span>
+      <button
+        type="button"
+        className="ml-2 inline-flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface disabled:opacity-40"
+        disabled={page === 0}
+        onClick={() => onPageChange(Math.max(0, page - 1))}
+        aria-label="上一页"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface disabled:opacity-40"
+        disabled={page >= pageCount - 1}
+        onClick={() => onPageChange(Math.min(pageCount - 1, page + 1))}
+        aria-label="下一页"
+      >
+        <ChevronRight className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
 
-function IbkrXAxisTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string } }) {
+function AxisTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string } }) {
   if (x == null || y == null || !payload?.value) return null;
   const [year, month, day] = payload.value.split('-');
   return (
     <g transform={`translate(${x},${y + 8})`}>
-      <text textAnchor="middle" fill={SECONDARY} fontSize={11}>
+      <text textAnchor="middle" fill={AXIS_FILL} fontSize={11}>
         <tspan x={0} dy={0}>{year}</tspan>
-        <tspan x={0} dy={13}>{Number(month)}/{Number(day)}</tspan>
+        <tspan x={0} dy={12}>{Number(month)}/{Number(day)}</tspan>
       </text>
     </g>
   );
-}
-
-function buttonStyle(selected: boolean): CSSProperties {
-  return {
-    borderColor: selected ? '#4F86E8' : '#D5D9E0',
-    borderRadius: 4,
-    background: selected ? '#EAF2FF' : '#FFFFFF',
-    color: selected ? DEEP_BLUE : '#333333',
-  };
 }
 
 function buildPerformanceRows(history: HistoryPoint[]): PerfRow[] {
@@ -597,14 +597,23 @@ function buildPerformanceRows(history: HistoryPoint[]): PerfRow[] {
     const prev = index > 0 ? history[index - 1] : null;
     const spyPeriod = prev ? periodReturn(prev.returnPctSpy, point.returnPctSpy) : 0;
     const portfolioPeriod = prev ? periodReturn(prev.returnPctUser, point.returnPctUser) : 0;
+    const excessCum = excessReturn(point.returnPctUser, point.returnPctSpy);
     return {
       date: point.date,
       spyPeriodReturn: spyPeriod,
       portfolioPeriodReturn: portfolioPeriod,
       spyCumulativeReturn: point.returnPctSpy,
       portfolioCumulativeReturn: point.returnPctUser,
+      excessCumulativeReturn: excessCum,
     };
   });
+}
+
+function excessReturn(portfolio: number, benchmark: number): number {
+  const denom = 1 + benchmark;
+  if (!Number.isFinite(denom) || Math.abs(denom) < 1e-9) return 0;
+  const value = (1 + portfolio) / denom - 1;
+  return Number.isFinite(value) ? value : 0;
 }
 
 function sliceRowsByRange(rows: PerfRow[], range: RangeKey): PerfRow[] {
@@ -631,21 +640,21 @@ function periodReturn(prevCumulative: number, currentCumulative: number): number
 function buildSummary(rows: PerfRow[]) {
   const end = rows[rows.length - 1];
   const empty = [0, 0, 0, 0];
-  if (!end) return { spy: empty, portfolio: empty };
-  return {
-    spy: [
-      returnSince(rows, startOfMonth(end.date), 'spyCumulativeReturn'),
-      returnSince(rows, startOfQuarter(end.date), 'spyCumulativeReturn'),
-      returnSince(rows, `${end.date.slice(0, 4)}-01-01`, 'spyCumulativeReturn'),
-      end.spyCumulativeReturn,
-    ],
-    portfolio: [
-      returnSince(rows, startOfMonth(end.date), 'portfolioCumulativeReturn'),
-      returnSince(rows, startOfQuarter(end.date), 'portfolioCumulativeReturn'),
-      returnSince(rows, `${end.date.slice(0, 4)}-01-01`, 'portfolioCumulativeReturn'),
-      end.portfolioCumulativeReturn,
-    ],
-  };
+  if (!end) return { spy: empty, portfolio: empty, excess: empty };
+  const portfolio = [
+    returnSince(rows, startOfMonth(end.date), 'portfolioCumulativeReturn'),
+    returnSince(rows, startOfQuarter(end.date), 'portfolioCumulativeReturn'),
+    returnSince(rows, `${end.date.slice(0, 4)}-01-01`, 'portfolioCumulativeReturn'),
+    end.portfolioCumulativeReturn,
+  ];
+  const spy = [
+    returnSince(rows, startOfMonth(end.date), 'spyCumulativeReturn'),
+    returnSince(rows, startOfQuarter(end.date), 'spyCumulativeReturn'),
+    returnSince(rows, `${end.date.slice(0, 4)}-01-01`, 'spyCumulativeReturn'),
+    end.spyCumulativeReturn,
+  ];
+  const excess = portfolio.map((p, i) => excessReturn(p, spy[i]));
+  return { spy, portfolio, excess };
 }
 
 function returnSince(rows: PerfRow[], startDate: string, key: 'spyCumulativeReturn' | 'portfolioCumulativeReturn') {
@@ -689,9 +698,11 @@ function roundUp(value: number) {
   return Math.ceil(value * 2) / 2;
 }
 
-function formatPct(value: number) {
-  if (!Number.isFinite(value)) return '-';
-  return (value * 100).toFixed(2);
+function formatSignedPct(value: number) {
+  if (!Number.isFinite(value)) return '—';
+  const pct = value * 100;
+  const sign = pct > 0 ? '+' : '';
+  return `${sign}${pct.toFixed(2)}%`;
 }
 
 function downsampleChartRows(rows: ChartRow[], maxPoints: number) {
@@ -702,146 +713,4 @@ function downsampleChartRows(rows: ChartRow[], maxPoints: number) {
   const last = rows[rows.length - 1];
   if (sampled[sampled.length - 1] !== last) sampled.push(last);
   return sampled;
-}
-
-function useDemoDcaData() {
-  const { user } = useAuth();
-  const qc = useQueryClient();
-  const [message, setMessage] = useState<string | null>(null);
-
-  async function clearDemoRows() {
-    if (!user) throw new Error('请先登录');
-    const tx = await supabase
-      .from('transactions')
-      .delete()
-      .eq('user_id', user.id)
-      .in('note', [DEMO_NOTE, LEGACY_DEMO_NOTE]);
-    if (tx.error) throw tx.error;
-    const cf = await supabase
-      .from('cashflows')
-      .delete()
-      .eq('user_id', user.id)
-      .in('note', [DEMO_NOTE, LEGACY_DEMO_NOTE]);
-    if (cf.error) throw cf.error;
-  }
-
-  const clearMutation = useMutation({
-    mutationFn: clearDemoRows,
-    onSuccess: async () => {
-      setMessage('测试数据已清除');
-      await invalidatePortfolioQueries(qc);
-    },
-    onError: (err) => setMessage(err instanceof Error ? err.message : '清除失败'),
-  });
-
-  const seedMutation = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error('请先登录');
-      setMessage(null);
-      await clearDemoRows();
-
-      const history = await fetchHistory([DEMO_TICKER, 'SPY'], '10y');
-      const prices = seriesToPriceMap(history, DEMO_TICKER);
-      const tradeRows = buildMonthlyDemoTrades(prices);
-      if (tradeRows.length === 0) throw new Error('没有拿到 QQQ 历史价格');
-
-      const cashflows = tradeRows.map((row) => ({
-        user_id: user.id,
-        cny_out_date: row.date,
-        cny_amount: Number((DEMO_MONTHLY_USD * DEMO_RATE).toFixed(2)),
-        usd_in_date: row.date,
-        usd_amount: DEMO_MONTHLY_USD,
-        target_rate: DEMO_RATE,
-        fees_cny: 0,
-        fees_usd: 0,
-        note: DEMO_NOTE,
-      }));
-      const transactions = tradeRows.map((row) => ({
-        user_id: user.id,
-        trade_date: row.date,
-        ticker: DEMO_TICKER,
-        side: 'buy' as const,
-        price: row.close,
-        shares: Number((DEMO_MONTHLY_USD / row.close).toFixed(6)),
-        kind: 'dca' as const,
-        note: DEMO_NOTE,
-      }));
-
-      const cf = await supabase.from('cashflows').insert(cashflows);
-      if (cf.error) throw cf.error;
-      const tx = await supabase.from('transactions').insert(transactions);
-      if (tx.error) throw tx.error;
-      return tradeRows.length;
-    },
-    onSuccess: async (count) => {
-      setMessage(`已生成 ${count} 期`);
-      await invalidatePortfolioQueries(qc);
-    },
-    onError: (err) => setMessage(err instanceof Error ? err.message : '生成失败'),
-  });
-
-  return {
-    seed: () => seedMutation.mutate(),
-    clear: () => clearMutation.mutate(),
-    seeding: seedMutation.isPending,
-    clearing: clearMutation.isPending,
-    busy: seedMutation.isPending || clearMutation.isPending,
-    message,
-  };
-}
-
-async function invalidatePortfolioQueries(qc: ReturnType<typeof useQueryClient>) {
-  await refreshPortfolioHistoryCache();
-  await Promise.all([
-    qc.invalidateQueries({ queryKey: ['transactions'] }),
-    qc.invalidateQueries({ queryKey: ['cashflows'] }),
-    qc.invalidateQueries({ queryKey: ['portfolio_history'] }),
-    qc.invalidateQueries({ queryKey: ['daily_prices'] }),
-  ]);
-}
-
-async function refreshPortfolioHistoryCache() {
-  const performance = await supabase.rpc('refresh_performance_history_cache');
-  if (!performance.error) return;
-  if (!isMissingRpc(performance.error)) {
-    // eslint-disable-next-line no-console
-    console.warn('[history-cache] refresh failed', performance.error.message);
-    return;
-  }
-
-  const { error } = await supabase.rpc('refresh_portfolio_history_cache');
-  if (!error || isMissingRpc(error)) return;
-  // eslint-disable-next-line no-console
-  console.warn('[history-cache] refresh failed', error.message);
-}
-
-function isMissingRpc(error: { code?: string; message?: string }) {
-  return error.code === 'PGRST202' || /function .* does not exist|could not find .* function/i.test(error.message ?? '');
-}
-
-function seriesToPriceMap(series: HistorySeries[], ticker: string) {
-  const row = series.find((s) => s.ticker.toUpperCase() === ticker);
-  return new Map((row?.points ?? []).map((p) => [p.date, p.close]));
-}
-
-function buildMonthlyDemoTrades(prices: Map<string, number>) {
-  const months = buildMonthlyStarts();
-  const dates = [...prices.keys()].sort();
-  return months.flatMap((monthStart) => {
-    const month = monthStart.slice(0, 7);
-    const tradeDate = dates.find((date) => date >= monthStart && date.startsWith(month));
-    const close = tradeDate ? prices.get(tradeDate) : null;
-    return tradeDate && close ? [{ date: tradeDate, close }] : [];
-  });
-}
-
-function buildMonthlyStarts() {
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear() - 10, now.getUTCMonth(), 1));
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const out: string[] = [];
-  for (let d = start; d <= end; d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1))) {
-    out.push(d.toISOString().slice(0, 10));
-  }
-  return out;
 }

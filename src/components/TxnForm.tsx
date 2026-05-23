@@ -3,12 +3,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useTransactions } from '@/hooks/usePortfolio';
 import { aggregatePositions } from '@/lib/calc/position';
 import { todayLocalIso } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import type { Database } from '@/lib/database.types';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
@@ -105,26 +106,33 @@ export function TxnForm({ initial, onDone }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label>方向</Label>
-          <Select value={side} onValueChange={(v) => setSide(v as 'buy' | 'sell')}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="buy">买入</SelectItem>
-              <SelectItem value="sell">卖出</SelectItem>
-            </SelectContent>
-          </Select>
+          <SegmentedControl
+            value={side}
+            onChange={(v) => setSide(v)}
+            name="txn-side"
+            ariaLabel="买入或卖出"
+            className={cn(side === 'sell' && 'ring-1 ring-loss/30')}
+            options={[
+              { value: 'buy', label: <span className={side === 'buy' ? 'text-gain' : ''}>买入</span> },
+              { value: 'sell', label: <span className={side === 'sell' ? 'text-loss' : ''}>卖出</span> },
+            ]}
+          />
         </div>
         <div className="space-y-1.5">
           <Label>类型</Label>
-          <Select value={kind} onValueChange={(v) => setKind(v as 'dca' | 'lumpsum')}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="dca">月定投</SelectItem>
-              <SelectItem value="lumpsum">大额建仓</SelectItem>
-            </SelectContent>
-          </Select>
+          <SegmentedControl
+            value={kind}
+            onChange={(v) => setKind(v)}
+            name="txn-kind"
+            ariaLabel="定投或大额建仓"
+            options={[
+              { value: 'dca', label: '月定投' },
+              { value: 'lumpsum', label: '大额建仓' },
+            ]}
+          />
         </div>
       </div>
 
@@ -146,7 +154,7 @@ export function TxnForm({ initial, onDone }: Props) {
             aria-invalid={sellOverflow}
           />
           {side === 'sell' && Number.isFinite(maxSellable) && (
-            <p className={`text-[11px] tnum ${sellOverflow ? 'text-danger' : 'text-muted-foreground'}`}>
+            <p className={cn('text-[11px] tnum', sellOverflow ? 'text-loss' : 'text-muted-foreground')}>
               当前可卖 {maxSellable.toFixed(4)} 股
               {sellOverflow && ' · 超出持仓'}
             </p>
@@ -160,12 +168,13 @@ export function TxnForm({ initial, onDone }: Props) {
       </div>
 
       {Number.isFinite(notional) && notional > 0 && (
-        <div className="rounded-lg bg-muted/50 px-3 py-2 text-xs tnum text-muted-foreground">
-          成交金额 ≈ ${notional.toFixed(2)}
+        <div className="flex items-center justify-between rounded-lg border border-border bg-surface-elevated px-3 py-2 text-xs tnum">
+          <span className="text-muted-foreground">成交金额</span>
+          <span className="font-medium">${notional.toFixed(2)}</span>
         </div>
       )}
 
-      {mut.isError && <p className="text-xs text-danger">{(mut.error as Error)?.message ?? '保存失败'}</p>}
+      {mut.isError && <p className="text-xs text-loss">{(mut.error as Error)?.message ?? '保存失败'}</p>}
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => onDone?.()}>取消</Button>

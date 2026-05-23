@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchQuotes, isUsMarketOpen, type Quote } from '@/lib/quote';
+import { fetchQuotes, isUsMarketDataActive, type Quote } from '@/lib/quote';
 
 export function useQuotes(symbols: string[]) {
   const uniqSorted = [...new Set(symbols.map((s) => s.toUpperCase()))].sort();
@@ -7,7 +7,7 @@ export function useQuotes(symbols: string[]) {
     queryKey: ['quotes', uniqSorted.join(',')],
     queryFn: () => fetchQuotes(uniqSorted),
     enabled: uniqSorted.length > 0,
-    refetchInterval: () => (isUsMarketOpen() ? 60_000 : false),
+    refetchInterval: () => (isUsMarketDataActive() ? 60_000 : false),
     refetchOnWindowFocus: true,
     staleTime: 30_000,
   });

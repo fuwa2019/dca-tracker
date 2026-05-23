@@ -38,6 +38,10 @@ export default {
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
+        surface: {
+          DEFAULT: 'hsl(var(--surface))',
+          elevated: 'hsl(var(--surface-elevated))',
+        },
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
@@ -62,8 +66,20 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
-        success: 'hsl(142 71% 45%)',
-        danger: 'hsl(0 84% 60%)',
+        brand: {
+          DEFAULT: 'hsl(var(--brand))',
+          foreground: 'hsl(var(--brand-foreground))',
+        },
+        // Semantic colors used as text/bg utilities throughout the app.
+        // success/danger/warning are legacy names kept for back-compat with
+        // existing className strings (text-success, text-danger, text-warning).
+        success: 'hsl(var(--gain))',
+        danger: 'hsl(var(--loss))',
+        warning: 'hsl(var(--warn))',
+        gain: 'hsl(var(--gain))',
+        loss: 'hsl(var(--loss))',
+        warn: 'hsl(var(--warn))',
+        benchmark: 'hsl(var(--benchmark))',
       },
       borderRadius: {
         lg: 'var(--radius)',

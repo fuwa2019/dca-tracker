@@ -1,118 +1,94 @@
-  P0 必修
+# CLAUDE.md
 
-  1. 邮件 Worker 无鉴权触发发信
-     位置：workers/email-cron/src/index.ts:43
-     问题：公网 POST /run?force=1 可绕过日期和去重。
-     修改：增加 ADMIN_SECRET，要求 Authorization: Bearer ...；或生产环境删除 /
-     run?force=1。force 也要保留频控/去重。
-  2. 总资产/盈亏没有现金仓位
-     位置：src/app/dashboard.tsx:81、src/hooks/usePortfolio.ts:56
-     问题：只算股票市值，不算未买入现金；入金未买满会显示假亏损。
-     修改：新增 cash balance 口径：现金 = 累计到账USD - 买入成交额 + 卖出成交
-     额，总资产用 持仓市值 + 现金。XIRR、TWR、资产曲线、$1M 进度都用 NAV。
-  3. TWR 现金流分段公式错误
-     位置：src/lib/calc/twr.ts:98
-     问题：当前 cashflow 被算进上一段收益，违背 TWR。
-     修改：现金流日作为分段边界；先计算前一段 V_end / V_start - 1，再把现金流加
-     入下一段起始 NAV。或改用每日 NAV 链接法。
-  4. 卖出可超过持仓
-     位置：src/components/TxnForm.tsx:43、src/lib/calc/position.ts:63
-     问题：超卖后 FIFO 静默吞掉错误，持仓和已实现盈亏失真。
-     修改：前端提交卖出前计算当前可卖股数并拦截；计算层遇到超卖应抛错或返回
-     validation error。必要时数据库用 RPC 写交易，统一校验。
-  5. Cloudflare Pages 深层路由可能 404
-     位置：src/App.tsx:29
-     问题：/share/:token 直接打开可能不回退到 SPA。
-     修改：新增 public/_redirects：/* /index.html 200。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-  P1 重要
+## Commands
 
-  6. 汇兑损耗口径不完整
-     位置：src/components/CashflowForm.tsx:45
-     问题：没录入/计算 fees_cny，fees_usd 也没纳入口径；target_rate 标注成 USD/
-     CNY 但实际按 CNY/USD 用。
-     修改：表单增加 CNY 手续费；文案改为“参考汇率 CNY/USD”。推荐公式：总CNY成本
-     = cny_amount + fees_cny，理想USD = 总CNY成本 / target_rate，损耗 = 理想USD
-     - usd_amount。fees_usd 只做拆分展示，避免重复扣。
-  7. 再平衡默认比例和碎股不符合要求
-     位置：src/app/rebalance.tsx:23、src/lib/calc/rebalance.ts:68
-     问题：默认等权，且只支持整股。
-     修改：默认 VOO:QQQM:SMH = 2:1:1，即 50/25/25。买入股数改为 0.0001 精度：
-     Math.floor(rawShares * 10000) / 10000，显示 toFixed(4)，文案删除“整股”。
-  8. 再平衡 settings 异步加载后不同步
-     位置：src/app/rebalance.tsx:23
-     问题：weights 只在首次 render 初始化，watchlist 后续变化不会更新。
-     修改：用 useEffect 监听 watchlist，当用户未手动修改或标的变化时重建默认权
-     重。
-  9. Supabase 部署文档漏跑 0002_daily_prices.sql
-     位置：README.md:74、supabase/README.md:5
-     问题：新部署缺 daily_prices 表，资产曲线失败。
-     修改：文档改成按顺序执行 0001_init.sql 和 0002_daily_prices.sql。
-  10. Quote Worker CORS 预览域名匹配错误
+```bash
+npm run dev           # Vite dev server on http://localhost:5173
+npm run build         # tsc -b && vite build (CI also runs this)
+npm run typecheck     # Front-end + BOTH workers (tsc -b + workers/quote + workers/email-cron)
+npm run test:finance  # Modified-Dietz / TWR fixture regression — runs scripts/verify-performance-fixtures.mjs
+```
 
-     位置：workers/quote/src/index.ts:373、workers/quote/wrangler.toml:15
-     问题：注释说支持 preview pattern，代码实际精确匹配。
-     修改：支持 *.pages.dev 或明确列出生产域名/本地域名；不要让注释和实现矛盾。
-  11. SPY 基准遇到周末/假日入金会漏买
+There is no lint script. CI (`.github/workflows/ci.yml`) runs `test:finance`, `typecheck`, and `build` on every push/PR — keep all three green.
 
-     位置：src/lib/calc/history.ts:93
-     问题：cashflow 当天无 SPY close 时，只增加 invested，不增加 SPY shares。
-     修改：把 cashflow 规范到下一个交易日，或用 pendingSpyCash 在后续第一个有
-     SPY close 的日期买入。
-  12. 图表交易标记在金额模式下坐标错误
+Worker deploys are per-directory and require `wrangler login` once:
 
-     位置：src/components/EquityCurveChart.tsx:102
-     问题：金额模式用 navUser 放 marker，但主线是 pnlUser。
-     修改：Scatter value 改为：收益率模式 returnPctUser，金额模式 pnlUser。
-  13. 分享视图收益率在卖出后不准
+```bash
+cd workers/quote      && npm run deploy   # uses workers/quote/wrangler.toml
+cd workers/email-cron && npm run deploy   # uses workers/email-cron/wrangler.toml
+```
 
-     位置：supabase/migrations/0001_init.sql:205
-     问题：shared_portfolio 用所有历史买入均价，没有按卖出扣减剩余成本。
-     修改：SQL 函数按平均成本等比例扣减卖出成本，或改为 RPC 返回脱敏后的前端同口
-     径计算结果。
+To trigger the email Worker manually for testing: `curl -X POST https://dca-email-cron.<acct>.workers.dev/run` (note the auth / dedupe caveat in "Gotchas" below).
 
-  P2 质量/部署
+## Architecture
 
-  14. .env.example 缺失
+Three deployables share one Supabase Postgres:
 
-     位置：README.md:107
-     问题：文档要求复制 .env.example，但文件不存在。
-     修改：新增 .env.example，只放占位值：VITE_SUPABASE_URL、
-     VITE_SUPABASE_ANON_KEY、VITE_QUOTE_WORKER_URL。
-  15. lint 脚本不可运行
+```
+Browser SPA (Cloudflare Pages) ──► Supabase (auth + RLS + RPCs)
+        │                       └► dca-quote Worker ──► Yahoo Finance
+        │                                          └─► writes daily_prices via service role on cron
+        └───────────────────── (no direct call) ─────► dca-email-cron Worker ──► Resend
+                                                                              └─► reads settings via service role
+```
 
-     位置：package.json:11
-     问题：定义了 eslint，但没安装 ESLint。
-     修改：要么补齐 eslint、typescript-eslint、eslint-plugin-react-hooks 配置；
-     要么删除 lint 脚本，避免假质量门。
-  16. .gitignore 太少
+- **`src/`** — React 18 SPA. Routes in `src/App.tsx`. Pages in `src/app/`. Pure finance math in `src/lib/calc/` (`position`, `xirr`, `twr`, `rebalance`, `target`, `history`). Data fetching via `@tanstack/react-query` hooks in `src/hooks/`.
+- **`workers/quote/`** — Yahoo Finance reverse-proxy with KV cache. Three endpoints: `/api/quote` (5-min cache), `/api/chart` (1h), `/api/history` (1h, also persists to `daily_prices`). Daily cron at UTC 22:15 syncs prices and calls `refresh_due_performance_caches()`.
+- **`workers/email-cron/`** — Cron at UTC 03:00 = Beijing 11:00. Computes next NYSE trading day, sends a Resend email the day before the month's first trading day. KV (`sent:<user>:<YYYY-MM>`) + `email_log` table = two-layer dedupe.
+- **`supabase/migrations/`** — Numbered, additive, idempotent SQL. **Run in order on a fresh project** (currently 0001 → 0014). Each new schema change is a new file; never rewrite an already-applied migration. `supabase/README.md` documents the deploy order.
 
-     位置：.gitignore:1
-     问题：未排除 node_modules/、dist/、worker node_modules、.env*。
-     修改：加入这些目录和环境文件，避免提交依赖、构建产物和密钥。
-  17. 前端 typecheck 不覆盖 Worker
+## Performance history pipeline (non-obvious, central)
 
-     位置：tsconfig.json:1、worker tsconfig
-     问题：根 npm run typecheck 只检查前端和 Vite 配置。
-     修改：根 package 增加脚本，例如同时跑 tsc -b、cd workers/quote && tsc
-     --noEmit、cd workers/email-cron && tsc --noEmit。
-  18. 新建交易/资金流默认日期用 UTC
+The dashboard and the public `/share/:token` view must show **the same TWR curve**, and the share view must never recompute it anonymously (privacy + cost). This is enforced by a precomputed cache, not a live calculation:
 
-     位置：src/components/TxnForm.tsx:23、src/components/CashflowForm.tsx:22
-     问题：中国早上会默认成前一天。
-     修改：用本地日期格式化函数，或固定 Asia/Shanghai。
-  19. 美股开盘判断忽略 NYSE 假日
+1. **Source of truth**: `transactions`, `cashflows`, and `daily_prices.adjusted_close` per user.
+2. **Cache table**: `performance_history_cache` stores only public-safe fields per day: `date`, `return_pct_user`, `return_pct_spy`. **No USD NAV, no cashflows, no trade detail.** This is what keeps share links from leaking absolute amounts.
+3. **Dirty marking**: triggers on `transactions`/`cashflows`/`daily_prices` flip a per-user `dirty` flag.
+4. **Refresh entry points** (use these — do not add new ones casually):
+   - Authenticated dashboard: `performance_history()` RPC (reads cache; UI shows stale curve and refreshes in background if dirty).
+   - Authenticated refresh: `refresh_performance_history_cache()`.
+   - Public share read: `shared_performance_history(token)` — cache-only, returns empty state if no cache exists, never recomputes.
+   - Share-owner refresh: `refresh_shared_history_cache(token)`.
+   - Service-role batch refresh from the quote Worker's cron: `refresh_due_performance_caches()`.
+5. **Returns math**: TWR (daily-linked, Modified-Dietz per sub-period) for the chart. XIRR is money-weighted and shown separately — never used to draw the curve. Benchmark is SPY using adjusted-close as a total-return proxy (close enough for the report, not broker-exact).
 
-     位置：src/lib/quote.ts:32
-     问题：节假日会误判盘中并 1 分钟刷新。
-     修改：复用 NYSE holiday calendar，或文案改成“工作日盘中估算”。
-  20. 邮件提醒默认开启
+Spec lives in `docs/PERFORMANCE_SPEC.md`; the regression fixtures in `scripts/verify-performance-fixtures.mjs` enumerate the cases (single buy, sell-after-buy, weekend cashflow, missing price, share-token parity, etc.) that must stay green when touching this pipeline.
 
-     位置：supabase/migrations/0001_init.sql:102
-     问题：注册后自动订阅提醒。
-     修改：开源/多用户场景建议默认 email_enabled=false，让用户主动开启。
-  21. README 引用不存在/本机路径
+## Calc layer rules
 
-     位置：README.md:5
-     问题：写 CLAUDE.md 和本机 .claude 路径，仓库内实际是 AGENT.md。
-     修改：可不改；如果开源，建议改成 AGENT.md 或删除本机路径。
+`src/lib/calc/` is **pure** — no network, no Supabase, no React. Hooks marshal data in and out. Three contracts that the UI relies on:
+
+- **NAV = market value of holdings + uninvested cash** (deposits − buys + sells). Dashboard totals, XIRR, TWR, `$1M` progress, and the equity curve all use NAV. Don't compute "total" from positions only.
+- **Cost basis**: average cost is the default; FIFO is a toggle. Both live in `position.ts`. Sells are validated against current shares; oversells must surface as a validation error, not silently zero out FIFO lots.
+- **TWR sub-periods are bounded by cashflow dates.** The cashflow on day *t* enters the *next* sub-period's starting NAV, not the previous sub-period's return.
+
+## Privacy invariant for shared views
+
+`shared_portfolio(token)` and `shared_performance_history(token)` are `security definer` RPCs that return **sanitized** data: holding weights %, return %, dates. They must never expose USD amounts, CNY, exchange-loss, deposit history, or per-trade detail. When adding any field to a share response, trace it to a DB column or RPC field that is already public-safe — never proxy through a live external API call from the share page.
+
+## Migration discipline
+
+- Migrations are numbered (`NNNN_description.sql`) and **append-only**. Never edit a migration that has been committed/applied.
+- New work that changes schema or RPCs ⇒ new `NNNN+1_*.sql`. Use `create or replace`, `add column if not exists`, etc. so the file is idempotent on already-deployed projects.
+- After adding a migration that affects performance history, run `supabase/performance_cache_verify.sql` against a dev project and confirm `npm run test:finance` still passes.
+
+## Non-obvious gotchas
+
+- **Supabase client has no `Database` generic.** `src/lib/supabase.ts` is intentionally untyped at the client level (v2's signature conflicted with our flattened row types). Type safety is per-call: `useQuery<TxnRow[]>(...)`. Don't "fix" this by adding the generic.
+- **`xirr` is CJS with no `.d.ts`.** Custom shim lives at `src/types/xirr.d.ts`. Keep it.
+- **NYSE holiday calendar is hardcoded** in `workers/email-cron/src/nyse-calendar.ts` for 2026–2028. Every December, append the next year from nyse.com and redeploy. `src/lib/quote.ts` market-hours check shares the same blind spot.
+- **Worker CORS is per-deployment.** `ALLOWED_ORIGINS` in `workers/quote/wrangler.toml` is comma-separated and supports a single-label `*` wildcard (e.g. `https://*.dca-tracker.pages.dev` matches preview hashes). Changing Pages domains requires editing the toml and re-deploying the Worker.
+- **Email Worker `/run?force=1` bypasses the date check** for testing but still hits KV/`email_log` dedupe. Treat the endpoint as privileged; if exposing the Worker URL widely, add a bearer secret check before relying on `force`.
+- **Default dates in TxnForm/CashflowForm**: forms use local-date formatting (not UTC) so a Beijing-morning entry doesn't roll back a day. Keep that when editing the forms.
+- **SPA deep-link fallback**: `public/_redirects` (`/* /index.html 200`) is required for `/share/:token` to load on Pages. Don't delete it.
+- **`portfolio_history_cache` is legacy.** New reads go through `performance_history()` / `shared_performance_history()`. Keep the old table working for back-compat but don't extend it.
+
+## Where to look first
+
+- New feature touching numbers ⇒ `src/lib/calc/` first, then the hook that calls it, then the page.
+- Anything visible in `/share/:token` ⇒ start in `supabase/migrations/` (find the latest `shared_*` function) and `docs/PERFORMANCE_SPEC.md`.
+- Quote/price flow ⇒ `workers/quote/src/index.ts` + `src/lib/quote.ts` + `src/hooks/useQuotes.ts` / `useDailyPrices.ts`.
+- Email reminder logic ⇒ `workers/email-cron/src/index.ts` + `workers/email-cron/src/nyse-calendar.ts`.
+- Operational health / cache dirty status ⇒ `src/app/data-health.tsx` and `supabase/migrations/0014_performance_ops_and_security.sql`.

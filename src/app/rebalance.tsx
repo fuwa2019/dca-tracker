@@ -1,29 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { Scale } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/EmptyState';
 import { useTransactions, useSettings } from '@/hooks/usePortfolio';
 import { useQuotes } from '@/hooks/useQuotes';
 import { aggregatePositions } from '@/lib/calc/position';
 import { rebalance } from '@/lib/calc/rebalance';
 import { usd, signedPct, pct } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 export function RebalancePage() {
   const { data: txns = [] } = useTransactions();
   const { data: settings } = useSettings();
-  const positions = useMemo(() => aggregatePositions(txns).filter((p) => p.shares > 1e-9), [txns]);
+  const positions = useMemo(
+    () => aggregatePositions(txns).filter((p) => p.shares > 1e-9),
+    [txns],
+  );
 
   const watchlist = settings?.watchlist ?? ['VOO', 'QQQM', 'SMH'];
-  const symbols = useMemo(() => [...new Set([...positions.map((p) => p.ticker), ...watchlist])], [positions, watchlist]);
+  const symbols = useMemo(
+    () => [...new Set([...positions.map((p) => p.ticker), ...watchlist])],
+    [positions, watchlist],
+  );
   const { data: quotes = [] } = useQuotes(symbols);
   const priceMap = useMemo(() => new Map(quotes.map((q) => [q.ticker, q.price ?? 0])), [quotes]);
 
   const [newCash, setNewCash] = useState('3000');
   const [weights, setWeights] = useState<Record<string, string>>(() => defaultWeights(watchlist));
   const dirtyRef = useRef(false);
-  // Rebuild defaults when watchlist arrives async — but only if user hasn't edited
   useEffect(() => {
     if (dirtyRef.current) return;
     setWeights(defaultWeights(watchlist));
@@ -31,47 +38,58 @@ export function RebalancePage() {
 
   const weightSum = Object.values(weights).reduce((s, v) => s + (Number(v) || 0), 0);
   const cash = Number(newCash) || 0;
+  const weightSumOk = Math.abs(weightSum - 100) <= 0.5;
 
   const holdings = useMemo(
-    () => positions.map((p) => ({ ticker: p.ticker, marketValue: p.shares * (priceMap.get(p.ticker) ?? 0), price: priceMap.get(p.ticker) ?? 0 })),
+    () =>
+      positions.map((p) => ({
+        ticker: p.ticker,
+        marketValue: p.shares * (priceMap.get(p.ticker) ?? 0),
+        price: priceMap.get(p.ticker) ?? 0,
+      })),
     [positions, priceMap],
   );
 
   const result = useMemo(() => {
-    if (Math.abs(weightSum - 100) > 0.5) return null;
+    if (!weightSumOk) return null;
     if (cash <= 0) return null;
     const tw: Record<string, number> = {};
     for (const [k, v] of Object.entries(weights)) tw[k] = (Number(v) || 0) / 100;
     return rebalance({ holdings, targetWeights: tw, newCashUsd: cash });
-  }, [holdings, weights, cash, weightSum]);
+  }, [holdings, weights, cash, weightSumOk]);
 
   return (
-    <div className="container max-w-4xl py-6 space-y-5">
-      <motion.h1
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-2xl font-semibold tracking-tight"
-      >
-        再平衡计算器
-      </motion.h1>
-      <p className="text-sm text-muted-foreground">
-        输入新资金 + 目标权重，自动算出每只 ETF 该买多少（不卖出，避免触发税）。
+    <div className="container max-w-4xl px-4 py-5 sm:px-6 sm:py-6 space-y-5">
+      <p className="text-xs text-muted-foreground">
+        输入新资金 + 目标权重 → 自动算出每只 ETF 该买多少（仅买入，避免卖出触税）。支持 0.0001 股精度。
       </p>
 
       <Card>
-        <CardHeader>
-          <CardTitle>输入</CardTitle>
-          <CardDescription>权重总和需 = 100%</CardDescription>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">输入</CardTitle>
+          <CardDescription className="text-xs">权重总和需 = 100%</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="cash">新资金 (USD)</Label>
-            <Input id="cash" type="number" step="0.01" inputMode="decimal" value={newCash} onChange={(e) => setNewCash(e.target.value)} />
+            <Input
+              id="cash"
+              type="number"
+              step="0.01"
+              inputMode="decimal"
+              value={newCash}
+              onChange={(e) => setNewCash(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span>目标权重</span>
-              <span className={`tnum ${Math.abs(weightSum - 100) > 0.5 ? 'text-danger' : 'text-success'}`}>
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-muted-foreground uppercase tracking-wider">目标权重</span>
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[11px] font-medium tnum',
+                  weightSumOk ? 'bg-gain-soft' : 'bg-loss-soft',
+                )}
+              >
                 合计 {weightSum.toFixed(1)}%
               </span>
             </div>
@@ -122,46 +140,82 @@ export function RebalancePage() {
         </CardContent>
       </Card>
 
-      {result && (
-        <Card>
-          <CardHeader>
-            <CardTitle>建议买入</CardTitle>
-            <CardDescription>支持 0.0001 股精度（Schwab 碎股）· 剩余 USD 列出供参考</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              {result.map((r) => (
-                <motion.div
-                  key={r.ticker}
-                  layout
-                  className="flex flex-wrap items-center gap-3 rounded-lg border bg-card/60 px-3 py-3"
-                >
-                  <div className="w-14 font-semibold">{r.ticker}</div>
-                  <div className="flex-1 min-w-[140px] text-xs text-muted-foreground tnum">
-                    当前 {pct(r.currentWeight)} → 目标 {pct(r.targetWeight)}
-                  </div>
-                  <div className="text-right text-xs tnum text-muted-foreground">
-                    买 <span className="font-medium text-foreground">{r.buyShares.toFixed(4)} 股</span> ≈ {usd.format(r.buyShares * (priceMap.get(r.ticker) ?? 0))}
-                  </div>
-                  <div className="w-24 text-right text-xs tnum">
-                    分配 {usd.format(r.buyUsd)}
-                  </div>
-                  <div className="w-full text-right text-[10px] text-muted-foreground tnum">
-                    剩余 {usd.format(r.leftoverUsd)} · 调后 {signedPct(r.resultingWeight - r.targetWeight, 1)} 偏离
-                  </div>
-                </motion.div>
-              ))}
+      {result ? (
+        <Card className="overflow-hidden p-0">
+          <div className="border-b border-border px-4 py-3">
+            <div className="text-sm font-semibold">建议买入</div>
+            <div className="text-[11px] text-muted-foreground">
+              注入 {usd.format(cash)} · 现金剩余看每行右下
             </div>
-          </CardContent>
+          </div>
+          <div className="hidden md:block">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
+                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">代码</th>
+                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">当前 → 目标</th>
+                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">偏离</th>
+                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">买入股数</th>
+                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">分配 USD</th>
+                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">余额</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.map((r) => {
+                  const deviation = r.currentWeight - r.targetWeight;
+                  const buyUsd = r.buyShares * (priceMap.get(r.ticker) ?? 0);
+                  return (
+                    <tr key={r.ticker} className="border-b border-border last:border-0">
+                      <td className="px-4 py-3 font-semibold">{r.ticker}</td>
+                      <td className="px-4 py-3 text-right tnum text-muted-foreground">
+                        {pct(r.currentWeight)} <span className="opacity-60">→</span> {pct(r.targetWeight)}
+                      </td>
+                      <td className={cn('px-4 py-3 text-right tnum', deviation > 0 ? 'text-warn' : 'text-muted-foreground')}>
+                        {signedPct(deviation, 1)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium tnum">{r.buyShares.toFixed(4)}</td>
+                      <td className="px-4 py-3 text-right tnum">{usd.format(buyUsd)}</td>
+                      <td className="px-4 py-3 text-right tnum text-muted-foreground">{usd.format(r.leftoverUsd)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="divide-y divide-border md:hidden">
+            {result.map((r) => {
+              const deviation = r.currentWeight - r.targetWeight;
+              const buyUsd = r.buyShares * (priceMap.get(r.ticker) ?? 0);
+              return (
+                <div key={r.ticker} className="px-4 py-3">
+                  <div className="flex items-baseline justify-between">
+                    <div className="font-semibold">{r.ticker}</div>
+                    <div className="text-sm font-medium tnum">{r.buyShares.toFixed(4)} 股</div>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2 text-[11px] text-muted-foreground tnum">
+                    <span>
+                      当前 {pct(r.currentWeight)} → 目标 {pct(r.targetWeight)} ({signedPct(deviation, 1)})
+                    </span>
+                    <span>{usd.format(buyUsd)} · 余 {usd.format(r.leftoverUsd)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </Card>
-      )}
+      ) : !weightSumOk ? (
+        <EmptyState
+          icon={Scale}
+          title="权重未到 100%"
+          description={`当前合计 ${weightSum.toFixed(1)}% — 调整每只 ETF 的目标占比，让总和等于 100%。`}
+        />
+      ) : cash <= 0 ? (
+        <EmptyState icon={Scale} title="还没有可分配资金" description="填一笔 USD 新资金即可看到建议买入。" />
+      ) : null}
     </div>
   );
 }
 
-/** Project-recommended default weights.
- *  If the watchlist exactly matches VOO/QQQM/SMH (any order), use 50/25/25.
- *  Otherwise fall back to equal-weight. */
 function defaultWeights(watchlist: string[]): Record<string, string> {
   const set = new Set(watchlist.map((t) => t.toUpperCase()));
   const out: Record<string, string> = {};

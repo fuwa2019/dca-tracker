@@ -3,73 +3,82 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 4%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 4%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 4%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 0 0% 4%;
+  :root,
+  [data-theme='light'] {
+    /* Surfaces */
+    --background: 220 14% 97%;        /* #F6F7F9 */
+    --surface: 0 0% 100%;             /* #FFFFFF — card */
+    --surface-elevated: 220 14% 97%;  /* #F6F7F9 — table headers / chips on cards */
+    --foreground: 220 39% 11%;        /* #111827 */
+    --muted-foreground: 220 9% 46%;   /* #6B7280 */
+    --border: 220 13% 91%;            /* #E5E7EB */
+    --input: 220 13% 91%;
+    --ring: 219 84% 56%;
+
+    /* Brand & semantic */
+    --brand: 219 84% 56%;             /* #2F6FED — portfolio line, primary action */
+    --brand-foreground: 0 0% 100%;
+    --gain: 142 71% 36%;              /* #16A34A — profit text */
+    --loss: 0 73% 51%;                /* #DC2626 — loss text */
+    --warn: 32 95% 44%;               /* #D97706 */
+    --info: 217 91% 60%;
+    --benchmark: 142 71% 36%;         /* SPY line — green family */
+    --chart-grid: 220 13% 91%;
+    --chart-axis: 220 9% 46%;
+    --crosshair: 220 9% 46%;
+
+    /* shadcn back-compat aliases */
+    --card: var(--surface);
+    --card-foreground: var(--foreground);
+    --popover: var(--surface);
+    --popover-foreground: var(--foreground);
+    --primary: var(--brand);
+    --primary-foreground: var(--brand-foreground);
+    --secondary: var(--surface-elevated);
+    --secondary-foreground: var(--foreground);
+    --muted: var(--surface-elevated);
+    --accent: var(--surface-elevated);
+    --accent-foreground: var(--foreground);
+    --destructive: var(--loss);
+    --destructive-foreground: 0 0% 100%;
+
     --radius: 0.75rem;
   }
 
   [data-theme='dark'] {
-    --background: 0 0% 4%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 7%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 12%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 64%;
-    --accent: 0 0% 12%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 63% 50%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14%;
-    --input: 0 0% 14%;
-    --ring: 0 0% 83%;
-  }
+    --background: 213 28% 6%;         /* #0B0F14 */
+    --surface: 213 30% 10%;           /* #111820 — card */
+    --surface-elevated: 211 33% 13%;  /* #16202B — elevated chip / table header */
+    --foreground: 220 13% 91%;        /* #E5E7EB */
+    --muted-foreground: 220 9% 65%;   /* #9CA3AF */
+    --border: 215 28% 17%;            /* #1F2937 */
+    --input: 215 28% 17%;
+    --ring: 217 75% 61%;
 
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme='light']) {
-      --background: 0 0% 4%;
-      --foreground: 0 0% 98%;
-      --card: 0 0% 7%;
-      --card-foreground: 0 0% 98%;
-      --popover: 0 0% 7%;
-      --popover-foreground: 0 0% 98%;
-      --primary: 0 0% 98%;
-      --primary-foreground: 0 0% 9%;
-      --secondary: 0 0% 12%;
-      --secondary-foreground: 0 0% 98%;
-      --muted: 0 0% 12%;
-      --muted-foreground: 0 0% 64%;
-      --accent: 0 0% 12%;
-      --accent-foreground: 0 0% 98%;
-      --destructive: 0 63% 50%;
-      --destructive-foreground: 0 0% 98%;
-      --border: 0 0% 14%;
-      --input: 0 0% 14%;
-      --ring: 0 0% 83%;
-    }
+    --brand: 217 75% 61%;             /* #4F86E8 */
+    --brand-foreground: 220 39% 11%;
+    --gain: 145 63% 49%;              /* #2BC275 — slightly lifted for dark bg */
+    --loss: 0 86% 70%;                /* #F87171 */
+    --warn: 38 95% 60%;               /* #FBBF24 */
+    --info: 217 91% 60%;
+    --benchmark: 158 64% 52%;         /* #34D399 */
+    --chart-grid: 215 28% 17%;
+    --chart-axis: 220 9% 65%;
+    --crosshair: 220 9% 65%;
+
+    --card: var(--surface);
+    --card-foreground: var(--foreground);
+    --popover: var(--surface-elevated);
+    --popover-foreground: var(--foreground);
+    --primary: var(--brand);
+    --primary-foreground: var(--brand-foreground);
+    --secondary: var(--surface-elevated);
+    --secondary-foreground: var(--foreground);
+    --muted: var(--surface-elevated);
+    --accent: var(--surface-elevated);
+    --accent-foreground: var(--foreground);
+    --destructive: var(--loss);
+    --destructive-foreground: 220 39% 11%;
   }
 }
 
@@ -82,20 +91,68 @@
   #root {
     @apply h-full;
   }
+  html {
+    color-scheme: light;
+  }
+  html[data-theme='dark'] {
+    color-scheme: dark;
+  }
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: 'tnum', 'ss01';
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
   }
-  /* iOS safe area */
+  /* Numbers everywhere should line up. */
+  .tnum,
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  /* iOS safe area helpers */
   .safe-top {
     padding-top: env(safe-area-inset-top);
   }
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
-  .tnum {
-    font-variant-numeric: tabular-nums;
+  /* Custom scrollbar in dark mode — subtle, doesn't fight the surface */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+@layer utilities {
+  .text-gain {
+    color: hsl(var(--gain));
+  }
+  .text-loss {
+    color: hsl(var(--loss));
+  }
+  .text-warn {
+    color: hsl(var(--warn));
+  }
+  .bg-gain-soft {
+    background-color: hsl(var(--gain) / 0.12);
+    color: hsl(var(--gain));
+  }
+  .bg-loss-soft {
+    background-color: hsl(var(--loss) / 0.12);
+    color: hsl(var(--loss));
+  }
+  .bg-warn-soft {
+    background-color: hsl(var(--warn) / 0.14);
+    color: hsl(var(--warn));
+  }
+  .bg-brand-soft {
+    background-color: hsl(var(--brand) / 0.12);
+    color: hsl(var(--brand));
   }
 }

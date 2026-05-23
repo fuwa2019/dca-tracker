@@ -1,11 +1,19 @@
 import { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TxnList } from '@/components/TxnList';
 import { useTransactions } from '@/hooks/usePortfolio';
 
 type Filter = 'all' | 'buy' | 'sell' | 'dca' | 'lumpsum';
+
+const FILTERS: ReadonlyArray<{ value: Filter; label: string }> = [
+  { value: 'all', label: '全部' },
+  { value: 'buy', label: '买入' },
+  { value: 'sell', label: '卖出' },
+  { value: 'dca', label: '定投' },
+  { value: 'lumpsum', label: '大额' },
+];
 
 export function TransactionsAllPage() {
   const { data: txns = [] } = useTransactions();
@@ -35,11 +43,9 @@ export function TransactionsAllPage() {
   }, [txns, q, filter]);
 
   return (
-    <div className="container max-w-5xl py-6 space-y-4">
-      <h1 className="text-2xl font-semibold tracking-tight">全部交易</h1>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px]">
+    <div className="container max-w-5xl px-4 py-5 sm:px-6 sm:py-6 space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative min-w-0 flex-1 sm:min-w-[260px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={q}
@@ -48,16 +54,14 @@ export function TransactionsAllPage() {
             className="pl-9"
           />
         </div>
-        <Select value={filter} onValueChange={(v) => setFilter(v as Filter)}>
-          <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">全部</SelectItem>
-            <SelectItem value="buy">仅买入</SelectItem>
-            <SelectItem value="sell">仅卖出</SelectItem>
-            <SelectItem value="dca">定投</SelectItem>
-            <SelectItem value="lumpsum">大额</SelectItem>
-          </SelectContent>
-        </Select>
+        <SegmentedControl
+          value={filter}
+          onChange={(v) => setFilter(v)}
+          name="txn-filter"
+          ariaLabel="交易筛选"
+          options={FILTERS}
+          size="sm"
+        />
       </div>
 
       <p className="text-xs text-muted-foreground tnum">{filtered.length} / {txns.length} 条</p>
