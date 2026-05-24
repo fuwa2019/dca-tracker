@@ -35,9 +35,9 @@ Browser SPA (Cloudflare Pages) ──► Supabase (auth + RLS + RPCs)
 ```
 
 - **`src/`** — React 18 SPA. Routes in `src/App.tsx`. Pages in `src/app/`. Pure finance math in `src/lib/calc/` (`position`, `xirr`, `twr`, `rebalance`, `target`, `history`). Data fetching via `@tanstack/react-query` hooks in `src/hooks/`.
-- **`workers/quote/`** — Yahoo Finance reverse-proxy with KV cache. Three endpoints: `/api/quote` (5-min cache), `/api/chart` (1h), `/api/history` (1h, also persists to `daily_prices`). Daily cron at UTC 22:15 syncs prices and calls `refresh_due_performance_caches()`.
+- **`workers/quote/`** — Yahoo Finance reverse-proxy with KV cache. Three endpoints: `/api/quote` (5-min cache), `/api/chart` (1h), `/api/history` (1h, also persists to `daily_prices`). Daily cron at UTC 22:15 syncs prices and calls `refresh_due_performance_caches()`. `/api/history` supports `?persist=sync` to await the `daily_prices` upsert before responding — use this when the caller needs guaranteed price data before the next step (e.g. demo seed, price backfill).
 - **`workers/email-cron/`** — Cron at UTC 03:00 = Beijing 11:00. Computes next NYSE trading day, sends a Resend email the day before the month's first trading day. KV (`sent:<user>:<YYYY-MM>`) + `email_log` table = two-layer dedupe.
-- **`supabase/migrations/`** — Numbered, additive, idempotent SQL. **Run in order on a fresh project** (currently 0001 → 0014). Each new schema change is a new file; never rewrite an already-applied migration. `supabase/README.md` documents the deploy order.
+- **`supabase/migrations/`** — Numbered, additive, idempotent SQL. **Run in order on a fresh project** (currently 0001 → 0017). Each new schema change is a new file; never rewrite an already-applied migration. `supabase/README.md` documents the deploy order.
 
 ## Performance history pipeline (non-obvious, central)
 
@@ -74,6 +74,16 @@ Spec lives in `docs/PERFORMANCE_SPEC.md`; the regression fixtures in `scripts/ve
 - New work that changes schema or RPCs ⇒ new `NNNN+1_*.sql`. Use `create or replace`, `add column if not exists`, etc. so the file is idempotent on already-deployed projects.
 - After adding a migration that affects performance history, run `supabase/performance_cache_verify.sql` against a dev project and confirm `npm run test:finance` still passes.
 
+## Data-health / backfill flow
+
+The data-health page (`src/app/data-health.tsx`) orchestrates price backfill and cache refresh. The order matters:
+
+1. **Backfill**: `fetchHistory(symbols, range, { persist: 'sync' })` — sync-writes `daily_prices` before returning, so subsequent cache refresh sees the new prices.
+2. **Cache refresh**: calls `refreshPerformanceHistoryCache()` (via `useRefreshPerformanceCache`), which recomputes TWR and clears the dirty flag.
+3. **UI refetch**: after either operation, `price_coverage`, `performance_cache_status`, and `portfolio_history` are all invalidated + refetched so the page shows current state.
+
+Demo data seed (`useDemoDcaData`) follows the same pattern: sync-fetch prices → insert transactions → refresh cache once.
+
 ## Non-obvious gotchas
 
 - **Supabase client has no `Database` generic.** `src/lib/supabase.ts` is intentionally untyped at the client level (v2's signature conflicted with our flattened row types). Type safety is per-call: `useQuery<TxnRow[]>(...)`. Don't "fix" this by adding the generic.
@@ -84,6 +94,8 @@ Spec lives in `docs/PERFORMANCE_SPEC.md`; the regression fixtures in `scripts/ve
 - **Default dates in TxnForm/CashflowForm**: forms use local-date formatting (not UTC) so a Beijing-morning entry doesn't roll back a day. Keep that when editing the forms.
 - **SPA deep-link fallback**: `public/_redirects` (`/* /index.html 200`) is required for `/share/:token` to load on Pages. Don't delete it.
 - **`portfolio_history_cache` is legacy.** New reads go through `performance_history()` / `shared_performance_history()`. Keep the old table working for back-compat but don't extend it.
+- **`isMissingRpc` is duplicated** across `useDemoDcaData.ts` and `usePerformanceCache.ts` (identical logic, different file-local copies). This is intentional — each hook is self-contained and the function is trivial. Don't extract it into a shared util unless a third copy appears.
+- **Performance cache warnings aggregation** (migration 0017): the `_performance_history_for_user_fast` function uses CTE separation — `series_json` (jsonb_agg of cumulative returns) and `warnings_json` (jsonb_agg from warnings_source) are computed independently then `cross join`ed in the final SELECT. This avoids the `column must appear in GROUP BY` error that inline aggregation caused. Don't collapse them back into a single CTE.
 
 ## Where to look first
 
@@ -91,4 +103,4 @@ Spec lives in `docs/PERFORMANCE_SPEC.md`; the regression fixtures in `scripts/ve
 - Anything visible in `/share/:token` ⇒ start in `supabase/migrations/` (find the latest `shared_*` function) and `docs/PERFORMANCE_SPEC.md`.
 - Quote/price flow ⇒ `workers/quote/src/index.ts` + `src/lib/quote.ts` + `src/hooks/useQuotes.ts` / `useDailyPrices.ts`.
 - Email reminder logic ⇒ `workers/email-cron/src/index.ts` + `workers/email-cron/src/nyse-calendar.ts`.
-- Operational health / cache dirty status ⇒ `src/app/data-health.tsx` and `supabase/migrations/0014_performance_ops_and_security.sql`.
+- Operational health / cache dirty status ⇒ `src/app/data-health.tsx`, `src/hooks/usePerformanceCache.ts`, and `supabase/migrations/0017_fix_performance_warnings_aggregation.sql`.
