@@ -47,16 +47,20 @@ export function useRefreshPerformanceCache() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async () => {
+      const startedAt = performance.now();
       const { data, error } = await supabase.rpc('refresh_performance_history_cache');
+      const elapsedMs = Math.max(0, Math.round(performance.now() - startedAt));
       if (error) {
         if (!isMissingRpc(error)) throw error;
+        const legacyStartedAt = performance.now();
         const legacy = await supabase.rpc('refresh_portfolio_history_cache');
+        const legacyElapsedMs = Math.max(0, Math.round(performance.now() - legacyStartedAt));
         if (legacy.error) throw legacy.error;
         if (legacy.data && 'error' in legacy.data) throw new Error(String(legacy.data.error));
-        return legacy.data;
+        return withRefreshMsFallback(legacy.data, legacyElapsedMs);
       }
       if (data && 'error' in data) throw new Error(String(data.error));
-      return data;
+      return withRefreshMsFallback(data, elapsedMs);
     },
     onSuccess: async (data) => {
       if (data && !('error' in data)) {
@@ -90,6 +94,14 @@ export function useRefreshPerformanceCache() {
       await qc.refetchQueries({ queryKey: ['performance_cache_status'] });
     },
   });
+}
+
+function withRefreshMsFallback(
+  data: HistoryCacheRefresh | { error: string } | null,
+  elapsedMs: number,
+): HistoryCacheRefresh | { error: string } | null {
+  if (!data || 'error' in data || data.refresh_ms != null) return data;
+  return { ...data, refresh_ms: elapsedMs };
 }
 
 async function readHistoryStatusFallback(): Promise<PerformanceCacheStatus | null> {
