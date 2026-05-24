@@ -57,7 +57,7 @@ export function PerformancePage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs text-muted-foreground">
-            日链接时间加权 (TWR) · 复权价口径 · 基准 SPY
+            交易口径 TWR · 复权价口径 · 基准 SPY
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -106,7 +106,7 @@ export function PerformancePage() {
             <div className="font-medium text-loss">缓存刷新失败</div>
             <p className="mt-1 text-xs text-muted-foreground break-words">{cacheError}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              检查交易/资金流是否完整，必要时到「数据健康」补齐日线价格再重试。
+              检查交易是否完整，必要时到「数据健康」补齐日线价格再重试。
             </p>
           </div>
         </Card>
@@ -166,7 +166,7 @@ export function PerformancePage() {
             <div className="min-w-0 flex-1">
               <div className="font-medium text-foreground">还没有业绩缓存</div>
               <p className="mt-1 text-xs text-muted-foreground">
-                录入第一笔交易和资金流，并到「数据健康」补齐 SPY/持仓的历史日线价格，再点上方「刷新缓存」即可生成曲线。
+                录入第一笔交易，并到「数据健康」补齐 SPY/持仓的历史日线价格，再点上方「刷新缓存」即可生成曲线。
               </p>
             </div>
           </div>

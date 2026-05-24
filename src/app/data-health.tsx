@@ -62,10 +62,9 @@ export function DataHealthPage() {
     [txns],
   );
   const earliestDate = useMemo(() => {
-    const cashDates = cashflows.map((c) => c.usd_in_date).filter((d): d is string => !!d);
     const tradeDates = txns.map((t) => t.trade_date);
-    return [...cashDates, ...tradeDates].sort()[0] ?? null;
-  }, [cashflows, txns]);
+    return [...tradeDates].sort()[0] ?? null;
+  }, [txns]);
   const coverageStartDates = useMemo(() => {
     const byTicker = new Map<string, string>();
     for (const txn of txns) {
@@ -131,7 +130,7 @@ export function DataHealthPage() {
   const activeShares = (shareLinks.data ?? []).filter((s) => !s.revoked);
   const stalePrices = coverage.filter((c) => c.status !== 'ok');
   const adjustedMissing = coverage.filter((c) => c.points > 0 && c.adjustedPoints < c.points);
-  const hasEvents = txns.length > 0 || cashflows.length > 0;
+  const hasEvents = txns.length > 0;
   const cacheDirty = cacheStatus.data?.dirty ?? false;
   const cacheExists = cacheStatus.data?.exists ?? false;
   const cachePoints = cacheStatus.data?.points;

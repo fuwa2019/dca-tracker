@@ -11,6 +11,8 @@ sanitized performance cache.
 - Cash is deposits minus buys plus sells.
 - Cost basis defaults to average cost in product UI.
 - Performance chart uses daily-linked TWR.
+- Performance chart uses the trading-performance view: it starts on the first
+  transaction date and ignores idle cash before the first trade.
 - XIRR is separate money-weighted performance and is not used for the chart.
 - The default benchmark is SPY.
 - Historical chart points use daily prices. The current dashboard cards use
@@ -47,7 +49,13 @@ performance curve uses an adjusted-close total-return proxy:
   adjusted price around the trade date;
 - each day values those units using the latest adjusted price available on or
   before that day;
-- benchmark cashflows buy benchmark units using the same adjusted-price logic.
+- benchmark units are bought from inferred trade-funding flows using the same
+  adjusted-price logic.
+
+Trade-funding flows are inferred from transactions, not deposit rows. Sell
+proceeds fund later buys first; only the unfunded portion of a buy is treated
+as a new external flow. This keeps the curve focused on trading performance and
+prevents an early deposit with no trade from starting the SPY clock.
 
 This is closer to total-return reporting for ETFs such as SPY/QQQ than raw
 close-only curves. It is still a proxy, not a broker statement: true IBKR
@@ -66,7 +74,6 @@ state rather than running a long SQL calculation.
 Source changes mark cache dirty:
 
 - transactions insert/update/delete
-- cashflows insert/update/delete
 - daily price insert/update/delete
 
 The next authenticated refresh regenerates the cache.
@@ -85,9 +92,9 @@ Use these cases when comparing against IBKR or changing SQL:
 - single buy on one date
 - transaction-only import with no cashflow rows
 - monthly 60 USD QQQ DCA over 10 years
-- deposit with no buy
+- deposit with no buy does not create a performance curve
 - buy followed by partial/full sell
-- weekend cashflow with next trading-day benchmark purchase
+- sell proceeds reused for later buys without double-counting new capital
 - missing daily price between two available closes
 - public share token reading the same curve as the dashboard
 

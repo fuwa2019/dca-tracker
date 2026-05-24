@@ -44,7 +44,7 @@ export function EquityCurveChart({ history, metric, range, showBenchmark, redact
   if (sliced.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-        暂无数据 — 录入交易和资金流后会显示资产曲线
+        暂无数据 - 录入交易后会显示资产曲线
       </div>
     );
   }

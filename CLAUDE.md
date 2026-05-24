@@ -43,26 +43,26 @@ Browser SPA (Cloudflare Pages) ──► Supabase (auth + RLS + RPCs)
 
 The dashboard and the public `/share/:token` view must show **the same TWR curve**, and the share view must never recompute it anonymously (privacy + cost). This is enforced by a precomputed cache, not a live calculation:
 
-1. **Source of truth**: `transactions`, `cashflows`, and `daily_prices.adjusted_close` per user.
+1. **Source of truth**: `transactions` and `daily_prices.adjusted_close` per user. Cashflows remain source-of-truth for account NAV/XIRR, but the performance curve uses trading-performance flows inferred from transactions.
 2. **Cache table**: `performance_history_cache` stores only public-safe fields per day: `date`, `return_pct_user`, `return_pct_spy`. **No USD NAV, no cashflows, no trade detail.** This is what keeps share links from leaking absolute amounts.
-3. **Dirty marking**: triggers on `transactions`/`cashflows`/`daily_prices` flip a per-user `dirty` flag.
+3. **Dirty marking**: triggers on `transactions`/`daily_prices` flip a per-user `dirty` flag.
 4. **Refresh entry points** (use these — do not add new ones casually):
    - Authenticated dashboard: `performance_history()` RPC (reads cache; UI shows stale curve and refreshes in background if dirty).
    - Authenticated refresh: `refresh_performance_history_cache()`.
    - Public share read: `shared_performance_history(token)` — cache-only, returns empty state if no cache exists, never recomputes.
    - Share-owner refresh: `refresh_shared_history_cache(token)`.
    - Service-role batch refresh from the quote Worker's cron: `refresh_due_performance_caches()`.
-5. **Returns math**: TWR (daily-linked, Modified-Dietz per sub-period) for the chart. XIRR is money-weighted and shown separately — never used to draw the curve. Benchmark is SPY using adjusted-close as a total-return proxy (close enough for the report, not broker-exact).
+5. **Returns math**: TWR (daily-linked, Modified-Dietz per sub-period) for the chart. The chart starts on the first transaction date; sell proceeds fund later buys first, and only the unfunded portion of a buy becomes a new external flow. XIRR is money-weighted and shown separately — never used to draw the curve. Benchmark is SPY using adjusted-close as a total-return proxy (close enough for the report, not broker-exact).
 
-Spec lives in `docs/PERFORMANCE_SPEC.md`; the regression fixtures in `scripts/verify-performance-fixtures.mjs` enumerate the cases (single buy, sell-after-buy, weekend cashflow, missing price, share-token parity, etc.) that must stay green when touching this pipeline.
+Spec lives in `docs/PERFORMANCE_SPEC.md`; the regression fixtures in `scripts/verify-performance-fixtures.mjs` enumerate the cases (single buy, sell-after-buy, trade-only funding, missing price, share-token parity, etc.) that must stay green when touching this pipeline.
 
 ## Calc layer rules
 
 `src/lib/calc/` is **pure** — no network, no Supabase, no React. Hooks marshal data in and out. Three contracts that the UI relies on:
 
-- **NAV = market value of holdings + uninvested cash** (deposits − buys + sells). Dashboard totals, XIRR, TWR, `$1M` progress, and the equity curve all use NAV. Don't compute "total" from positions only.
+- **NAV = market value of holdings + uninvested cash** (deposits − buys + sells). Dashboard totals, XIRR, and `$1M` progress use account NAV. The performance curve uses trade-funding NAV inferred from transactions so pre-trade idle cash does not affect SPY comparison. Don't compute "total" from positions only.
 - **Cost basis**: average cost is the default; FIFO is a toggle. Both live in `position.ts`. Sells are validated against current shares; oversells must surface as a validation error, not silently zero out FIFO lots.
-- **TWR sub-periods are bounded by cashflow dates.** The cashflow on day *t* enters the *next* sub-period's starting NAV, not the previous sub-period's return.
+- **TWR sub-periods are bounded by inferred trade-funding flows.** A flow on day *t* enters the next sub-period's starting NAV, not the previous sub-period's return.
 
 ## Privacy invariant for shared views
 

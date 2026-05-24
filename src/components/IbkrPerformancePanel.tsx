@@ -194,7 +194,7 @@ export function PerformancePanel({
 
         {infoOpen && (
           <div className="border-b border-border bg-surface px-4 py-3 text-[12px] leading-5 text-muted-foreground">
-            累积基准比较采用日链接时间加权回报 (TWR)。组合线来自已录入交易、资金流和复权日线；SPY 基准线假设每次可投资现金流在同日买入 SPY。超额收益按
+            累积基准比较采用交易口径时间加权回报 (TWR)。组合线来自已录入交易和复权日线；SPY 基准线使用同一组交易资金流买入 SPY。超额收益按
             {' '}(1+组合)/(1+SPY)-1 计算。
           </div>
         )}
@@ -204,7 +204,7 @@ export function PerformancePanel({
             <EmptyState
               icon={Info}
               title={loading ? '正在拉取历史数据...' : (emptyMessage ?? '暂无业绩数据')}
-              description={loading ? undefined : '录入交易和资金流后会自动生成时间加权收益率曲线。'}
+              description={loading ? undefined : '录入交易后会自动生成时间加权收益率曲线。'}
             />
           </div>
         ) : (
@@ -222,7 +222,7 @@ export function PerformancePanel({
       </Card>
 
       <p className="text-[11px] leading-5 text-muted-foreground">
-        业绩基于已录入交易、资金流和日线复权价；曲线采用日链接时间加权回报 (TWR)。历史数据仅供分析参考，不构成投资建议。
+        业绩基于已录入交易和日线复权价；曲线采用交易口径时间加权回报 (TWR)。历史数据仅供分析参考，不构成投资建议。
       </p>
     </div>
   );

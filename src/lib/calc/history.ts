@@ -5,10 +5,10 @@ export const BENCHMARK_TICKER = 'SPY';
 
 export interface HistoryPoint {
   date: string;
-  invested: number;          // cumulative cashflow.usd_amount up to and including this day
+  invested: number;          // cumulative trade-funding flows up to and including this day
   costBasis: number;         // cumulative buy notional minus sell notional (signed cost)
   navUser: number;           // user's portfolio NAV: Σ netShares(d) × close(d)
-  navSpy: number;            // SPY benchmark NAV under "buy SPY on each cashflow date" model
+  navSpy: number;            // SPY benchmark NAV under the same trade-funding flow model
   returnPctUser: number;     // cumulative daily-linked TWR
   returnPctSpy: number;      // cumulative daily-linked TWR for the SPY benchmark
   pnlUser: number;           // navUser - invested
@@ -30,16 +30,15 @@ export interface BuildHistoryInput {
 
 /**
  * Build the daily equity-history series with a SPY benchmark obtained by the
- * "money-time-aligned" model: every cashflow.usd_amount is virtually used to
- * buy SPY on its usd_in_date, accumulating spyShares. Daily NAV is
- * spyShares × SPY close(d) plus any cash pending for the next SPY trading day.
+ * trade-funding model: the curve starts on the first trade date, sell proceeds
+ * fund later buys first, and only the unfunded portion of a buy is treated as a
+ * new external flow. Those same inferred flows virtually buy SPY.
  *
  * returnPctUser / returnPctSpy are daily-linked time-weighted returns, similar
- * to PortfolioAnalyst performance reporting: external deposits are removed from
- * that day's return calculation, while buys/sells remain internal transfers.
- * If no cashflows were recorded, buy transactions are treated as inferred
- * external deposits so an imported trade-only history can still show
- * post-purchase performance.
+ * to PortfolioAnalyst performance reporting: external trade-funding flows are
+ * removed from that day's return calculation, while sells and cash reuse remain
+ * internal portfolio transfers. Cashflows are intentionally ignored here; they
+ * affect account NAV elsewhere, but not the trading-performance curve.
  *
  * Forward-fill rule: when a ticker's price is missing for a date (e.g. between
  * trading days, holidays, or pre-data dates), we re-use the most recent prior
@@ -47,14 +46,12 @@ export interface BuildHistoryInput {
  * temporary account-equity anchor until market closes arrive.
  */
 export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
-  const { transactions, cashflows, prices, todayQuotes, todaySpyPrice, asOf } = input;
+  const { transactions, prices, todayQuotes, todaySpyPrice, asOf } = input;
 
-  // Earliest date to start the series from: earliest cashflow USD-in date, or earliest trade
-  const cashDates = cashflows.map((c) => c.usd_in_date).filter((d): d is string => !!d);
+  // Earliest date to start the series from: earliest trade.
   const tradeDates = transactions.map((t) => t.trade_date);
-  const allEventDates = [...cashDates, ...tradeDates].sort();
-  if (allEventDates.length === 0) return [];
-  const startIso = allEventDates[0];
+  if (tradeDates.length === 0) return [];
+  const startIso = [...tradeDates].sort()[0];
 
   // Warn early if SPY isn't in the prices map — that means the benchmark line
   // will be flat and any 'SPY 对照 0%' bug in the UI starts here.
@@ -66,15 +63,8 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
   const today = asOf ?? new Date();
   const todayIso = isoUtcDate(today);
 
-  const hasRecordedCashflows = cashflows.some((c) => !!c.usd_in_date && Number(c.usd_amount) > 0);
-
   // Pre-index events by date
-  const cashByDate = new Map<string, number>();
-  for (const c of cashflows) {
-    if (c.usd_in_date && c.usd_amount) {
-      cashByDate.set(c.usd_in_date, (cashByDate.get(c.usd_in_date) ?? 0) + Number(c.usd_amount));
-    }
-  }
+  const flowByDate = inferTradeFundingFlows(transactions);
   const txnsByDate = new Map<string, HistoryPoint['txns']>();
   for (const t of transactions) {
     const list = txnsByDate.get(t.trade_date) ?? [];
@@ -86,13 +76,6 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       kind: t.kind,
     });
     txnsByDate.set(t.trade_date, list);
-  }
-  if (!hasRecordedCashflows) {
-    for (const t of transactions) {
-      if (t.side !== 'buy') continue;
-      const inferredDeposit = Number(t.shares) * Number(t.price);
-      cashByDate.set(t.trade_date, (cashByDate.get(t.trade_date) ?? 0) + inferredDeposit);
-    }
   }
 
   // Per-ticker latest known close (for forward-fill)
@@ -119,8 +102,8 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       if (typeof c === 'number') lastClose.set(ticker, c);
     }
 
-    // 1) Apply this day's cashflow (this happens *before* the day's market close)
-    const flow = cashByDate.get(iso);
+    // 1) Apply this day's external trade-funding flow before the market close.
+    const flow = flowByDate.get(iso);
     if (flow && flow > 0) {
       invested += flow;
       pendingSpyCash += flow;
@@ -143,7 +126,7 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       costBasis += t.side === 'buy' ? t.shares * t.price : -t.shares * t.price;
     }
 
-    // 3) Compute end-of-day NAV (stock holdings + uninvested cash sitting in Schwab)
+    // 3) Compute end-of-day NAV (stock holdings + cash generated/reused by trades)
     const isLastDay = iso === todayIso;
     let stockMv = 0;
     for (const [ticker, sh] of netShares) {
@@ -153,16 +136,15 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
         : (lastClose.get(ticker) ?? lastTradePrice.get(ticker) ?? 0);
       stockMv += sh * px;
     }
-    // cash = cumulative deposits minus cumulative buy-cost plus sell-proceeds (= invested - costBasis).
+    // cash = cumulative trade-funding flows minus cumulative buy-cost plus sell-proceeds.
     // We've been tracking costBasis as buys - sells, so cash = invested - costBasis.
     const cashOnDay = invested - costBasis;
     const navUser = stockMv + cashOnDay;
     const spyPxToday = isLastDay && todaySpyPrice != null
       ? todaySpyPrice
       : (lastClose.get(BENCHMARK_TICKER) ?? 0);
-    // On the last day, if SPY has a live price and there's still pending cash
-    // (e.g. user added a Sat/Sun cashflow and Monday's close isn't in daily_prices yet),
-    // drain it against the live price so today's navSpy reflects today's deposit.
+    // On the last day, if SPY has a live price and there's still pending flow
+    // from a non-trading day, drain it against the live price.
     if (isLastDay && todaySpyPrice != null && todaySpyPrice > 0 && pendingSpyCash > 0) {
       spyShares += pendingSpyCash / todaySpyPrice;
       pendingSpyCash = 0;
@@ -202,6 +184,35 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       pnlSpy: navSpy - invested,
       txns: dayTxns,
     });
+  }
+
+  return out;
+}
+
+function inferTradeFundingFlows(transactions: TransactionRow[]): Map<string, number> {
+  const out = new Map<string, number>();
+  let cash = 0;
+
+  const ordered = [...transactions].sort((a, b) =>
+    a.trade_date.localeCompare(b.trade_date)
+    || a.created_at.localeCompare(b.created_at)
+    || a.id.localeCompare(b.id)
+  );
+
+  for (const t of ordered) {
+    const notional = Number(t.shares) * Number(t.price);
+    if (!Number.isFinite(notional) || notional <= 0) continue;
+
+    if (t.side === 'sell') {
+      cash += notional;
+      continue;
+    }
+
+    const flow = Math.max(notional - cash, 0);
+    if (flow > 0) {
+      out.set(t.trade_date, (out.get(t.trade_date) ?? 0) + flow);
+    }
+    cash = Math.max(cash - notional, 0);
   }
 
   return out;
