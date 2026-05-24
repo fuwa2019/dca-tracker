@@ -277,6 +277,17 @@ export interface Database {
         Args: { p_limit?: number };
         Returns: { ok: true; refreshed: number; limit: number; generated_at: string } | { error: string };
       };
+      daily_price_coverage: {
+        Args: { p_tickers: string[]; p_earliest_date?: string | null };
+        Returns: Array<{
+          ticker: string;
+          points: number;
+          adjusted_points: number;
+          first_date: string | null;
+          last_date: string | null;
+          updated_at: string | null;
+        }>;
+      };
       performance_cache_status: {
         Args: Record<string, never>;
         Returns: PerformanceCacheStatus | { error: string };

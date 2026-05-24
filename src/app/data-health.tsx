@@ -26,12 +26,13 @@ import { cn } from '@/lib/utils';
 import type { Database as Db } from '@/lib/database.types';
 
 type ShareRow = Db['public']['Tables']['share_links']['Row'];
-
-type DailyPriceRow = {
+type DailyPriceCoverageRow = Db['public']['Functions']['daily_price_coverage']['Returns'][number];
+type DailyPriceCoverageRpcRow = {
   ticker: string;
-  trade_date: string;
-  close: number;
-  adjusted_close: number | null;
+  points: number | string;
+  adjusted_points: number | string;
+  first_date: string | null;
+  last_date: string | null;
   updated_at: string | null;
 };
 
@@ -75,19 +76,16 @@ export function DataHealthPage() {
   const cacheStatus = usePerformanceCacheStatus();
   const refreshCache = useRefreshPerformanceCache();
 
-  const priceRows = useQuery<DailyPriceRow[]>({
+  const priceRows = useQuery<DailyPriceCoverageRow[]>({
     queryKey: ['price_coverage', symbols.join(','), earliestDate],
     enabled: symbols.length > 0,
     queryFn: async () => {
-      let query = supabase
-        .from('daily_prices')
-        .select('ticker,trade_date,close,adjusted_close,updated_at')
-        .in('ticker', symbols)
-        .order('trade_date', { ascending: true });
-      if (earliestDate) query = query.gte('trade_date', earliestDate);
-      const { data, error } = await query;
+      const { data, error } = await supabase.rpc('daily_price_coverage', {
+        p_tickers: symbols,
+        p_earliest_date: earliestDate,
+      });
       if (error) throw error;
-      return (data as DailyPriceRow[]) ?? [];
+      return ((data as DailyPriceCoverageRpcRow[]) ?? []).map(normalizeCoverageRow);
     },
     staleTime: 5 * 60_000,
   });
@@ -477,31 +475,22 @@ function DemoDataPanel() {
 
 function buildCoverage(
   symbols: string[],
-  rows: DailyPriceRow[],
+  rows: DailyPriceCoverageRow[],
   earliestDate: string | null,
 ): Coverage[] {
   const today = new Date().toISOString().slice(0, 10);
   const freshEnough = addDays(today, -10);
-  const byTicker = new Map<string, DailyPriceRow[]>();
-  for (const row of rows) {
-    const list = byTicker.get(row.ticker) ?? [];
-    list.push(row);
-    byTicker.set(row.ticker, list);
-  }
+  const byTicker = new Map(rows.map((row) => [row.ticker, row]));
   return symbols.map((ticker) => {
-    const list = (byTicker.get(ticker) ?? []).sort((a, b) =>
-      a.trade_date.localeCompare(b.trade_date),
-    );
-    const first = list[0]?.trade_date ?? null;
-    const last = list[list.length - 1]?.trade_date ?? null;
-    const adjustedPoints = list.filter((r) => Number(r.adjusted_close) > 0).length;
-    const updatedAt = list.reduce<string | null>((latest, row) => {
-      if (!row.updated_at) return latest;
-      return !latest || row.updated_at > latest ? row.updated_at : latest;
-    }, null);
+    const row = byTicker.get(ticker);
+    const points = row?.points ?? 0;
+    const adjustedPoints = row?.adjusted_points ?? 0;
+    const first = row?.first_date ?? null;
+    const last = row?.last_date ?? null;
+    const updatedAt = row?.updated_at ?? null;
     let status: Coverage['status'] = 'ok';
     let note = '正常';
-    if (list.length === 0) {
+    if (points === 0) {
       status = 'bad';
       note = '缺价格';
     } else if (earliestDate && first && first > addDays(earliestDate, 7)) {
@@ -510,13 +499,13 @@ function buildCoverage(
     } else if (last && last < freshEnough) {
       status = 'warn';
       note = '价格偏旧';
-    } else if (adjustedPoints < list.length) {
+    } else if (adjustedPoints < points) {
       status = 'warn';
       note = '缺复权价';
     }
     return {
       ticker,
-      points: list.length,
+      points,
       adjustedPoints,
       firstDate: first,
       lastDate: last,
@@ -525,6 +514,17 @@ function buildCoverage(
       note,
     };
   });
+}
+
+function normalizeCoverageRow(row: DailyPriceCoverageRpcRow): DailyPriceCoverageRow {
+  return {
+    ticker: row.ticker,
+    points: Number(row.points) || 0,
+    adjusted_points: Number(row.adjusted_points) || 0,
+    first_date: row.first_date,
+    last_date: row.last_date,
+    updated_at: row.updated_at,
+  };
 }
 
 function pickRange(earliestDate: string | null) {
