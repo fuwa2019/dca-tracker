@@ -7,6 +7,8 @@ import type {
   PortfolioHistory,
 } from '@/lib/database.types';
 
+const REFRESH_MS_PRESERVE_WINDOW_MS = 30_000;
+
 function isMissingRpc(error: { code?: string; message?: string; status?: number }) {
   return (
     error.code === 'PGRST202' ||
@@ -24,10 +26,16 @@ export function usePerformanceCacheStatus() {
       const previous = qc.getQueryData<PerformanceCacheStatus | null>(['performance_cache_status']);
       const { data, error } = await supabase.rpc('performance_cache_status');
       if (error) {
-        if (isMissingRpc(error)) return readHistoryStatusFallback();
+        if (isMissingRpc(error)) {
+          const fallback = await readHistoryStatusFallback();
+          return fallback ? preserveRefreshMs(fallback, previous) : fallback;
+        }
         throw error;
       }
-      if (!data || 'error' in data) return readHistoryStatusFallback();
+      if (!data || 'error' in data) {
+        const fallback = await readHistoryStatusFallback();
+        return fallback ? preserveRefreshMs(fallback, previous) : fallback;
+      }
       return preserveRefreshMs(data as PerformanceCacheStatus, previous);
     },
     staleTime: 60_000,
@@ -39,8 +47,33 @@ function preserveRefreshMs(
   previous: PerformanceCacheStatus | null | undefined,
 ): PerformanceCacheStatus {
   if (next.refresh_ms != null || previous?.refresh_ms == null) return next;
-  if (next.updated_at && previous.updated_at && next.updated_at !== previous.updated_at) return next;
+  if (!next.exists || next.error) return next;
+
+  const nextAttemptMs = statusAttemptTimeMs(next);
+  const previousAttemptMs = statusAttemptTimeMs(previous);
+  if (
+    nextAttemptMs != null &&
+    previousAttemptMs != null &&
+    nextAttemptMs > previousAttemptMs + REFRESH_MS_PRESERVE_WINDOW_MS
+  ) {
+    return next;
+  }
+
   return { ...next, refresh_ms: previous.refresh_ms };
+}
+
+function statusAttemptTimeMs(status: PerformanceCacheStatus): number | null {
+  return (
+    parseTimeMs(status.last_refresh_attempt_at) ??
+    parseTimeMs(status.updated_at) ??
+    parseTimeMs(status.generated_at)
+  );
+}
+
+function parseTimeMs(value?: string | null): number | null {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : null;
 }
 
 export function useRefreshPerformanceCache() {
