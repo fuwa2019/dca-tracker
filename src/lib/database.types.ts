@@ -288,6 +288,17 @@ export interface Database {
           updated_at: string | null;
         }>;
       };
+      daily_price_coverage_v2: {
+        Args: { p_items: Array<{ ticker: string; start_date?: string | null }> };
+        Returns: Array<{
+          ticker: string;
+          points: number;
+          adjusted_points: number;
+          first_date: string | null;
+          last_date: string | null;
+          updated_at: string | null;
+        }>;
+      };
       performance_cache_status: {
         Args: Record<string, never>;
         Returns: PerformanceCacheStatus | { error: string };

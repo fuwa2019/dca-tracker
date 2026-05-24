@@ -35,6 +35,10 @@ type DailyPriceCoverageRpcRow = {
   last_date: string | null;
   updated_at: string | null;
 };
+type DailyPriceCoverageItem = {
+  ticker: string;
+  start_date: string | null;
+};
 
 type Coverage = {
   ticker: string;
@@ -82,17 +86,23 @@ export function DataHealthPage() {
     ].sort(),
     [positions, settings?.watchlist],
   );
+  const coverageItems = useMemo<DailyPriceCoverageItem[]>(
+    () => symbols.map((ticker) => ({
+      ticker,
+      start_date: coverageStartDates.get(ticker) ?? null,
+    })),
+    [coverageStartDates, symbols],
+  );
 
   const cacheStatus = usePerformanceCacheStatus();
   const refreshCache = useRefreshPerformanceCache();
 
   const priceRows = useQuery<DailyPriceCoverageRow[]>({
-    queryKey: ['price_coverage', symbols.join(','), earliestDate],
+    queryKey: ['price_coverage', symbols.join(','), JSON.stringify(coverageItems)],
     enabled: symbols.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('daily_price_coverage', {
-        p_tickers: symbols,
-        p_earliest_date: earliestDate,
+      const { data, error } = await supabase.rpc('daily_price_coverage_v2', {
+        p_items: coverageItems,
       });
       if (error) throw error;
       return ((data as DailyPriceCoverageRpcRow[]) ?? []).map(normalizeCoverageRow);
