@@ -62,6 +62,16 @@ export function DataHealthPage() {
     const tradeDates = txns.map((t) => t.trade_date);
     return [...cashDates, ...tradeDates].sort()[0] ?? null;
   }, [cashflows, txns]);
+  const coverageStartDates = useMemo(() => {
+    const byTicker = new Map<string, string>();
+    for (const txn of txns) {
+      const ticker = txn.ticker.toUpperCase();
+      const current = byTicker.get(ticker);
+      if (!current || txn.trade_date < current) byTicker.set(ticker, txn.trade_date);
+    }
+    if (earliestDate) byTicker.set('SPY', earliestDate);
+    return byTicker;
+  }, [earliestDate, txns]);
   const symbols = useMemo(
     () => [
       ...new Set([
@@ -104,8 +114,8 @@ export function DataHealthPage() {
   });
 
   const coverage = useMemo(
-    () => buildCoverage(symbols, priceRows.data ?? [], earliestDate),
-    [symbols, priceRows.data, earliestDate],
+    () => buildCoverage(symbols, priceRows.data ?? [], coverageStartDates),
+    [symbols, priceRows.data, coverageStartDates],
   );
 
   const activeShares = (shareLinks.data ?? []).filter((s) => !s.revoked);
@@ -476,7 +486,7 @@ function DemoDataPanel() {
 function buildCoverage(
   symbols: string[],
   rows: DailyPriceCoverageRow[],
-  earliestDate: string | null,
+  coverageStartDates: ReadonlyMap<string, string>,
 ): Coverage[] {
   const today = new Date().toISOString().slice(0, 10);
   const freshEnough = addDays(today, -10);
@@ -488,12 +498,13 @@ function buildCoverage(
     const first = row?.first_date ?? null;
     const last = row?.last_date ?? null;
     const updatedAt = row?.updated_at ?? null;
+    const startDate = coverageStartDates.get(ticker) ?? null;
     let status: Coverage['status'] = 'ok';
     let note = '正常';
     if (points === 0) {
       status = 'bad';
       note = '缺价格';
-    } else if (earliestDate && first && first > addDays(earliestDate, 7)) {
+    } else if (startDate && first && first > addDays(startDate, 7)) {
       status = 'bad';
       note = '起始覆盖不足';
     } else if (last && last < freshEnough) {
