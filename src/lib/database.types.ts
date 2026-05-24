@@ -217,6 +217,7 @@ export type HistoryCacheRefresh = {
   updated_at?: string;
   benchmark?: string;
   method?: string;
+  refresh_ms?: number | null;
 };
 
 export type PerformanceCacheStatus = {

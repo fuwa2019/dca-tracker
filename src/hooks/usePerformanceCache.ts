@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { PerformanceCacheStatus, PerformanceHistory, PortfolioHistory } from '@/lib/database.types';
+import type {
+  HistoryCacheRefresh,
+  PerformanceCacheStatus,
+  PerformanceHistory,
+  PortfolioHistory,
+} from '@/lib/database.types';
 
 function isMissingRpc(error: { code?: string; message?: string; status?: number }) {
   return (
@@ -42,7 +47,26 @@ export function useRefreshPerformanceCache() {
       if (data && 'error' in data) throw new Error(String(data.error));
       return data;
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      if (data && !('error' in data)) {
+        qc.setQueryData<PerformanceCacheStatus | null>(['performance_cache_status'], (current) => {
+          const refresh = data as HistoryCacheRefresh;
+          if (refresh.refresh_ms == null) return current ?? null;
+          return {
+            ...(current ?? { exists: true }),
+            exists: true,
+            benchmark: refresh.benchmark ?? current?.benchmark ?? 'SPY',
+            method: refresh.method ?? current?.method ?? 'TWR',
+            points: refresh.points ?? current?.points,
+            dirty: false,
+            generated_at: refresh.generated_at ?? current?.generated_at,
+            updated_at: refresh.updated_at ?? refresh.generated_at ?? current?.updated_at,
+            last_refresh_attempt_at: refresh.updated_at ?? refresh.generated_at ?? current?.last_refresh_attempt_at,
+            refresh_ms: refresh.refresh_ms,
+            error: null,
+          };
+        });
+      }
       await qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
       await qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       await qc.invalidateQueries({ queryKey: ['share', 'history'] });
