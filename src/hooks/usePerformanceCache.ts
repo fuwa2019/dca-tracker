@@ -17,19 +17,30 @@ function isMissingRpc(error: { code?: string; message?: string; status?: number 
 }
 
 export function usePerformanceCacheStatus() {
+  const qc = useQueryClient();
   return useQuery<PerformanceCacheStatus | null>({
     queryKey: ['performance_cache_status'],
     queryFn: async () => {
+      const previous = qc.getQueryData<PerformanceCacheStatus | null>(['performance_cache_status']);
       const { data, error } = await supabase.rpc('performance_cache_status');
       if (error) {
         if (isMissingRpc(error)) return readHistoryStatusFallback();
         throw error;
       }
       if (!data || 'error' in data) return readHistoryStatusFallback();
-      return data as PerformanceCacheStatus;
+      return preserveRefreshMs(data as PerformanceCacheStatus, previous);
     },
     staleTime: 60_000,
   });
+}
+
+function preserveRefreshMs(
+  next: PerformanceCacheStatus,
+  previous: PerformanceCacheStatus | null | undefined,
+): PerformanceCacheStatus {
+  if (next.refresh_ms != null || previous?.refresh_ms == null) return next;
+  if (next.updated_at && previous.updated_at && next.updated_at !== previous.updated_at) return next;
+  return { ...next, refresh_ms: previous.refresh_ms };
 }
 
 export function useRefreshPerformanceCache() {
