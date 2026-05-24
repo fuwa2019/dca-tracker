@@ -362,21 +362,20 @@ async function upsertDailyPrices(env: Env, ticker: string, points: HistoryPoint[
     source: 'yahoo',
     updated_at: new Date().toISOString(),
   }));
-  // Supabase REST batch upsert. PostgREST limits payload, so chunk if >1000 rows.
+  // Supabase RPC batch upsert. PostgREST limits payload, so chunk if >1000 rows.
   const CHUNK = 1000;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const slice = rows.slice(i, i + CHUNK);
-    const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/daily_prices?on_conflict=ticker,trade_date`, {
+    const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/upsert_daily_prices`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: env.SUPABASE_SERVICE_ROLE_KEY!,
         Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY!}`,
-        Prefer: 'resolution=merge-duplicates,return=minimal',
       },
-      body: JSON.stringify(slice),
+      body: JSON.stringify({ p_rows: slice }),
     });
-    if (!r.ok) throw new Error(`supabase daily_prices upsert ${r.status}: ${await r.text()}`);
+    if (!r.ok) throw new Error(`supabase upsert_daily_prices rpc ${r.status}: ${await r.text()}`);
   }
 }
 
