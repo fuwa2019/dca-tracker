@@ -1,3 +1,5 @@
+import { isoDateInNewYork, isNyseHoliday } from '@/lib/nyse-calendar';
+
 export interface Quote {
   ticker: string;
   price: number | null;
@@ -92,14 +94,19 @@ function getEtClockParts(now: Date) {
 /** US stock-session heuristic in New York time. It includes common extended-hours windows. */
 export function getUsMarketSession(now = new Date()): UsMarketSession {
   const { weekday, minutes } = getEtClockParts(now);
+  const etDate = isoDateInNewYork(now);
   const isWeekend = weekday === 'Sat' || weekday === 'Sun';
+  const isHoliday = isNyseHoliday(etDate);
   const isWeekday = !isWeekend;
   const isSundayNight = weekday === 'Sun' && minutes >= 20 * 60;
-  const isOvernightMorning = isWeekday && minutes < 4 * 60;
-  const isWeeknight = isWeekday && weekday !== 'Fri' && minutes >= 20 * 60;
+  const isOvernightMorning = isWeekday && !isHoliday && minutes < 4 * 60;
+  const isWeeknight = isWeekday && !isHoliday && weekday !== 'Fri' && minutes >= 20 * 60;
 
   if (isWeekend && !isSundayNight) {
     return { key: 'closed', label: '休市', detail: '周末休市', isTrading: false, isRegular: false };
+  }
+  if (isHoliday) {
+    return { key: 'closed', label: '休市', detail: 'NYSE 节假日休市', isTrading: false, isRegular: false };
   }
   if (isSundayNight || isOvernightMorning || isWeeknight) {
     return { key: 'overnight', label: '夜盘', detail: '20:00-04:00 ET', isTrading: true, isRegular: false };
