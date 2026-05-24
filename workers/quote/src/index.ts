@@ -242,10 +242,33 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
   const range = url.searchParams.get('range') ?? '5y';
   const persist = url.searchParams.get('persist') ?? '';
   if (symbols.length === 0) return json({ error: 'missing_symbols' }, 400);
+  if (persist === 'sync' && (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY)) {
+    return json({
+      error: 'supabase_config_missing',
+      message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for persist=sync',
+    }, 500);
+  }
 
   const cacheKey = `history:${symbols.join(',')}:${range}`;
-  const cached = await env.QUOTE_CACHE.get(cacheKey, 'json');
-  if (cached) return json({ series: cached, cache: 'hit' });
+  const cached = await env.QUOTE_CACHE.get(cacheKey, 'json') as unknown;
+  if (isHistorySeriesArray(cached)) {
+    if (persist !== 'sync') return json({ series: cached, cache: 'hit' });
+
+    try {
+      await Promise.all(
+        cached
+          .filter((s) => s.points.length > 0)
+          .map((s) => upsertDailyPrices(env, s.ticker, s.points)),
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return json({ error: 'daily_prices_upsert_failed', message: msg }, 500);
+    }
+    return json({ series: cached, cache: 'hit', persisted: true });
+  }
+  if (cached) {
+    console.warn('[history] ignoring invalid cached history payload');
+  }
 
   const series = await Promise.all(
     symbols.map((s) => fetchYahooHistory(s, range).catch((e) => {
@@ -257,24 +280,48 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
   const successful = series.filter((s) => s.points.length > 0);
   if (successful.length > 0) {
     await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(series), { expirationTtl: HISTORY_TTL });
-    if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
-      if (persist === 'sync') {
-        try {
-          await Promise.all(successful.map((s) => upsertDailyPrices(env, s.ticker, s.points)));
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          return json({ error: 'daily_prices_upsert_failed', message: msg }, 500);
-        }
-      } else {
-        ctx.waitUntil(
-          Promise.all(successful.map((s) => upsertDailyPrices(env, s.ticker, s.points)))
-            .catch((e) => console.warn('[history] daily_prices upsert failed:', e)),
-        );
+    if (persist === 'sync') {
+      try {
+        await Promise.all(successful.map((s) => upsertDailyPrices(env, s.ticker, s.points)));
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return json({ error: 'daily_prices_upsert_failed', message: msg }, 500);
       }
+      return json({ series, cache: 'miss', persisted: true });
+    }
+    if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+      ctx.waitUntil(
+        Promise.all(successful.map((s) => upsertDailyPrices(env, s.ticker, s.points)))
+          .catch((e) => console.warn('[history] daily_prices upsert failed:', e)),
+      );
     }
   }
 
   return json({ series, cache: 'miss' });
+}
+
+function isHistorySeriesArray(value: unknown): value is HistorySeries[] {
+  return Array.isArray(value) && value.every(isHistorySeries);
+}
+
+function isHistorySeries(value: unknown): value is HistorySeries {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as { ticker?: unknown; points?: unknown };
+  return typeof row.ticker === 'string' && Array.isArray(row.points) && row.points.every(isHistoryPoint);
+}
+
+function isHistoryPoint(value: unknown): value is HistoryPoint {
+  if (!value || typeof value !== 'object') return false;
+  const point = value as { date?: unknown; close?: unknown; adjustedClose?: unknown };
+  return (
+    typeof point.date === 'string'
+    && typeof point.close === 'number'
+    && Number.isFinite(point.close)
+    && (
+      point.adjustedClose === undefined
+      || (typeof point.adjustedClose === 'number' && Number.isFinite(point.adjustedClose))
+    )
+  );
 }
 
 async function fetchYahooHistory(symbol: string, range: string): Promise<HistorySeries> {

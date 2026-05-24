@@ -53,13 +53,15 @@ export function useDemoDcaData() {
     mutationFn: async () => {
       if (!user) throw new Error('请先登录');
       setMessage(null);
-      await clearDemoRows();
 
       // Fetch prices synchronously so daily_prices is guaranteed written before we insert.
       const history = await fetchHistory([DEMO_TICKER, 'SPY'], '10y', { persist: 'sync' });
+      if (!hasHistoryPoints(history, DEMO_TICKER) || !hasHistoryPoints(history, 'SPY')) {
+        throw new Error('没有拿到 QQQ/SPY 历史价格，测试数据未写入');
+      }
       const prices = seriesToPriceMap(history, DEMO_TICKER);
       const tradeRows = buildMonthlyDemoTrades(prices);
-      if (tradeRows.length === 0) throw new Error('没有拿到 QQQ 历史价格');
+      if (tradeRows.length === 0) throw new Error('没有拿到 QQQ/SPY 历史价格，测试数据未写入');
 
       const cashflows = tradeRows.map((row) => ({
         user_id: user.id,
@@ -82,6 +84,8 @@ export function useDemoDcaData() {
         kind: 'dca' as const,
         note: DEMO_NOTE,
       }));
+
+      await clearDemoRows();
 
       const cf = await supabase.from('cashflows').insert(cashflows);
       if (cf.error) throw cf.error;
@@ -110,6 +114,10 @@ export function useDemoDcaData() {
     busy: seedMutation.isPending || clearMutation.isPending,
     message,
   };
+}
+
+function hasHistoryPoints(series: HistorySeries[], ticker: string) {
+  return (series.find((s) => s.ticker.toUpperCase() === ticker)?.points.length ?? 0) > 0;
 }
 
 async function invalidatePortfolioQueries(qc: ReturnType<typeof useQueryClient>) {

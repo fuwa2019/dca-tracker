@@ -50,6 +50,8 @@ export function RebalancePage() {
   const weightSum = Object.values(weights).reduce((s, v) => s + (Number(v) || 0), 0);
   const cash = Number(newCash) || 0;
   const weightSumOk = Math.abs(weightSum - 100) <= 0.5;
+  const missingPricesText = missingPrices.join(', ');
+  const showMissingPriceEmpty = weightSumOk && cash > 0 && missingPrices.length > 0;
 
   const holdings = useMemo(
     () =>
@@ -155,17 +157,6 @@ export function RebalancePage() {
         </CardContent>
       </Card>
 
-      {missingPrices.length > 0 && (
-        <Card className="flex items-start gap-3 border-warn/30 bg-warn/5 p-4 text-sm">
-          <Scale className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-          <div className="min-w-0 flex-1">
-            <div className="font-medium text-foreground">缺少行情价格</div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              以下 ticker 缺少有效价格，无法生成再平衡建议：{missingPrices.join(', ')}
-            </p>
-          </div>
-        </Card>
-      )}
       {result ? (
         <Card className="overflow-hidden p-0">
           <div className="border-b border-border px-4 py-3">
@@ -229,6 +220,12 @@ export function RebalancePage() {
             })}
           </div>
         </Card>
+      ) : showMissingPriceEmpty ? (
+        <EmptyState
+          icon={Scale}
+          title="行情缺失，暂不能生成建议"
+          description={`缺失 ${missingPricesText} 等现价，避免按 0 价格计算。请稍后刷新或检查 Worker。`}
+        />
       ) : !weightSumOk ? (
         <EmptyState
           icon={Scale}
