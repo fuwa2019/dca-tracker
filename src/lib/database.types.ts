@@ -176,6 +176,9 @@ export type SharedHistory = {
     return_pct_spy: number;
   }>;
   generated_at: string;
+  updated_at?: string;
+  last_refresh_attempt_at?: string | null;
+  refresh_ms?: number | null;
   benchmark?: string;
   method?: string;
   price_basis?: string;
@@ -202,6 +205,9 @@ export type PortfolioHistory = {
     }>;
   }>;
   generated_at: string;
+  updated_at?: string;
+  last_refresh_attempt_at?: string | null;
+  refresh_ms?: number | null;
   benchmark?: string;
   method?: string;
   price_basis?: string;

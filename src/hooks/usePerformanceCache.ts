@@ -162,7 +162,9 @@ function statusFromHistory(history: PerformanceHistory | PortfolioHistory): Perf
     dirty: history.dirty ?? false,
     points,
     generated_at: history.generated_at,
-    updated_at: history.generated_at,
+    updated_at: history.updated_at ?? history.generated_at,
+    last_refresh_attempt_at: history.last_refresh_attempt_at ?? null,
+    refresh_ms: history.refresh_ms ?? null,
     error: null,
   };
 }
