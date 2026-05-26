@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { CalendarDays, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { PerformancePanel } from '@/components/IbkrPerformancePanel';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -99,6 +99,10 @@ export function SharePage() {
     ? (1 + portfolioReturn) / (1 + spyReturn) - 1
     : 0;
   const dateRange = last ? `${history[0].date} 至 ${last.date}` : '等待业绩缓存';
+  const rawHistory = historyQuery.data && !('error' in historyQuery.data) ? historyQuery.data : null;
+  const tradingCalendar = rawHistory?.trading_calendar ?? rawHistory?.benchmark ?? 'SPY';
+  const usesTradingDays = rawHistory?.excluded_non_trading_days ?? rawHistory?.date_basis === 'benchmark_price_dates';
+  const generatedAt = rawHistory?.updated_at ?? rawHistory?.generated_at ?? data.generated_at;
 
   const hasSnapshotPrices = data.has_snapshot_price;
 
@@ -116,6 +120,29 @@ export function SharePage() {
       </header>
 
       <div className="container max-w-[1200px] space-y-5 px-4 py-5 sm:px-6 sm:py-7">
+        <section className="rounded-xl border border-border bg-surface px-5 py-5 sm:px-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-2xl">
+              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Public Performance Report
+              </div>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">只读业绩报告</h1>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                这份报告只展示持仓比例和收益率，不包含金额、入金、汇兑损耗或交易明细。
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface-elevated px-2 py-1 text-muted-foreground">
+                <CalendarDays className="h-3.5 w-3.5" />
+                {usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'}
+              </span>
+              <span className="rounded-md border border-border bg-surface-elevated px-2 py-1 text-muted-foreground tnum">
+                更新 {formatDateTime(generatedAt)}
+              </span>
+            </div>
+          </div>
+        </section>
+
         {!hasSnapshotPrices && (
           <Card className="flex items-start gap-3 border-warn/30 bg-warn/5 p-3 text-sm">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
@@ -281,6 +308,15 @@ function isIsoDate(value: string) {
 function normalizeDate(value: unknown) {
   if (typeof value === 'string') return value.slice(0, 10);
   return '';
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return '暂无';
+  try {
+    return new Date(value).toLocaleString('zh-CN', { hour12: false });
+  } catch {
+    return value;
+  }
 }
 
 function toFiniteNumber(value: unknown) {

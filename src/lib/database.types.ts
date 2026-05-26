@@ -186,6 +186,10 @@ export type SharedHistory = {
   benchmark?: string;
   method?: string;
   price_basis?: string;
+  flow_basis?: string;
+  date_basis?: string;
+  trading_calendar?: string;
+  excluded_non_trading_days?: boolean;
   dirty?: boolean;
 };
 
@@ -215,6 +219,10 @@ export type PortfolioHistory = {
   benchmark?: string;
   method?: string;
   price_basis?: string;
+  flow_basis?: string;
+  date_basis?: string;
+  trading_calendar?: string;
+  excluded_non_trading_days?: boolean;
   dirty?: boolean;
 };
 

@@ -40,10 +40,10 @@ export interface BuildHistoryInput {
  * internal portfolio transfers. Cashflows are intentionally ignored here; they
  * affect account NAV elsewhere, but not the trading-performance curve.
  *
- * Forward-fill rule: when a ticker's price is missing for a date (e.g. between
- * trading days, holidays, or pre-data dates), we re-use the most recent prior
- * close. If no prior close exists yet, we use the latest trade price as the
- * temporary account-equity anchor until market closes arrive.
+ * Cache-backed dashboard/share charts are generated in SQL on SPY price dates
+ * only, so holidays and weekends are not counted as observations. This local
+ * helper is retained for legacy/offline callers and still forward-fills missing
+ * ticker prices while iterating calendar days.
  */
 export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
   const { transactions, prices, todayQuotes, todaySpyPrice, asOf } = input;

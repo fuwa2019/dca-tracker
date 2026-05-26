@@ -198,7 +198,8 @@ export function PerformancePanel({
 
         {infoOpen && (
           <div className="border-b border-border bg-surface px-4 py-3 text-[12px] leading-5 text-muted-foreground">
-            累积基准比较来自已录入交易和复权日线；{benchmarkLabel} 基准线使用同一组交易资金流买入 {benchmarkLabel}。超额收益按组合相对基准计算。
+            累积基准比较采用交易口径时间加权回报 (TWR)。组合线来自已录入交易和复权日线；{benchmarkLabel} 基准线使用同一组交易资金流买入 {benchmarkLabel}。超额收益按
+            {' '}(1+组合)/(1+{benchmarkLabel})-1 计算。曲线日期采用 SPY 实际价格日，休市日不纳入统计。
           </div>
         )}
 
@@ -212,6 +213,19 @@ export function PerformancePanel({
           </div>
         ) : (
           <>
+            <div className="border-b border-border px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold tracking-tight">业绩曲线</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    只统计 SPY 有实际日线价格的美股交易日；周末、节假日和休市日不会生成平点。
+                  </p>
+                </div>
+                <div className="rounded-md border border-border bg-surface-elevated px-2 py-1 text-[11px] text-muted-foreground">
+                  Benchmark calendar · SPY
+                </div>
+              </div>
+            </div>
             <SummaryTable dateLabel={dateLabel} summary={summary} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
             <PerformanceChart rows={chartRows} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
             <PerformanceDetailTable
@@ -226,7 +240,7 @@ export function PerformancePanel({
       </Card>
 
       <p className="text-[11px] leading-5 text-muted-foreground">
-        业绩基于已录入交易和日线复权价；首页年化收益以 XIRR 为准，曲线用于观察历史走势和基准对照。
+        业绩基于已录入交易和日线复权价；曲线采用交易口径时间加权回报 (TWR)，并以 SPY 实际价格日作为交易日历。历史数据仅供分析参考，不构成投资建议。
       </p>
     </div>
   );

@@ -13,6 +13,10 @@ sanitized performance cache.
 - Performance chart uses daily-linked TWR.
 - Performance chart uses the trading-performance view: it starts on the first
   transaction date and ignores idle cash before the first trade.
+- Performance chart points are emitted only on benchmark trading dates: the
+  cache uses dates where SPY has an actual persisted adjusted/close price.
+  Weekends, NYSE holidays, and other non-trading days are not shown as flat
+  carry-forward points.
 - XIRR is separate money-weighted performance and is not used for the chart.
 - The default benchmark is SPY.
 - Historical chart points use daily prices. The current dashboard cards use
@@ -51,6 +55,12 @@ performance curve uses an adjusted-close total-return proxy:
   before that day;
 - benchmark units are bought from inferred trade-funding flows using the same
   adjusted-price logic.
+
+The chart calendar is anchored to the benchmark (`SPY` by default). A trade
+entered on a non-trading day is applied on the next SPY price date for
+performance-series purposes. This keeps dashboard and share charts from
+counting holidays or weekends as performance observations while preserving the
+original transaction date in the transaction ledger.
 
 Trade-funding flows are inferred from transactions, not deposit rows. Sell
 proceeds fund later buys first; only the unfunded portion of a buy is treated

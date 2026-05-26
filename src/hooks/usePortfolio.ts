@@ -106,6 +106,10 @@ function normalizeHistory(history: PerformanceHistory | PortfolioHistory | Share
     benchmark: history.benchmark,
     method: history.method,
     price_basis: history.price_basis,
+    flow_basis: history.flow_basis,
+    date_basis: history.date_basis,
+    trading_calendar: history.trading_calendar,
+    excluded_non_trading_days: history.excluded_non_trading_days,
     dirty: history.dirty,
     series: (history.series ?? []).map((p) => {
       const row = p as PortfolioHistory['series'][number];

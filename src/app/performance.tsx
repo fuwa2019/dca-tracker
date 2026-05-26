@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { RefreshCw, Database, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Database, AlertTriangle, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { StatCard } from '@/components/StatCard';
@@ -54,14 +54,33 @@ export function PerformancePage() {
   const hasCache = !!cacheStatus.data?.exists || history.length > 0;
   const cacheError = cacheStatus.data?.error;
   const generatedAt = cacheStatus.data?.updated_at ?? cacheStatus.data?.generated_at ?? portfolioHistory.data?.generated_at;
+  const tradingCalendar = portfolioHistory.data?.trading_calendar ?? portfolioHistory.data?.benchmark ?? 'SPY';
+  const usesTradingDays = portfolioHistory.data?.excluded_non_trading_days ?? portfolioHistory.data?.date_basis === 'benchmark_price_dates';
+  const reportLead = history.length > 0
+    ? `从 ${history[0].date} 到 ${last?.date}，组合累计 ${signedPct(portfolioReturn)}，相对 SPY ${signedPct(excess)}。`
+    : '录入交易并补齐日线价格后，这里会生成一份可分享、可审计的业绩报告。';
 
   return (
     <div className="container max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs text-muted-foreground">
-            历史曲线 · 复权价口径 · 当前基准 {selectedBenchmark}
-          </p>
+        <div className="max-w-3xl">
+          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            Performance Report
+          </div>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">交易业绩是否跑赢 SPY？</h2>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{reportLead}</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
+              <CalendarDays className="h-3.5 w-3.5" />
+              {usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'}
+            </span>
+            <span className="rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
+              交易口径 TWR
+            </span>
+            <span className="rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
+              复权价总回报 proxy
+            </span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {cacheError ? (
