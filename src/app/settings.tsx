@@ -13,6 +13,8 @@ import { EmptyState } from '@/components/EmptyState';
 import { useSettings } from '@/hooks/usePortfolio';
 import { useAuth, signOut } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { searchSymbols, type SymbolSearchResult } from '@/lib/quote';
+import { DEFAULT_BENCHMARKS, DEFAULT_WATCHLIST, getBenchmarks, getSelectedBenchmark, splitTickers } from '@/lib/settings';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/lib/database.types';
 
@@ -36,6 +38,8 @@ export function SettingsPage() {
     email_to: '',
     cost_basis_default: 'avg' as 'avg' | 'fifo',
     watchlist: 'VOO,QQQM,SMH',
+    benchmarks: DEFAULT_BENCHMARKS.join(','),
+    selected_benchmark: DEFAULT_BENCHMARKS[0],
   });
   const [savedFlash, setSavedFlash] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
@@ -49,7 +53,9 @@ export function SettingsPage() {
         email_enabled: settings.email_enabled,
         email_to: settings.email_to ?? '',
         cost_basis_default: (settings.cost_basis_default as 'avg' | 'fifo') ?? 'avg',
-        watchlist: (settings.watchlist ?? ['VOO', 'QQQM', 'SMH']).join(','),
+        watchlist: (settings.watchlist ?? DEFAULT_WATCHLIST).join(','),
+        benchmarks: getBenchmarks(settings).join(','),
+        selected_benchmark: getSelectedBenchmark(settings),
       });
     }
   }, [settings]);
@@ -57,11 +63,11 @@ export function SettingsPage() {
   const save = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('not_authed');
-      const watchlist = form.watchlist
-        .split(',')
-        .map((s) => s.trim().toUpperCase())
-        .filter(Boolean)
-        .filter((v, i, arr) => arr.indexOf(v) === i);
+      const watchlist = splitTickers(form.watchlist, DEFAULT_WATCHLIST);
+      const benchmarks = splitTickers(form.benchmarks, DEFAULT_BENCHMARKS);
+      const selectedBenchmark = benchmarks.includes(form.selected_benchmark.toUpperCase())
+        ? form.selected_benchmark.toUpperCase()
+        : benchmarks[0] ?? 'SPY';
       const payload = {
         user_id: user.id,
         target_usd: Number(form.target_usd),
@@ -71,9 +77,15 @@ export function SettingsPage() {
         email_to: form.email_to || null,
         cost_basis_default: form.cost_basis_default,
         watchlist,
+        benchmarks,
+        selected_benchmark: selectedBenchmark,
       };
       const { error } = await supabase.from('settings').upsert(payload);
-      if (error) throw error;
+      if (!error) return;
+      if (!/benchmarks|selected_benchmark|schema cache|column/i.test(error.message ?? '')) throw error;
+      const { benchmarks: _benchmarks, selected_benchmark: _selected, ...legacyPayload } = payload;
+      const retry = await supabase.from('settings').upsert(legacyPayload);
+      if (retry.error) throw retry.error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings'] });
@@ -161,7 +173,7 @@ export function SettingsPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">持仓与自选</CardTitle>
-          <CardDescription className="text-xs">控制盈亏计算口径和首页自选股列表</CardDescription>
+          <CardDescription className="text-xs">控制盈亏计算口径、首页自选股和业绩基准</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
@@ -186,6 +198,20 @@ export function SettingsPage() {
               placeholder="VOO,QQQM,SMH"
             />
             <p className="text-[11px] text-muted-foreground">逗号分隔，保存时自动大写去重</p>
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>业绩基准</Label>
+            <BenchmarkManager
+              benchmarks={splitTickers(form.benchmarks, DEFAULT_BENCHMARKS)}
+              selected={form.selected_benchmark}
+              onChange={(benchmarks, selected) => {
+                setForm((f) => ({
+                  ...f,
+                  benchmarks: benchmarks.join(','),
+                  selected_benchmark: selected,
+                }));
+              }}
+            />
           </div>
         </CardContent>
       </Card>
@@ -296,11 +322,11 @@ export function SettingsPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">外观</CardTitle>
-          <CardDescription className="text-xs">浅色或深色主题。系统会在你下次打开时记住选择。</CardDescription>
+          <CardDescription className="text-xs">默认跟随系统，也可以手动固定浅色或深色。</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">主题</div>
-          <ThemeToggle />
+          <ThemeToggle compact={false} />
         </CardContent>
       </Card>
 
@@ -310,6 +336,117 @@ export function SettingsPage() {
           <LogOut className="h-4 w-4" />退出登录
         </Button>
       </div>
+    </div>
+  );
+}
+
+function BenchmarkManager({
+  benchmarks,
+  selected,
+  onChange,
+}: {
+  benchmarks: string[];
+  selected: string;
+  onChange: (benchmarks: string[], selected: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SymbolSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const safeSelected = benchmarks.includes(selected) ? selected : benchmarks[0] ?? 'SPY';
+
+  async function runSearch() {
+    const q = query.trim().toUpperCase();
+    if (!q) return;
+    setSearching(true);
+    try {
+      const next = await searchSymbols(q);
+      setResults(next.length > 0 ? next : [{ symbol: q, name: '手动添加', exchange: null, type: null }]);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function add(symbol: string) {
+    const ticker = symbol.trim().toUpperCase();
+    if (!ticker) return;
+    const next = benchmarks.includes(ticker) ? benchmarks : [...benchmarks, ticker];
+    onChange(next, ticker);
+    setQuery('');
+    setResults([]);
+  }
+
+  function remove(symbol: string) {
+    const next = benchmarks.filter((b) => b !== symbol);
+    const fallback = next.length > 0 ? next : DEFAULT_BENCHMARKS;
+    onChange(fallback, safeSelected === symbol ? fallback[0] : safeSelected);
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border bg-surface-elevated/40 p-3">
+      <div className="flex flex-wrap gap-2">
+        {benchmarks.map((ticker) => (
+          <div
+            key={ticker}
+            className={cn(
+              'inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-xs font-medium transition-colors',
+              safeSelected === ticker
+                ? 'border-brand/50 bg-brand/10 text-foreground'
+                : 'border-border bg-surface text-muted-foreground hover:text-foreground',
+            )}
+          >
+            <button type="button" onClick={() => onChange(benchmarks, ticker)}>
+              {ticker}
+            </button>
+            {ticker !== 'SPY' && (
+              <button
+                type="button"
+                className="text-muted-foreground hover:text-loss"
+                onClick={() => remove(ticker)}
+                aria-label={`删除 ${ticker}`}
+              >
+                ×
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value.toUpperCase())}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              runSearch();
+            }
+          }}
+          placeholder="搜索 ETF / 股票，例如 QQQ"
+        />
+        <Button type="button" variant="outline" size="sm" onClick={runSearch} disabled={searching || !query.trim()}>
+          {searching ? '搜索中' : '搜索'}
+        </Button>
+      </div>
+      {results.length > 0 && (
+        <div className="space-y-1">
+          {results.map((row) => (
+            <button
+              key={`${row.symbol}-${row.exchange ?? ''}`}
+              type="button"
+              onClick={() => add(row.symbol)}
+              className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-xs hover:bg-surface"
+            >
+              <span className="min-w-0">
+                <span className="font-semibold">{row.symbol}</span>
+                <span className="ml-2 text-muted-foreground">{row.name}</span>
+              </span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">{row.exchange ?? row.type ?? ''}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <p className="text-[11px] leading-5 text-muted-foreground">
+        当前选中的基准会用于业绩曲线和分享页。新增基准后到「数据健康」补齐日线价格并刷新缓存。
+      </p>
     </div>
   );
 }

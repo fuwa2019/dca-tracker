@@ -33,8 +33,9 @@ import { usePerformanceCacheStatus } from '@/hooks/usePerformanceCache';
 import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
-import { BENCHMARK_TICKER, type HistoryPoint } from '@/lib/calc/history';
+import type { HistoryPoint } from '@/lib/calc/history';
 import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
+import { getSelectedBenchmark, getWatchlist } from '@/lib/settings';
 import { cn } from '@/lib/utils';
 
 const MINI_CHART_POINTS = 180;
@@ -45,17 +46,18 @@ export function DashboardPage() {
   const { data: settings } = useSettings();
   const { total: totalInvested } = useTotalInvested();
   const { cash } = useCashBalance();
-  const cacheStatus = usePerformanceCacheStatus();
+  const selectedBenchmark = useMemo(() => getSelectedBenchmark(settings), [settings]);
+  const cacheStatus = usePerformanceCacheStatus(selectedBenchmark);
   // Auto-refresh removed: cache status is shown, user refreshes via Data Health.
 
-  const watchlist = settings?.watchlist ?? ['VOO', 'QQQM', 'SMH'];
+  const watchlist = useMemo(() => getWatchlist(settings), [settings]);
   const positions = useMemo(
     () => aggregatePositions(txns).filter((p) => p.shares > 1e-9),
     [txns],
   );
   const symbols = useMemo(
-    () => [...new Set([...positions.map((p) => p.ticker), ...watchlist, BENCHMARK_TICKER])],
-    [positions, watchlist],
+    () => [...new Set([...positions.map((p) => p.ticker), ...watchlist, selectedBenchmark])],
+    [positions, watchlist, selectedBenchmark],
   );
   const { data: quotes = [], isLoading: quotesLoading, isError: quotesError } = useQuotes(symbols);
   const quoteByTicker = useMemo(() => new Map(quotes.map((q) => [q.ticker, q])), [quotes]);
@@ -65,7 +67,7 @@ export function DashboardPage() {
     return !q || q.price == null;
   });
 
-  const portfolioHistory = usePortfolioHistory();
+  const portfolioHistory = usePortfolioHistory(selectedBenchmark);
   const history: HistoryPoint[] = useMemo(() => {
     const rows = portfolioHistory.data?.series ?? [];
     return rows.map((p) => ({
@@ -120,10 +122,10 @@ export function DashboardPage() {
   const xirr = useMemo(() => computeXirr(xirrEvents), [xirrEvents]);
 
   const last = history[history.length - 1];
-  const twrCumulative = last?.returnPctUser ?? 0;
-  const spyCumulative = last?.returnPctSpy ?? 0;
-  const excessVsSpy = Number.isFinite((1 + twrCumulative) / (1 + spyCumulative) - 1)
-    ? (1 + twrCumulative) / (1 + spyCumulative) - 1
+  const portfolioCumulative = last?.returnPctUser ?? 0;
+  const benchmarkCumulative = last?.returnPctSpy ?? 0;
+  const excessVsBenchmark = Number.isFinite((1 + portfolioCumulative) / (1 + benchmarkCumulative) - 1)
+    ? (1 + portfolioCumulative) / (1 + benchmarkCumulative) - 1
     : 0;
 
   const isEmpty = positions.length === 0 && cashflows.length === 0 && txns.length === 0;
@@ -143,6 +145,7 @@ export function DashboardPage() {
             totalPL={aggregates.totalPL}
             totalReturnPct={totalReturnPct}
             cacheDirty={!!cacheStatus.data?.dirty}
+            benchmark={selectedBenchmark}
           />
 
           {(quotesNone || quotesPartial || quotesError) && (
@@ -165,22 +168,22 @@ export function DashboardPage() {
 
           <div className="grid gap-3 md:grid-cols-3">
             <StatCard
-              label="XIRR · 钱加权"
+              label="年化收益 XIRR"
               value={xirr !== null ? signedPct(xirr) : '—'}
               tone={xirr === null ? 'muted' : xirr >= 0 ? 'gain' : 'loss'}
-              sub={xirr !== null ? '按每笔到账时点精确折现' : '至少需 2 笔不同日期入金'}
+              sub={xirr !== null ? '唯一年化主指标' : '至少需 2 笔不同日期入金'}
             />
             <StatCard
-              label="TWR · 累计"
-              value={signedPct(twrCumulative)}
-              tone={twrCumulative >= 0 ? 'gain' : 'loss'}
-              sub={last ? `${history[0].date} 至 ${last.date} · ${history.length} 个交易日` : '录入后显示'}
+              label="组合累计表现"
+              value={signedPct(portfolioCumulative)}
+              tone={portfolioCumulative >= 0 ? 'gain' : 'loss'}
+              sub={last ? `${history[0].date} 至 ${last.date}` : '录入后显示'}
             />
             <StatCard
-              label="超额 vs SPY"
-              value={signedPct(excessVsSpy)}
-              className={changeColor(excessVsSpy)}
-              sub="组合 − SPY 同期"
+              label={`超额 vs ${selectedBenchmark}`}
+              value={signedPct(excessVsBenchmark)}
+              className={changeColor(excessVsBenchmark)}
+              sub={`组合 − ${selectedBenchmark} 同期`}
             />
           </div>
 
@@ -276,6 +279,7 @@ function NavHero({
   totalPL,
   totalReturnPct,
   cacheDirty,
+  benchmark,
 }: {
   nav: number;
   stockMv: number;
@@ -285,6 +289,7 @@ function NavHero({
   totalPL: number;
   totalReturnPct: number;
   cacheDirty: boolean;
+  benchmark: string;
 }) {
   return (
     <Card className="overflow-hidden p-0">
@@ -308,6 +313,9 @@ function NavHero({
             </span>
             <span className="inline-flex items-center gap-1">
               <Wallet className="h-3 w-3" /> 现金 {usd.format(cash)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <TrendingUp className="h-3 w-3" /> 基准 {benchmark}
             </span>
           </div>
         </motion.div>

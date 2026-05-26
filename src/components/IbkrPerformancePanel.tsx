@@ -32,8 +32,9 @@ interface Props {
   availableRanges: RangeKey[];
   showBenchmark: boolean;
   onShowBenchmarkChange: (show: boolean) => void;
+  benchmarkLabel?: string;
   loading?: boolean;
-  /** Hide the SPY toggle entirely (used by Share view where the toggle adds noise). */
+  /** Hide the benchmark toggle entirely (used by Share view where the toggle adds noise). */
   hideBenchmarkToggle?: boolean;
   emptyMessage?: string;
 }
@@ -72,6 +73,7 @@ export function PerformancePanel({
   availableRanges,
   showBenchmark,
   onShowBenchmarkChange,
+  benchmarkLabel = 'SPY',
   loading = false,
   hideBenchmarkToggle = false,
   emptyMessage,
@@ -129,6 +131,7 @@ export function PerformancePanel({
                 <BenchmarkToggle
                   checked={showBenchmark}
                   onCheckedChange={onShowBenchmarkChange}
+                  benchmarkLabel={benchmarkLabel}
                 />
               )}
             </div>
@@ -187,6 +190,7 @@ export function PerformancePanel({
               <BenchmarkToggle
                 checked={showBenchmark}
                 onCheckedChange={onShowBenchmarkChange}
+                benchmarkLabel={benchmarkLabel}
               />
             )}
           </div>
@@ -194,8 +198,7 @@ export function PerformancePanel({
 
         {infoOpen && (
           <div className="border-b border-border bg-surface px-4 py-3 text-[12px] leading-5 text-muted-foreground">
-            累积基准比较采用交易口径时间加权回报 (TWR)。组合线来自已录入交易和复权日线；SPY 基准线使用同一组交易资金流买入 SPY。超额收益按
-            {' '}(1+组合)/(1+SPY)-1 计算。
+            累积基准比较来自已录入交易和复权日线；{benchmarkLabel} 基准线使用同一组交易资金流买入 {benchmarkLabel}。超额收益按组合相对基准计算。
           </div>
         )}
 
@@ -209,11 +212,12 @@ export function PerformancePanel({
           </div>
         ) : (
           <>
-            <SummaryTable dateLabel={dateLabel} summary={summary} showBenchmark={showBenchmark} />
-            <PerformanceChart rows={chartRows} showBenchmark={showBenchmark} />
+            <SummaryTable dateLabel={dateLabel} summary={summary} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
+            <PerformanceChart rows={chartRows} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
             <PerformanceDetailTable
               tableRows={visibleRows}
               showBenchmark={showBenchmark}
+              benchmarkLabel={benchmarkLabel}
               page={page}
               onPageChange={setPage}
             />
@@ -222,7 +226,7 @@ export function PerformancePanel({
       </Card>
 
       <p className="text-[11px] leading-5 text-muted-foreground">
-        业绩基于已录入交易和日线复权价；曲线采用交易口径时间加权回报 (TWR)。历史数据仅供分析参考，不构成投资建议。
+        业绩基于已录入交易和日线复权价；首页年化收益以 XIRR 为准，曲线用于观察历史走势和基准对照。
       </p>
     </div>
   );
@@ -231,9 +235,11 @@ export function PerformancePanel({
 function BenchmarkToggle({
   checked,
   onCheckedChange,
+  benchmarkLabel,
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
+  benchmarkLabel: string;
 }) {
   return (
     <button
@@ -257,7 +263,7 @@ function BenchmarkToggle({
         />
       </span>
       <span className={cn(checked ? 'text-foreground' : 'text-muted-foreground')}>
-        显示 SPY 基准
+        显示 {benchmarkLabel} 基准
       </span>
     </button>
   );
@@ -267,10 +273,12 @@ function SummaryTable({
   dateLabel,
   summary,
   showBenchmark,
+  benchmarkLabel,
 }: {
   dateLabel: string;
   summary: ReturnType<typeof buildSummary>;
   showBenchmark: boolean;
+  benchmarkLabel: string;
 }) {
   const headers = ['本月', '本季', '本年', '开仓至今'];
   return (
@@ -294,11 +302,11 @@ function SummaryTable({
             </thead>
             <tbody>
               {showBenchmark && (
-                <SummaryRow name="SPY 基准" swatch={BENCHMARK_STROKE} values={summary.spy} muted />
+                <SummaryRow name={`${benchmarkLabel} 基准`} swatch={BENCHMARK_STROKE} values={summary.spy} muted />
               )}
               <SummaryRow name="组合 NAV" swatch={PORTFOLIO_STROKE} values={summary.portfolio} bold />
               {showBenchmark && (
-                <SummaryRow name="超额 vs SPY" values={summary.excess} dashed />
+                <SummaryRow name={`超额 vs ${benchmarkLabel}`} values={summary.excess} dashed />
               )}
             </tbody>
           </table>
@@ -361,7 +369,7 @@ function SummaryRow({
   );
 }
 
-function PerformanceChart({ rows, showBenchmark }: { rows: ChartRow[]; showBenchmark: boolean }) {
+function PerformanceChart({ rows, showBenchmark, benchmarkLabel }: { rows: ChartRow[]; showBenchmark: boolean; benchmarkLabel: string }) {
   const domain = chartDomain(
     rows.flatMap((row) => [showBenchmark ? row.spyCumulativePct : 0, row.portfolioCumulativePct]),
   );
@@ -377,7 +385,7 @@ function PerformanceChart({ rows, showBenchmark }: { rows: ChartRow[]; showBench
           <CartesianGrid stroke={GRID_STROKE} strokeWidth={1} vertical={false} />
           <Tooltip
             cursor={<CrosshairCursor domain={domain} />}
-            content={<PerformanceTooltip showBenchmark={showBenchmark} />}
+            content={<PerformanceTooltip showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />}
             isAnimationActive={false}
           />
           <XAxis
@@ -428,11 +436,13 @@ function PerformanceTooltip({
   payload,
   label,
   showBenchmark,
+  benchmarkLabel,
 }: {
   active?: boolean;
   payload?: Array<{ dataKey?: string; value?: number; payload?: ChartRow }>;
   label?: string;
   showBenchmark: boolean;
+  benchmarkLabel: string;
 }) {
   if (!active || !payload || payload.length === 0) return null;
   const row = payload[0]?.payload;
@@ -447,7 +457,7 @@ function PerformanceTooltip({
         bold
       />
       {showBenchmark && (
-        <Row swatch={BENCHMARK_STROKE} label="SPY累计" value={row.spyCumulativeReturn} />
+        <Row swatch={BENCHMARK_STROKE} label={`${benchmarkLabel}累计`} value={row.spyCumulativeReturn} />
       )}
       {showBenchmark && (
         <Row label="超额" value={row.excessCumulativeReturn} dashed />
@@ -455,7 +465,7 @@ function PerformanceTooltip({
       <div className="my-1 border-t border-border" />
       <Row label="组合当日" value={row.portfolioPeriodReturn} />
       {showBenchmark && (
-        <Row label="SPY当日" value={row.spyPeriodReturn} />
+        <Row label={`${benchmarkLabel}当日`} value={row.spyPeriodReturn} />
       )}
     </div>
   );
@@ -531,11 +541,13 @@ function CrosshairCursor({
 function PerformanceDetailTable({
   tableRows,
   showBenchmark,
+  benchmarkLabel,
   page,
   onPageChange,
 }: {
   tableRows: PerfRow[];
   showBenchmark: boolean;
+  benchmarkLabel: string;
   page: number;
   onPageChange: (page: number) => void;
 }) {
@@ -553,7 +565,7 @@ function PerformanceDetailTable({
             <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
               <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">日期</th>
               {showBenchmark && (
-                <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">SPY 累计 %</th>
+                <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">{benchmarkLabel} 累计 %</th>
               )}
               <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">组合 累计 %</th>
               {showBenchmark && (

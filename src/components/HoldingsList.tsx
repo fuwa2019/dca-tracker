@@ -18,6 +18,8 @@ interface Row {
   price: number | null;
   dayChangePct: number | null;
   dayChangeUsd: number | null;
+  sessionLabel: string | null;
+  isExtended: boolean;
   marketValue: number;
   weightPct: number;
   unrealizedUsd: number;
@@ -38,6 +40,8 @@ function buildRows({ positions, quoteByTicker, totalMarketValue, basis }: Props)
         price,
         dayChangePct,
         dayChangeUsd: dayChange !== null ? p.shares * dayChange : null,
+        sessionLabel: q?.sessionLabel ?? null,
+        isExtended: !!q?.isExtended,
         marketValue,
         weightPct: totalMarketValue > 0 ? marketValue / totalMarketValue : 0,
         unrealizedUsd,
@@ -86,6 +90,11 @@ function HoldingsTable({ rows }: { rows: Row[] }) {
             <td className="px-4 py-3 text-right tnum text-muted-foreground">{r.shares.toFixed(4)}</td>
             <td className="px-4 py-3 text-right tnum">
               {r.price !== null ? usd.format(r.price) : '—'}
+              {r.sessionLabel && (
+                <div className={cn('text-[10px]', r.isExtended ? 'text-brand' : 'text-muted-foreground')}>
+                  {r.sessionLabel}
+                </div>
+              )}
             </td>
             <td className={cn('px-4 py-3 text-right tnum', changeColor(r.dayChangePct))}>
               <span className="inline-flex items-center justify-end gap-1">
@@ -128,6 +137,7 @@ function HoldingsCards({ rows, basis: _basis }: { rows: Row[]; basis: 'avg' | 'f
               <div className="font-semibold">{r.ticker}</div>
               <div className="text-[11px] text-muted-foreground tnum">
                 {r.shares.toFixed(4)} 股 · {r.price !== null ? usd.format(r.price) : '—'}
+                {r.sessionLabel ? ` · ${r.sessionLabel}` : ''}
               </div>
             </div>
             <div className="text-right">

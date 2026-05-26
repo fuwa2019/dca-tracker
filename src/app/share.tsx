@@ -90,6 +90,9 @@ export function SharePage() {
   if (!data || 'error' in data) return <Centered>分享链接无效或已过期</Centered>;
 
   const last = history[history.length - 1];
+  const benchmark = historyQuery.data && !('error' in historyQuery.data)
+    ? (historyQuery.data.benchmark ?? 'SPY')
+    : 'SPY';
   const portfolioReturn = last?.returnPctUser ?? 0;
   const spyReturn = last?.returnPctSpy ?? 0;
   const excess = Number.isFinite((1 + portfolioReturn) / (1 + spyReturn) - 1)
@@ -127,14 +130,14 @@ export function SharePage() {
         <Card className="overflow-hidden p-0">
           <div className={cn('grid gap-0', showBenchmark ? 'md:grid-cols-3' : 'md:grid-cols-1')}>
             <SummaryCell
-              label="组合 TWR · 累计"
+                label="组合累计表现"
               value={last ? signedPct(portfolioReturn) : '—'}
               valueClass={cn(last ? changeColor(portfolioReturn) : 'text-muted-foreground', 'text-3xl')}
               sub={dateRange}
             />
             {showBenchmark && (
               <SummaryCell
-                label="SPY · 同期"
+                label={`${benchmark} · 同期`}
                 value={last ? signedPct(spyReturn) : '—'}
                 valueClass={last ? changeColor(spyReturn) : 'text-muted-foreground'}
                 sub="基准对照"
@@ -142,10 +145,10 @@ export function SharePage() {
             )}
             {showBenchmark && (
               <SummaryCell
-                label="超额 vs SPY"
+                label={`超额 vs ${benchmark}`}
                 value={last ? signedPct(excess) : '—'}
                 valueClass={last ? changeColor(excess) : 'text-muted-foreground'}
-                sub="(1+组合)/(1+SPY) − 1"
+                sub={`组合 / ${benchmark} 同期`}
               />
             )}
           </div>
@@ -158,6 +161,7 @@ export function SharePage() {
           availableRanges={ranges}
           showBenchmark={showBenchmark}
           onShowBenchmarkChange={setShowBenchmark}
+          benchmarkLabel={benchmark}
           loading={historyQuery.isLoading}
           emptyMessage={
             historyQuery.error

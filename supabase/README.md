@@ -4,10 +4,10 @@
 
 2. 项目 → SQL Editor → New query → **按顺序**粘贴并 Run：
    - `migrations/0001_init.sql`（核心表 + RLS + 分享函数 v1）
-   - `migrations/0002_daily_prices.sql`（资产曲线和 SPY 对照所需的历史价表）
+   - `migrations/0002_daily_prices.sql`（资产曲线和基准对照所需的历史价表）
    - `migrations/0003_shared_portfolio_v2.sql`（修复卖出后均价虚高，覆盖旧函数）
    - 后续已部署项目继续按编号运行新增 migration，当前最新版本到
-     `migrations/0025_persist_refresh_ms_in_history_status.sql`
+     `migrations/0027_dynamic_benchmarks_and_selected_performance.sql`
 
    新部署只需按顺序跑一次；已部署的项目跑新增的 sql 即可（idempotent）。
 

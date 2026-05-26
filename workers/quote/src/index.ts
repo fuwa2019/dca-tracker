@@ -4,8 +4,11 @@
  * GET /api/quote?symbols=VOO,QQQM,SMH
  *   → { quotes: [{ ticker, price, prevClose, change, changePct, marketState }] }
  *
- * GET /api/chart?symbol=VOO&range=1y&interval=1d
+ * GET /api/chart?symbol=VOO&range=1y&interval=1d&prepost=0
  *   → Yahoo v8/chart payload (passthrough)
+ *
+ * GET /api/search?q=VOO
+ *   → { results: [{ symbol, name, exchange, type }] }
  *
  * GET /api/history?symbols=VOO,QQQM,SMH,SPY&range=5y
  *   -> { series: [{ ticker, points: [{date, close, adjustedClose}] }] }
@@ -28,9 +31,10 @@ export interface Env {
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
 
-const QUOTE_TTL = 60 * 5;    // 5 min
+const QUOTE_TTL = 60;        // 1 min; front-end only polls while an app tab is open
 const CHART_TTL = 60 * 60;   // 1 h
 const HISTORY_TTL = 60 * 60; // 1 h (per symbol+range bucket)
+const SEARCH_TTL = 60 * 60 * 24;
 
 /** Default fallback watchlist for the scheduled cron when settings rows are unavailable. */
 const DEFAULT_CRON_TICKERS = ['VOO', 'QQQM', 'SMH', 'SPY'];
@@ -38,9 +42,20 @@ const DEFAULT_CRON_TICKERS = ['VOO', 'QQQM', 'SMH', 'SPY'];
 interface QuoteOut {
   ticker: string;
   price: number | null;
+  displayPrice: number | null;
   prevClose: number | null;
   change: number | null;
   changePct: number | null;
+  regularPrice: number | null;
+  preMarketPrice: number | null;
+  preMarketChange: number | null;
+  preMarketChangePct: number | null;
+  postMarketPrice: number | null;
+  postMarketChange: number | null;
+  postMarketChangePct: number | null;
+  session: 'pre_market' | 'regular' | 'after_hours' | 'overnight' | 'closed' | 'unknown';
+  sessionLabel: string;
+  isExtended: boolean;
   marketState: string | null;
   source: 'yahoo-v7' | 'yahoo-v8';
   cachedAt: string;
@@ -60,6 +75,9 @@ export default {
       if (url.pathname === '/api/chart') {
         return withCors(await handleChart(url, env), corsHeaders);
       }
+      if (url.pathname === '/api/search') {
+        return withCors(await handleSearch(url, env), corsHeaders);
+      }
       if (url.pathname === '/api/history') {
         return withCors(await handleHistory(url, env, ctx), corsHeaders);
       }
@@ -75,7 +93,7 @@ export default {
 
   /**
    * Scheduled trigger — runs after US market close (UTC 22:15 = ET 17:15 EST / 18:15 EDT).
-   * Pulls the union of every user's watchlist + SPY, fetches recent closes, and upserts
+   * Pulls the union of every user's watchlist + configured benchmarks, fetches recent closes, and upserts
    * into daily_prices. Idempotent thanks to PK (ticker, trade_date).
    */
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
@@ -108,17 +126,21 @@ async function runDailyPriceSync(env: Env): Promise<void> {
 
 async function collectCronTickers(env: Env): Promise<string[]> {
   try {
-    const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/settings?select=watchlist`, {
+    const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/settings?select=watchlist,benchmarks,selected_benchmark`, {
       headers: {
         apikey: env.SUPABASE_SERVICE_ROLE_KEY!,
         Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY!}`,
       },
     });
     if (!r.ok) throw new Error(`settings ${r.status}`);
-    const rows = (await r.json()) as Array<{ watchlist?: string[] }>;
+    const rows = (await r.json()) as Array<{ watchlist?: string[]; benchmarks?: string[]; selected_benchmark?: string }>;
     const set = new Set<string>();
-    for (const row of rows) for (const t of row.watchlist ?? []) set.add(t.toUpperCase());
-    set.add('SPY'); // always need SPY for benchmark
+    for (const row of rows) {
+      for (const t of row.watchlist ?? []) set.add(t.toUpperCase());
+      for (const t of row.benchmarks ?? []) set.add(t.toUpperCase());
+      if (row.selected_benchmark) set.add(row.selected_benchmark.toUpperCase());
+    }
+    set.add('SPY'); // default benchmark fallback
     return [...set];
   } catch (err) {
     console.warn('[cron] settings fetch failed, falling back to DEFAULT_CRON_TICKERS', err);
@@ -207,19 +229,43 @@ async function handleChart(url: URL, env: Env): Promise<Response> {
   const symbol = (url.searchParams.get('symbol') ?? '').trim().toUpperCase();
   const range = url.searchParams.get('range') ?? '1y';
   const interval = url.searchParams.get('interval') ?? '1d';
+  const prepost = url.searchParams.get('prepost') === '1' || url.searchParams.get('includePrePost') === 'true';
   if (!symbol) return json({ error: 'missing_symbol' }, 400);
 
-  const cacheKey = `chart:${symbol}:${range}:${interval}`;
+  const cacheKey = `chart:${symbol}:${range}:${interval}:${prepost ? 'prepost' : 'regular'}`;
   const cached = await env.QUOTE_CACHE.get(cacheKey, 'json');
   if (cached) return json({ ...cached, cache: 'hit' });
 
-  const upstream = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false&events=div%2Csplit`;
+  const upstream = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=${prepost ? 'true' : 'false'}&events=div%2Csplit`;
   const r = await fetch(upstream, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
   if (!r.ok) return json({ error: 'upstream_error', status: r.status }, 502);
   const data = (await r.json()) as unknown;
 
   await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: CHART_TTL });
   return json(data);
+}
+
+async function handleSearch(url: URL, env: Env): Promise<Response> {
+  const q = (url.searchParams.get('q') ?? '').trim();
+  if (!q) return json({ results: [] });
+  const cacheKey = `search:${q.toUpperCase()}`;
+  const cached = await env.QUOTE_CACHE.get(cacheKey, 'json');
+  if (cached) return json({ results: cached, cache: 'hit' });
+  const upstream = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=8&newsCount=0&enableFuzzyQuery=true`;
+  const r = await fetch(upstream, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+  if (!r.ok) return json({ error: 'upstream_error', status: r.status }, 502);
+  const data = (await r.json()) as YahooSearch;
+  const results = (data.quotes ?? [])
+    .map((row) => ({
+      symbol: (row.symbol ?? '').trim().toUpperCase(),
+      name: row.shortname ?? row.longname ?? row.symbol ?? '',
+      exchange: row.exchange ?? null,
+      type: row.quoteType ?? null,
+    }))
+    .filter((row) => row.symbol)
+    .slice(0, 8);
+  await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(results), { expirationTtl: SEARCH_TTL });
+  return json({ results, cache: 'miss' });
 }
 
 interface HistoryPoint {
@@ -404,20 +450,51 @@ async function fetchV7Quotes(symbols: string[]): Promise<QuoteOut[]> {
   });
   if (!r.ok) throw new Error(`v7 ${r.status}`);
   const data = (await r.json()) as YahooV7Quote;
-  return (data.quoteResponse?.result ?? []).map((row) => ({
-    ticker: (row.symbol ?? '').trim().toUpperCase(),
-    price: numOrNull(row.regularMarketPrice),
-    prevClose: numOrNull(row.regularMarketPreviousClose),
-    change: numOrNull(row.regularMarketChange),
-    changePct: pctFromV7(row.regularMarketChangePercent),
-    marketState: row.marketState ?? null,
-    source: 'yahoo-v7' as const,
-    cachedAt: new Date().toISOString(),
-  }));
+  return (data.quoteResponse?.result ?? []).map((row) => {
+    const regularPrice = numOrNull(row.regularMarketPrice);
+    const prevClose = numOrNull(row.regularMarketPreviousClose);
+    const preMarketPrice = numOrNull(row.preMarketPrice);
+    const postMarketPrice = numOrNull(row.postMarketPrice);
+    const marketState = row.marketState ?? null;
+    const session = sessionFromMarketState(marketState);
+    const extendedPrice = session === 'pre_market' ? preMarketPrice : session === 'after_hours' ? postMarketPrice : null;
+    const displayPrice = extendedPrice ?? regularPrice;
+    const change = session === 'pre_market'
+      ? numOrNull(row.preMarketChange) ?? diff(displayPrice, prevClose)
+      : session === 'after_hours'
+        ? numOrNull(row.postMarketChange) ?? diff(displayPrice, regularPrice ?? prevClose)
+        : numOrNull(row.regularMarketChange);
+    const changePct = session === 'pre_market'
+      ? pctFromV7(row.preMarketChangePercent) ?? ratio(change, prevClose)
+      : session === 'after_hours'
+        ? pctFromV7(row.postMarketChangePercent) ?? ratio(change, regularPrice ?? prevClose)
+        : pctFromV7(row.regularMarketChangePercent);
+    return {
+      ticker: (row.symbol ?? '').trim().toUpperCase(),
+      price: displayPrice,
+      displayPrice,
+      prevClose,
+      change,
+      changePct,
+      regularPrice,
+      preMarketPrice,
+      preMarketChange: numOrNull(row.preMarketChange),
+      preMarketChangePct: pctFromV7(row.preMarketChangePercent),
+      postMarketPrice,
+      postMarketChange: numOrNull(row.postMarketChange),
+      postMarketChangePct: pctFromV7(row.postMarketChangePercent),
+      session,
+      sessionLabel: sessionLabel(session),
+      isExtended: session === 'pre_market' || session === 'after_hours' || session === 'overnight',
+      marketState,
+      source: 'yahoo-v7' as const,
+      cachedAt: new Date().toISOString(),
+    };
+  });
 }
 
 async function fetchV8Quote(symbol: string): Promise<QuoteOut | null> {
-  const upstream = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m`;
+  const upstream = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=true`;
   const r = await fetch(upstream, {
     headers: { 'User-Agent': UA, Accept: 'application/json' },
   });
@@ -427,18 +504,57 @@ async function fetchV8Quote(symbol: string): Promise<QuoteOut | null> {
   if (!meta) return null;
   const price = meta.regularMarketPrice ?? null;
   const prev = meta.chartPreviousClose ?? meta.previousClose ?? null;
+  const session = sessionFromMarketState(meta.marketState ?? null);
   const change = price !== null && prev !== null ? price - prev : null;
   const changePct = price !== null && prev !== null && prev !== 0 ? (price - prev) / prev : null;
   return {
     ticker: symbol.trim().toUpperCase(),
     price: numOrNull(price),
+    displayPrice: numOrNull(price),
     prevClose: numOrNull(prev),
     change: numOrNull(change),
     changePct: numOrNull(changePct),
+    regularPrice: numOrNull(meta.regularMarketPrice),
+    preMarketPrice: null,
+    preMarketChange: null,
+    preMarketChangePct: null,
+    postMarketPrice: null,
+    postMarketChange: null,
+    postMarketChangePct: null,
+    session,
+    sessionLabel: sessionLabel(session),
+    isExtended: session === 'pre_market' || session === 'after_hours' || session === 'overnight',
     marketState: meta.marketState ?? null,
     source: 'yahoo-v8',
     cachedAt: new Date().toISOString(),
   };
+}
+
+function diff(a: number | null, b: number | null): number | null {
+  return a !== null && b !== null ? a - b : null;
+}
+
+function ratio(change: number | null, base: number | null): number | null {
+  return change !== null && base !== null && base !== 0 ? change / base : null;
+}
+
+function sessionFromMarketState(state: string | null): QuoteOut['session'] {
+  const s = (state ?? '').toUpperCase();
+  if (s === 'PRE' || s === 'PREPRE') return 'pre_market';
+  if (s === 'REGULAR') return 'regular';
+  if (s === 'POST' || s === 'POSTPOST') return 'after_hours';
+  if (s === 'OVERNIGHT') return 'overnight';
+  if (s === 'CLOSED') return 'closed';
+  return 'unknown';
+}
+
+function sessionLabel(session: QuoteOut['session']): string {
+  if (session === 'pre_market') return '盘前';
+  if (session === 'regular') return '盘中';
+  if (session === 'after_hours') return '盘后';
+  if (session === 'overnight') return '夜盘';
+  if (session === 'closed') return '收盘';
+  return '行情';
 }
 
 function numOrNull(v: unknown): number | null {
@@ -512,9 +628,25 @@ interface YahooV7Quote {
       regularMarketPreviousClose?: number;
       regularMarketChange?: number;
       regularMarketChangePercent?: number;
+      preMarketPrice?: number;
+      preMarketChange?: number;
+      preMarketChangePercent?: number;
+      postMarketPrice?: number;
+      postMarketChange?: number;
+      postMarketChangePercent?: number;
       marketState?: string;
     }>;
   };
+}
+
+interface YahooSearch {
+  quotes?: Array<{
+    symbol?: string;
+    shortname?: string;
+    longname?: string;
+    exchange?: string;
+    quoteType?: string;
+  }>;
 }
 
 interface YahooV8Chart {

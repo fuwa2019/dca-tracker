@@ -130,6 +130,8 @@ export interface SettingsRow {
   email_to: string | null;
   cost_basis_default: 'avg' | 'fifo';
   watchlist: string[];
+  benchmarks: string[];
+  selected_benchmark: string;
   updated_at: string;
 }
 export interface SettingsInsert {
@@ -141,6 +143,8 @@ export interface SettingsInsert {
   email_to?: string | null;
   cost_basis_default?: 'avg' | 'fifo';
   watchlist?: string[];
+  benchmarks?: string[];
+  selected_benchmark?: string;
   updated_at?: string;
 }
 export type SettingsUpdate = Partial<SettingsInsert>;
@@ -269,7 +273,7 @@ export interface Database {
         Returns: PortfolioHistory | { error: string };
       };
       performance_history: {
-        Args: Record<string, never>;
+        Args: { p_benchmark?: string | null };
         Returns: PerformanceHistory | { error: string };
       };
       refresh_portfolio_history_cache: {
@@ -277,7 +281,7 @@ export interface Database {
         Returns: HistoryCacheRefresh | { error: string };
       };
       refresh_performance_history_cache: {
-        Args: Record<string, never>;
+        Args: { p_benchmark?: string | null };
         Returns: HistoryCacheRefresh | { error: string };
       };
       refresh_due_performance_caches: {
@@ -307,7 +311,7 @@ export interface Database {
         }>;
       };
       performance_cache_status: {
-        Args: Record<string, never>;
+        Args: { p_benchmark?: string | null };
         Returns: PerformanceCacheStatus | { error: string };
       };
       refresh_shared_history_cache: {

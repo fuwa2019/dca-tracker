@@ -5,19 +5,22 @@ import { Card } from '@/components/ui/card';
 import { StatCard } from '@/components/StatCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { PerformancePanel } from '@/components/IbkrPerformancePanel';
-import { usePortfolioHistory } from '@/hooks/usePortfolio';
+import { usePortfolioHistory, useSettings } from '@/hooks/usePortfolio';
 import { usePerformanceCacheStatus, useRefreshPerformanceCache } from '@/hooks/usePerformanceCache';
 import { availableRanges, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
 import { signedPct, changeColor } from '@/lib/format';
+import { getSelectedBenchmark } from '@/lib/settings';
 import { cn } from '@/lib/utils';
 
 export function PerformancePage() {
   const [range, setRange] = useState<RangeKey>('ALL');
   const [showBenchmark, setShowBenchmark] = useState(true);
+  const { data: settings } = useSettings();
+  const selectedBenchmark = getSelectedBenchmark(settings);
 
-  const portfolioHistory = usePortfolioHistory();
-  const cacheStatus = usePerformanceCacheStatus();
-  const refreshCache = useRefreshPerformanceCache();
+  const portfolioHistory = usePortfolioHistory(selectedBenchmark);
+  const cacheStatus = usePerformanceCacheStatus(selectedBenchmark);
+  const refreshCache = useRefreshPerformanceCache(selectedBenchmark);
 
   // Auto-refresh removed: dirty status is shown to the user who decides when to refresh.
 
@@ -42,9 +45,9 @@ export function PerformancePage() {
 
   const last = history[history.length - 1];
   const portfolioReturn = last?.returnPctUser ?? 0;
-  const spyReturn = last?.returnPctSpy ?? 0;
-  const excess = Number.isFinite((1 + portfolioReturn) / (1 + spyReturn) - 1)
-    ? (1 + portfolioReturn) / (1 + spyReturn) - 1
+  const benchmarkReturn = last?.returnPctSpy ?? 0;
+  const excess = Number.isFinite((1 + portfolioReturn) / (1 + benchmarkReturn) - 1)
+    ? (1 + portfolioReturn) / (1 + benchmarkReturn) - 1
     : 0;
 
   const dirty = !!cacheStatus.data?.dirty;
@@ -57,7 +60,7 @@ export function PerformancePage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs text-muted-foreground">
-            交易口径 TWR · 复权价口径 · 基准 SPY
+            历史曲线 · 复权价口径 · 当前基准 {selectedBenchmark}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -126,25 +129,25 @@ export function PerformancePage() {
 
       <div className={cn('grid gap-3', showBenchmark ? 'sm:grid-cols-3' : 'sm:grid-cols-1')}>
         <StatCard
-          label="组合 TWR · 累计"
+          label="组合累计表现"
           value={signedPct(portfolioReturn)}
           tone={portfolioReturn >= 0 ? 'gain' : 'loss'}
           sub={history.length > 0 ? `${history[0].date} 至 ${last?.date}` : '暂无数据'}
         />
         {showBenchmark && (
           <StatCard
-            label="SPY 基准 · 累计"
-            value={signedPct(spyReturn)}
-            tone={spyReturn >= 0 ? 'gain' : 'loss'}
+            label={`${selectedBenchmark} 基准 · 累计`}
+            value={signedPct(benchmarkReturn)}
+            tone={benchmarkReturn >= 0 ? 'gain' : 'loss'}
             sub="同时间区间"
           />
         )}
         {showBenchmark && (
           <StatCard
-            label="超额 vs SPY"
+            label={`超额 vs ${selectedBenchmark}`}
             value={signedPct(excess)}
             className={changeColor(excess)}
-            sub="(1+组合)/(1+SPY) − 1"
+            sub={`组合 / ${selectedBenchmark} 同期`}
           />
         )}
       </div>
@@ -156,6 +159,7 @@ export function PerformancePage() {
         availableRanges={ranges}
         showBenchmark={showBenchmark}
         onShowBenchmarkChange={setShowBenchmark}
+        benchmarkLabel={selectedBenchmark}
         loading={portfolioHistory.isLoading}
       />
 
@@ -166,7 +170,7 @@ export function PerformancePage() {
             <div className="min-w-0 flex-1">
               <div className="font-medium text-foreground">还没有业绩缓存</div>
               <p className="mt-1 text-xs text-muted-foreground">
-                录入第一笔交易，并到「数据健康」补齐 SPY/持仓的历史日线价格，再点上方「刷新缓存」即可生成曲线。
+                录入第一笔交易，并到「数据健康」补齐 {selectedBenchmark}/持仓的历史日线价格，再点上方「刷新缓存」即可生成曲线。
               </p>
             </div>
           </div>

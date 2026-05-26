@@ -22,6 +22,7 @@ import {
 import { aggregatePositions } from '@/lib/calc/position';
 import { supabase } from '@/lib/supabase';
 import { fetchHistory } from '@/lib/quote';
+import { getBenchmarks, getSelectedBenchmark } from '@/lib/settings';
 import { cn } from '@/lib/utils';
 import type { Database as Db } from '@/lib/database.types';
 
@@ -56,6 +57,8 @@ export function DataHealthPage() {
   const { data: txns = [], isLoading: txnsLoading } = useTransactions();
   const { data: cashflows = [], isLoading: cashLoading } = useCashflows();
   const { data: settings } = useSettings();
+  const benchmarks = useMemo(() => getBenchmarks(settings), [settings]);
+  const selectedBenchmark = useMemo(() => getSelectedBenchmark(settings), [settings]);
 
   const positions = useMemo(
     () => aggregatePositions(txns).filter((p) => p.shares > 1e-9),
@@ -72,18 +75,20 @@ export function DataHealthPage() {
       const current = byTicker.get(ticker);
       if (!current || txn.trade_date < current) byTicker.set(ticker, txn.trade_date);
     }
-    if (earliestDate) byTicker.set('SPY', earliestDate);
+    if (earliestDate) {
+      for (const benchmark of benchmarks) byTicker.set(benchmark, earliestDate);
+    }
     return byTicker;
-  }, [earliestDate, txns]);
+  }, [benchmarks, earliestDate, txns]);
   const symbols = useMemo(
     () => [
       ...new Set([
         ...positions.map((p) => p.ticker),
         ...(settings?.watchlist ?? []),
-        'SPY',
+        ...benchmarks,
       ].map((s) => s.toUpperCase())),
     ].sort(),
-    [positions, settings?.watchlist],
+    [benchmarks, positions, settings?.watchlist],
   );
   const coverageItems = useMemo<DailyPriceCoverageItem[]>(
     () => symbols.map((ticker) => ({
@@ -93,8 +98,8 @@ export function DataHealthPage() {
     [coverageStartDates, symbols],
   );
 
-  const cacheStatus = usePerformanceCacheStatus();
-  const refreshCache = useRefreshPerformanceCache();
+  const cacheStatus = usePerformanceCacheStatus(selectedBenchmark);
+  const refreshCache = useRefreshPerformanceCache(selectedBenchmark);
 
   const priceRows = useQuery<DailyPriceCoverageRow[]>({
     queryKey: ['price_coverage', symbols.join(','), JSON.stringify(coverageItems)],
@@ -262,6 +267,7 @@ export function DataHealthPage() {
             value={adjustedMissing.length === 0 ? '完整' : `${adjustedMissing.length} 个 ticker 缺复权价`}
             tone={adjustedMissing.length === 0 ? 'ok' : 'warn'}
           />
+          <StatusLine label="当前基准" value={selectedBenchmark} />
           <StatusLine label="监控代码" value={symbols.join(', ') || '暂无'} />
         </CardContent>
       </Card>

@@ -69,7 +69,7 @@ export function CashflowsPage() {
         <EmptyState
           icon={Plus}
           title="还没有资金流水"
-          description="第一笔 CNY → USD 转账录进来后，汇兑损耗、TWR 起算点、SPY 基准都会自动开始计算。"
+          description="第一笔 CNY → USD 转账录进来后，汇兑损耗、XIRR 年化和基准曲线都会自动开始计算。"
           action={
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus className="h-3.5 w-3.5" /> 添加第一笔

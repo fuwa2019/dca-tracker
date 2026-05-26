@@ -134,12 +134,12 @@ class RouteErrorBoundary extends Component<
 
 function TopBar({ title }: { title: string }) {
   return (
-    <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-      <div className="flex flex-col gap-y-1 px-4 py-2.5 lg:flex-row lg:items-center lg:gap-x-3 lg:px-8 lg:py-3">
+    <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+      <div className="flex flex-col gap-y-1 px-3 py-2 lg:flex-row lg:items-center lg:gap-x-3 lg:px-6 lg:py-2.5">
         {/* Row 1 (mobile): Logo + title + ThemeToggle; Row 1 (desktop): title only */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Logo className="lg:hidden" />
-          <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight lg:text-lg">{title}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight">{title}</h1>
           <div className="lg:hidden">
             <ThemeToggle />
           </div>
@@ -163,15 +163,15 @@ function TopBar({ title }: { title: string }) {
 function DesktopNav() {
   const groups: Array<NavItem['group']> = ['overview', 'tracking', 'ops'];
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-surface lg:flex">
-      <div className="flex items-center gap-2 px-5 pt-5">
+    <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface lg:flex">
+      <div className="flex items-center gap-2 px-4 pt-4">
         <Logo />
         <div className="leading-tight">
           <div className="text-sm font-semibold">DCA Tracker</div>
           <div className="text-[11px] text-muted-foreground">个人定投分析</div>
         </div>
       </div>
-      <nav className="mt-6 flex flex-col gap-5 px-3 pb-6">
+      <nav className="mt-5 flex flex-col gap-4 px-2.5 pb-6">
         {groups.map((group) => (
           <div key={group}>
             <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -185,7 +185,7 @@ function DesktopNav() {
                   end={to === '/'}
                   className={({ isActive }) =>
                     cn(
-                      'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                      'group relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors',
                       isActive
                         ? 'bg-brand/10 text-foreground'
                         : 'text-muted-foreground hover:bg-surface-elevated hover:text-foreground',
@@ -211,8 +211,8 @@ function DesktopNav() {
           </div>
         ))}
       </nav>
-      <div className="mt-auto px-5 py-4 text-[10px] text-muted-foreground">
-        v1.0 · 组合业绩分析与脱敏共享
+      <div className="mt-auto border-t border-border px-4 py-3 text-[10px] text-muted-foreground">
+        v2.0 · 组合业绩分析与脱敏共享
       </div>
     </aside>
   );
@@ -221,7 +221,7 @@ function DesktopNav() {
 function MobileNav() {
   return (
     <nav className="safe-bottom sticky bottom-0 z-20 border-t border-border bg-background/95 backdrop-blur lg:hidden">
-      <div className="flex">
+      <div className="flex px-1">
         {MOBILE_NAV.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -229,7 +229,7 @@ function MobileNav() {
             end={to === '/'}
             className={({ isActive }) =>
               cn(
-                'relative flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] transition-colors',
+                'relative flex flex-1 flex-col items-center gap-0.5 rounded-md py-2 text-[10px] transition-colors',
                 isActive ? 'text-brand' : 'text-muted-foreground',
               )
             }
@@ -258,7 +258,7 @@ function Logo({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-brand-foreground text-sm font-bold',
+        'flex h-8 w-8 items-center justify-center rounded-md bg-brand text-brand-foreground text-sm font-bold',
         className,
       )}
     >

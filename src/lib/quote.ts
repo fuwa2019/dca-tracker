@@ -3,9 +3,20 @@ import { isoDateInNewYork, isNyseHoliday } from '@/lib/nyse-calendar';
 export interface Quote {
   ticker: string;
   price: number | null;
+  displayPrice?: number | null;
   prevClose: number | null;
   change: number | null;
   changePct: number | null;
+  regularPrice?: number | null;
+  preMarketPrice?: number | null;
+  preMarketChange?: number | null;
+  preMarketChangePct?: number | null;
+  postMarketPrice?: number | null;
+  postMarketChange?: number | null;
+  postMarketChangePct?: number | null;
+  session?: UsMarketSessionKey | 'unknown';
+  sessionLabel?: string;
+  isExtended?: boolean;
   marketState: string | null;
   source: string;
   cachedAt: string;
@@ -14,6 +25,13 @@ export interface Quote {
 export interface HistorySeries {
   ticker: string;
   points: Array<{ date: string; close: number; adjustedClose?: number }>;
+}
+
+export interface SymbolSearchResult {
+  symbol: string;
+  name: string;
+  exchange?: string | null;
+  type?: string | null;
 }
 
 const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
@@ -50,10 +68,21 @@ export async function fetchQuotes(symbols: string[]): Promise<Quote[]> {
 
 export async function fetchChart(symbol: string, range = '1y', interval = '1d') {
   if (!WORKER_BASE) return null;
-  const url = `${WORKER_BASE}/api/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&interval=${interval}`;
+  const includePrePost = range === '1d' || interval.endsWith('m');
+  const url = `${WORKER_BASE}/api/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&interval=${interval}&prepost=${includePrePost ? '1' : '0'}`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`chart http ${r.status}`);
   return r.json();
+}
+
+export async function searchSymbols(query: string): Promise<SymbolSearchResult[]> {
+  if (!WORKER_BASE) return [];
+  const q = query.trim();
+  if (q.length < 1) return [];
+  const r = await fetch(`${WORKER_BASE}/api/search?q=${encodeURIComponent(q)}`);
+  if (!r.ok) throw new Error(`search http ${r.status}`);
+  const data = (await r.json()) as { results?: SymbolSearchResult[] };
+  return data.results ?? [];
 }
 
 export async function fetchHistory(

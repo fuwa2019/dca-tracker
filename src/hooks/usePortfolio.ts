@@ -47,11 +47,12 @@ export function useSettings() {
   });
 }
 
-export function usePortfolioHistory() {
+export function usePortfolioHistory(benchmark?: string) {
+  const normalizedBenchmark = benchmark?.trim().toUpperCase() || undefined;
   return useQuery<PortfolioHistory | null>({
-    queryKey: ['portfolio_history'],
+    queryKey: ['portfolio_history', normalizedBenchmark ?? 'default'],
     queryFn: async () => {
-      const performance = await supabase.rpc('performance_history');
+      const performance = await rpcPerformanceHistory(normalizedBenchmark);
       if (!performance.error && performance.data && !('error' in performance.data)) {
         return normalizeHistory(performance.data as PerformanceHistory);
       }
@@ -89,6 +90,14 @@ export function usePortfolioHistory() {
     placeholderData: (previous) => previous,
     refetchOnWindowFocus: false,
   });
+}
+
+async function rpcPerformanceHistory(benchmark?: string) {
+  if (benchmark) {
+    const withBenchmark = await supabase.rpc('performance_history', { p_benchmark: benchmark });
+    if (!withBenchmark.error || !isMissingRpc(withBenchmark.error)) return withBenchmark;
+  }
+  return supabase.rpc('performance_history');
 }
 
 function normalizeHistory(history: PerformanceHistory | PortfolioHistory | SharedHistory): PortfolioHistory {
@@ -135,7 +144,7 @@ export function useTotalInvested() {
 
 /**
  * Cash USD currently sitting in Schwab — i.e. money you deposited but haven't
- * deployed into stock yet. Must be included in NAV so XIRR / TWR / charts don't
+ * deployed into stock yet. Must be included in NAV so XIRR / charts don't
  * report a fake loss when you've deposited more than you've bought.
  *
  *   cash = Σ cashflow.usd_amount − Σ buy_notional + Σ sell_notional

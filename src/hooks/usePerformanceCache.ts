@@ -18,28 +18,38 @@ function isMissingRpc(error: { code?: string; message?: string; status?: number 
   );
 }
 
-export function usePerformanceCacheStatus() {
+export function usePerformanceCacheStatus(benchmark?: string) {
   const qc = useQueryClient();
+  const normalizedBenchmark = benchmark?.trim().toUpperCase() || undefined;
+  const queryKey = ['performance_cache_status', normalizedBenchmark ?? 'default'];
   return useQuery<PerformanceCacheStatus | null>({
-    queryKey: ['performance_cache_status'],
+    queryKey,
     queryFn: async () => {
-      const previous = qc.getQueryData<PerformanceCacheStatus | null>(['performance_cache_status']);
-      const { data, error } = await supabase.rpc('performance_cache_status');
+      const previous = qc.getQueryData<PerformanceCacheStatus | null>(queryKey);
+      const { data, error } = await rpcPerformanceCacheStatus(normalizedBenchmark);
       if (error) {
         if (isMissingRpc(error)) {
-          const fallback = await readHistoryStatusFallback();
+          const fallback = await readHistoryStatusFallback(normalizedBenchmark);
           return fallback ? preserveRefreshMs(fallback, previous) : fallback;
         }
         throw error;
       }
       if (!data || 'error' in data) {
-        const fallback = await readHistoryStatusFallback();
+        const fallback = await readHistoryStatusFallback(normalizedBenchmark);
         return fallback ? preserveRefreshMs(fallback, previous) : fallback;
       }
       return preserveRefreshMs(data as PerformanceCacheStatus, previous);
     },
     staleTime: 60_000,
   });
+}
+
+async function rpcPerformanceCacheStatus(benchmark?: string) {
+  if (benchmark) {
+    const withBenchmark = await supabase.rpc('performance_cache_status', { p_benchmark: benchmark });
+    if (!withBenchmark.error || !isMissingRpc(withBenchmark.error)) return withBenchmark;
+  }
+  return supabase.rpc('performance_cache_status');
 }
 
 function preserveRefreshMs(
@@ -76,12 +86,14 @@ function parseTimeMs(value?: string | null): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-export function useRefreshPerformanceCache() {
+export function useRefreshPerformanceCache(benchmark?: string) {
   const qc = useQueryClient();
+  const normalizedBenchmark = benchmark?.trim().toUpperCase() || undefined;
+  const statusKey = ['performance_cache_status', normalizedBenchmark ?? 'default'];
   return useMutation({
     mutationFn: async () => {
       const startedAt = performance.now();
-      const { data, error } = await supabase.rpc('refresh_performance_history_cache');
+      const { data, error } = await rpcRefreshPerformanceCache(normalizedBenchmark);
       const elapsedMs = Math.max(0, Math.round(performance.now() - startedAt));
       if (error) {
         if (!isMissingRpc(error)) throw error;
@@ -97,13 +109,13 @@ export function useRefreshPerformanceCache() {
     },
     onSuccess: async (data) => {
       if (data && !('error' in data)) {
-        qc.setQueryData<PerformanceCacheStatus | null>(['performance_cache_status'], (current) => {
+        qc.setQueryData<PerformanceCacheStatus | null>(statusKey, (current) => {
           const refresh = data as HistoryCacheRefresh;
           if (refresh.refresh_ms == null) return current ?? null;
           return {
             ...(current ?? { exists: true }),
             exists: true,
-            benchmark: refresh.benchmark ?? current?.benchmark ?? 'SPY',
+            benchmark: refresh.benchmark ?? current?.benchmark ?? normalizedBenchmark ?? 'SPY',
             method: refresh.method ?? current?.method ?? 'TWR',
             points: refresh.points ?? current?.points,
             dirty: false,
@@ -129,6 +141,14 @@ export function useRefreshPerformanceCache() {
   });
 }
 
+async function rpcRefreshPerformanceCache(benchmark?: string) {
+  if (benchmark) {
+    const withBenchmark = await supabase.rpc('refresh_performance_history_cache', { p_benchmark: benchmark });
+    if (!withBenchmark.error || !isMissingRpc(withBenchmark.error)) return withBenchmark;
+  }
+  return supabase.rpc('refresh_performance_history_cache');
+}
+
 function withRefreshMsFallback(
   data: HistoryCacheRefresh | { error: string } | null,
   elapsedMs: number,
@@ -137,8 +157,10 @@ function withRefreshMsFallback(
   return { ...data, refresh_ms: elapsedMs };
 }
 
-async function readHistoryStatusFallback(): Promise<PerformanceCacheStatus | null> {
-  const performance = await supabase.rpc('performance_history');
+async function readHistoryStatusFallback(benchmark?: string): Promise<PerformanceCacheStatus | null> {
+  const performance = benchmark
+    ? await rpcPerformanceHistoryForStatus(benchmark)
+    : await supabase.rpc('performance_history');
   if (!performance.error && performance.data && !('error' in performance.data)) {
     return statusFromHistory(performance.data as PerformanceHistory);
   }
@@ -151,6 +173,12 @@ async function readHistoryStatusFallback(): Promise<PerformanceCacheStatus | nul
   if (legacy.error && !isMissingRpc(legacy.error)) throw legacy.error;
 
   return null;
+}
+
+async function rpcPerformanceHistoryForStatus(benchmark: string) {
+  const withBenchmark = await supabase.rpc('performance_history', { p_benchmark: benchmark });
+  if (!withBenchmark.error || !isMissingRpc(withBenchmark.error)) return withBenchmark;
+  return supabase.rpc('performance_history');
 }
 
 function statusFromHistory(history: PerformanceHistory | PortfolioHistory): PerformanceCacheStatus {

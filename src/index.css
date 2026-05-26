@@ -42,7 +42,7 @@
     --destructive: var(--loss);
     --destructive-foreground: 0 0% 100%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;
   }
 
   [data-theme='dark'] {
@@ -102,6 +102,25 @@
     font-feature-settings: 'tnum', 'ss01';
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
+  }
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+  }
+  input,
+  select,
+  textarea {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type='date'],
+  input[type='datetime-local'],
+  input[type='month'],
+  input[type='time'] {
+    min-height: 2.5rem;
+    line-height: 1.25rem;
   }
   /* Numbers everywhere should line up. */
   .tnum,

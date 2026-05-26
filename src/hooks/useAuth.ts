@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
+const DEV_BYPASS_AUTH = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH !== '0';
+const DEV_USER = {
+  id: '00000000-0000-4000-8000-000000000001',
+  email: 'local-preview@dca.dev',
+} as User;
+
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -12,12 +18,12 @@ export function useAuth() {
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       setSession(data.session);
-      setUser(data.session?.user ?? null);
+      setUser(data.session?.user ?? (DEV_BYPASS_AUTH ? DEV_USER : null));
       setLoading(false);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
-      setUser(s?.user ?? null);
+      setUser(s?.user ?? (DEV_BYPASS_AUTH ? DEV_USER : null));
     });
     return () => {
       mounted = false;
