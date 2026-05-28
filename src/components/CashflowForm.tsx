@@ -1,11 +1,13 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { todayLocalIso } from '@/lib/format';
+import { fetchCurrentExchangeRate } from '@/lib/quote';
+import { formatDefaultNumber, shouldAutoFillField } from '@/lib/formAutoFill';
 import type { Database } from '@/lib/database.types';
 
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
@@ -25,7 +27,8 @@ export function CashflowForm({ initial, onDone }: Props) {
   const [cnyAmount, setCnyAmount] = useState(initial ? String(initial.cny_amount) : '');
   const [usdInDate, setUsdInDate] = useState(initial?.usd_in_date ?? today);
   const [usdAmount, setUsdAmount] = useState(initial?.usd_amount ? String(initial.usd_amount) : '');
-  const [targetRate, setTargetRate] = useState(initial ? String(initial.target_rate) : '7.20');
+  const [targetRate, setTargetRate] = useState(initial ? String(initial.target_rate) : '');
+  const [rateTouched, setRateTouched] = useState(false);
   const [feesCny, setFeesCny] = useState(initial ? String(initial.fees_cny) : '0');
   const [feesUsd, setFeesUsd] = useState(initial ? String(initial.fees_usd) : '0');
   const [note, setNote] = useState(initial?.note ?? '');
@@ -40,8 +43,25 @@ export function CashflowForm({ initial, onDone }: Props) {
       setFeesCny(String(initial.fees_cny));
       setFeesUsd(String(initial.fees_usd));
       setNote(initial.note ?? '');
+      setRateTouched(false);
     }
   }, [initial, today]);
+
+  const currentRate = useQuery<number | null>({
+    queryKey: ['fx-rate', 'USDCNY'],
+    queryFn: fetchCurrentExchangeRate,
+    enabled: !isEdit,
+    staleTime: 10 * 60_000,
+    gcTime: 30 * 60_000,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    const value = currentRate.data;
+    if (value == null) return;
+    if (!shouldAutoFillField({ isEdit, touched: rateTouched, currentValue: targetRate })) return;
+    setTargetRate(formatDefaultNumber(value, 4));
+  }, [currentRate.data, isEdit, rateTouched, targetRate]);
 
   const cny = Number(cnyAmount) || 0;
   const usd = Number(usdAmount) || 0;
@@ -116,7 +136,27 @@ export function CashflowForm({ initial, onDone }: Props) {
       <Section title="汇率与手续费" hint="汇率写「CNY/USD」（例如 7.20）。CNY 手续费会计入损耗，USD 手续费仅作展示。">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field id="rate" label="参考汇率">
-            <Input id="rate" type="number" step="0.0001" inputMode="decimal" value={targetRate} onChange={(e) => setTargetRate(e.target.value)} required />
+            <Input
+              id="rate"
+              type="number"
+              step="0.0001"
+              inputMode="decimal"
+              value={targetRate}
+              onChange={(e) => {
+                setRateTouched(true);
+                setTargetRate(e.target.value);
+              }}
+              required
+            />
+            {!isEdit && currentRate.isFetching && !targetRate && (
+              <p className="text-[11px] text-muted-foreground">正在填入当前参考汇率…</p>
+            )}
+            {!isEdit && currentRate.isError && !targetRate && (
+              <p className="text-[11px] text-warn">当前汇率暂时获取失败，可手动填写后继续保存。</p>
+            )}
+            {!isEdit && currentRate.data === null && !currentRate.isFetching && !targetRate && (
+              <p className="text-[11px] text-warn">当前汇率暂无可用报价，可手动填写后继续保存。</p>
+            )}
           </Field>
           <Field id="fees-cny" label="CNY 手续费">
             <Input id="fees-cny" type="number" step="0.01" inputMode="decimal" value={feesCny} onChange={(e) => setFeesCny(e.target.value)} />

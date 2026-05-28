@@ -139,7 +139,7 @@ export function DataHealthPage() {
   const cacheDirty = cacheStatus.data?.dirty ?? false;
   const cacheExists = cacheStatus.data?.exists ?? false;
   const cachePoints = cacheStatus.data?.points;
-  const newestSpy = coverage.find((c) => c.ticker === 'SPY')?.lastDate ?? null;
+  const newestBenchmark = coverage.find((c) => c.ticker === selectedBenchmark)?.lastDate ?? null;
 
   const backfillPrices = useMutation({
     mutationFn: async () => {
@@ -206,7 +206,7 @@ export function DataHealthPage() {
             <div>
               <CardTitle className="text-base">运维操作</CardTitle>
               <CardDescription className="text-xs">
-                按顺序：先补价格，再刷缓存。业绩曲线只使用 SPY 实际价格日，处理完成后回到「业绩」页确认曲线。
+                按顺序：先补价格，再刷缓存。业绩曲线使用当前基准的实际价格日，处理完成后回到「业绩」页确认曲线。
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -265,8 +265,8 @@ export function DataHealthPage() {
           />
           <StatusLine
             label="交易日历"
-            value={newestSpy ? `SPY 价格日至 ${newestSpy}` : '等待 SPY 价格'}
-            tone={newestSpy ? 'ok' : 'warn'}
+            value={newestBenchmark ? `${selectedBenchmark} 价格日至 ${newestBenchmark}` : `等待 ${selectedBenchmark} 价格`}
+            tone={newestBenchmark ? 'ok' : 'warn'}
           />
           <StatusLine
             label="复权价覆盖"

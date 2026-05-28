@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, YAxis, Tooltip } from 'recharts';
 import {
   ArrowUpRight,
-  BarChart3,
   Plus,
   ArrowLeftRight,
   Activity,
@@ -434,12 +433,11 @@ function QuickActions() {
   const actions = [
     { to: '/transactions', label: '添加交易', short: '交易', icon: Plus },
     { to: '/cashflows', label: '记一笔入金', short: '入金', icon: ArrowLeftRight },
-    { to: '/rebalance', label: '再平衡计算', short: '再平衡', icon: BarChart3 },
     { to: '/health', label: '数据健康', short: '健康', icon: Activity },
   ];
   return (
     <Card className="p-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {actions.map(({ to, label, short, icon: Icon }) => (
           <Button key={to} asChild variant="ghost" className="h-12 justify-start text-xs sm:text-sm">
             <Link to={to} className="whitespace-nowrap">

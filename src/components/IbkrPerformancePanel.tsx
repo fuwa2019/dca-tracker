@@ -172,7 +172,7 @@ export function PerformancePanel({
             )}
           </div>
 
-          {/* Desktop: info + SPY toggle */}
+          {/* Desktop: info + benchmark toggle */}
           <div className="hidden items-center gap-2 sm:flex">
             <button
               type="button"
@@ -199,7 +199,7 @@ export function PerformancePanel({
         {infoOpen && (
           <div className="border-b border-border bg-surface px-4 py-3 text-[12px] leading-5 text-muted-foreground">
             累积基准比较采用交易口径时间加权回报 (TWR)。组合线来自已录入交易和复权日线；{benchmarkLabel} 基准线使用同一组交易资金流买入 {benchmarkLabel}。超额收益按
-            {' '}(1+组合)/(1+{benchmarkLabel})-1 计算。曲线日期采用 SPY 实际价格日，休市日不纳入统计。
+            {' '}(1+组合)/(1+{benchmarkLabel})-1 计算。曲线日期采用 {benchmarkLabel} 实际价格日，休市日不纳入统计。
           </div>
         )}
 
@@ -218,11 +218,11 @@ export function PerformancePanel({
                 <div>
                   <div className="text-sm font-semibold tracking-tight">业绩曲线</div>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    只统计 SPY 有实际日线价格的美股交易日；周末、节假日和休市日不会生成平点。
+                    只统计 {benchmarkLabel} 有实际日线价格的美股交易日；周末、节假日和休市日不会生成平点。
                   </p>
                 </div>
                 <div className="rounded-md border border-border bg-surface-elevated px-2 py-1 text-[11px] text-muted-foreground">
-                  Benchmark calendar · SPY
+                  Benchmark calendar · {benchmarkLabel}
                 </div>
               </div>
             </div>
@@ -240,7 +240,7 @@ export function PerformancePanel({
       </Card>
 
       <p className="text-[11px] leading-5 text-muted-foreground">
-        业绩基于已录入交易和日线复权价；曲线采用交易口径时间加权回报 (TWR)，并以 SPY 实际价格日作为交易日历。历史数据仅供分析参考，不构成投资建议。
+        业绩基于已录入交易和日线复权价；曲线采用交易口径时间加权回报 (TWR)，并以 {benchmarkLabel} 实际价格日作为交易日历。历史数据仅供分析参考，不构成投资建议。
       </p>
     </div>
   );

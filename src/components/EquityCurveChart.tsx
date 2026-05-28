@@ -29,12 +29,13 @@ interface Props {
   metric: ChartMetric;
   range: RangeKey;
   showBenchmark: boolean;
+  benchmarkLabel?: string;
   /** When true, suppress transaction markers + per-day transaction detail in tooltip.
    *  Used by the public share view to avoid leaking trading dates/sizes. */
   redacted?: boolean;
 }
 
-export function EquityCurveChart({ history, metric, range, showBenchmark, redacted = false }: Props) {
+export function EquityCurveChart({ history, metric, range, showBenchmark, benchmarkLabel = 'SPY', redacted = false }: Props) {
   const sliced = useMemo(() => sliceByRange(history, range), [history, range]);
   const markers = useMemo(
     () => (redacted ? [] : aggregateMarkers(sliced, markerGranularityFor(range))),
@@ -78,7 +79,7 @@ export function EquityCurveChart({ history, metric, range, showBenchmark, redact
               strokeWidth={1.5}
               strokeDasharray="4 3"
               dot={sliced.length <= 14 ? { r: 2, strokeWidth: 0, fill: 'hsl(var(--muted-foreground))' } : false}
-              name="SPY 对照"
+              name={`${benchmarkLabel} 对照`}
               isAnimationActive={false}
             />
           )}
@@ -120,7 +121,7 @@ export function EquityCurveChart({ history, metric, range, showBenchmark, redact
 
           <Tooltip
             cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '3 3' }}
-            content={<EquityTooltip metric={metric} showBenchmark={showBenchmark} redacted={redacted} />}
+            content={<EquityTooltip metric={metric} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} redacted={redacted} />}
             isAnimationActive={false}
           />
         </ComposedChart>
@@ -156,12 +157,14 @@ interface TooltipPayloadItem {
 function EquityTooltip({
   metric,
   showBenchmark,
+  benchmarkLabel,
   redacted,
   active,
   payload,
 }: {
   metric: ChartMetric;
   showBenchmark: boolean;
+  benchmarkLabel: string;
   redacted?: boolean;
   active?: boolean;
   payload?: TooltipPayloadItem[];
@@ -185,7 +188,7 @@ function EquityTooltip({
         <>
           <div className={cn('text-sm tnum', changeColor(spyValue))}>
             {metric === 'returnPct' ? signedPct(spyValue) : signedUsd(spyValue)}
-            <span className="ml-1 text-[10px] font-normal text-muted-foreground">SPY 对照</span>
+            <span className="ml-1 text-[10px] font-normal text-muted-foreground">{benchmarkLabel} 对照</span>
           </div>
           <div className={cn('mt-1 border-t pt-1 text-xs tnum', changeColor(diff))}>
             差值 {metric === 'returnPct' ? signedPct(diff) : signedUsd(diff)}

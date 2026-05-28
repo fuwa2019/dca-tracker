@@ -1,4 +1,10 @@
 import { isoDateInNewYork, isNyseHoliday } from '@/lib/nyse-calendar';
+import {
+  apiLimitConfigFromEnv,
+  rateLimited,
+  splitIntoBatches,
+  type ApiEndpoint,
+} from '@/lib/apiRateLimit';
 
 export interface Quote {
   ticker: string;
@@ -35,6 +41,8 @@ export interface SymbolSearchResult {
 }
 
 const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
+const API_LIMIT_CONFIG = apiLimitConfigFromEnv(import.meta.env);
+const quoteInflight = new Map<string, Promise<Quote[]>>();
 
 export type UsMarketSessionKey = 'pre_market' | 'regular' | 'after_hours' | 'overnight' | 'closed';
 
@@ -51,26 +59,51 @@ export async function fetchQuotes(symbols: string[]): Promise<Quote[]> {
     if (import.meta.env.DEV) console.warn('[quote] VITE_QUOTE_WORKER_URL missing — quotes unavailable');
     return [];
   }
-  if (symbols.length === 0) return [];
-  const url = `${WORKER_BASE}/api/quote?symbols=${encodeURIComponent(symbols.join(','))}`;
+  const normalized = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))].sort();
+  if (normalized.length === 0) return [];
+  const key = normalized.join(',');
+  const existing = quoteInflight.get(key);
+  if (existing) return existing;
+
+  const request = fetchQuoteBatches(normalized).finally(() => quoteInflight.delete(key));
+  quoteInflight.set(key, request);
+  return request;
+}
+
+async function fetchQuoteBatches(symbols: string[]): Promise<Quote[]> {
+  const batches = splitIntoBatches(symbols, API_LIMIT_CONFIG.maxSymbolsPerQuoteRequest);
+  const results: Quote[] = [];
+  for (const batch of batches) {
+    results.push(...await limitedFetchJson<{ quotes: Quote[] }>('quote', quoteUrl(batch)).then((data) => data.quotes ?? []));
+  }
+  return results;
+}
+
+function quoteUrl(symbols: string[]) {
+  return `${WORKER_BASE}/api/quote?symbols=${encodeURIComponent(symbols.join(','))}`;
+}
+
+async function limitedFetchJson<T>(endpoint: ApiEndpoint, url: string): Promise<T> {
   try {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`quote http ${r.status}`);
-    const data = (await r.json()) as { quotes: Quote[] };
-    const result = data.quotes ?? [];
-    if (import.meta.env.DEV && result.length === 0) console.warn('[quote] Worker returned 0 quotes — Yahoo upstream may be failing');
-    return result;
+    const r = await rateLimited(endpoint, () => fetch(url), API_LIMIT_CONFIG);
+    if (!r.ok) throw new Error(`${endpoint} http ${r.status}`);
+    return (await r.json()) as T;
   } catch (err) {
     if (import.meta.env.DEV) console.warn('[quote] fetch failed:', err);
     throw err;
   }
 }
 
+export async function fetchCurrentExchangeRate(): Promise<number | null> {
+  const [quote] = await fetchQuotes(['USDCNY=X']);
+  return quote?.price ?? quote?.displayPrice ?? quote?.regularPrice ?? null;
+}
+
 export async function fetchChart(symbol: string, range = '1y', interval = '1d') {
   if (!WORKER_BASE) return null;
   const includePrePost = range === '1d' || interval.endsWith('m');
   const url = `${WORKER_BASE}/api/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&interval=${interval}&prepost=${includePrePost ? '1' : '0'}`;
-  const r = await fetch(url);
+  const r = await rateLimited('chart', () => fetch(url), API_LIMIT_CONFIG);
   if (!r.ok) throw new Error(`chart http ${r.status}`);
   return r.json();
 }
@@ -79,7 +112,7 @@ export async function searchSymbols(query: string): Promise<SymbolSearchResult[]
   if (!WORKER_BASE) return [];
   const q = query.trim();
   if (q.length < 1) return [];
-  const r = await fetch(`${WORKER_BASE}/api/search?q=${encodeURIComponent(q)}`);
+  const r = await rateLimited('search', () => fetch(`${WORKER_BASE}/api/search?q=${encodeURIComponent(q)}`), API_LIMIT_CONFIG);
   if (!r.ok) throw new Error(`search http ${r.status}`);
   const data = (await r.json()) as { results?: SymbolSearchResult[] };
   return data.results ?? [];
@@ -95,7 +128,7 @@ export async function fetchHistory(
   const params = new URLSearchParams({ symbols: symbols.join(','), range });
   if (options?.persist === 'sync') params.set('persist', 'sync');
   const url = `${WORKER_BASE}/api/history?${params.toString()}`;
-  const r = await fetch(url);
+  const r = await rateLimited('history', () => fetch(url), API_LIMIT_CONFIG);
   if (!r.ok) {
     const body = await r.json().catch(() => ({}));
     const msg = (body as { message?: string }).message ?? `http ${r.status}`;

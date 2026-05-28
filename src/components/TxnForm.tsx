@@ -7,8 +7,10 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useTransactions } from '@/hooks/usePortfolio';
+import { useQuotes } from '@/hooks/useQuotes';
 import { aggregatePositions } from '@/lib/calc/position';
 import { todayLocalIso } from '@/lib/format';
+import { formatDefaultNumber, shouldAutoFillField } from '@/lib/formAutoFill';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/lib/database.types';
 
@@ -29,6 +31,7 @@ export function TxnForm({ initial, onDone }: Props) {
   const [ticker, setTicker] = useState(initial?.ticker ?? 'VOO');
   const [side, setSide] = useState<'buy' | 'sell'>(initial?.side ?? 'buy');
   const [price, setPrice] = useState(initial ? String(initial.price) : '');
+  const [priceTouched, setPriceTouched] = useState(false);
   const [shares, setShares] = useState(initial ? String(initial.shares) : '');
   const [kind, setKind] = useState<'dca' | 'lumpsum'>(initial?.kind ?? 'dca');
   const [note, setNote] = useState(initial?.note ?? '');
@@ -42,8 +45,19 @@ export function TxnForm({ initial, onDone }: Props) {
       setShares(String(initial.shares));
       setKind(initial.kind);
       setNote(initial.note ?? '');
+      setPriceTouched(false);
     }
   }, [initial]);
+
+  const normalizedTicker = ticker.trim().toUpperCase();
+  const { data: tickerQuotes = [], isFetching: quoteFetching, isError: quoteError } = useQuotes([normalizedTicker]);
+  const quotePrice = tickerQuotes[0]?.price ?? tickerQuotes[0]?.displayPrice ?? tickerQuotes[0]?.regularPrice ?? null;
+
+  useEffect(() => {
+    if (quotePrice == null) return;
+    if (!shouldAutoFillField({ isEdit, touched: priceTouched, currentValue: price })) return;
+    setPrice(formatDefaultNumber(quotePrice, 4));
+  }, [isEdit, price, priceTouched, quotePrice]);
 
   // Max sellable shares for the current ticker (excluding this txn if editing).
   const maxSellable = useMemo(() => {
@@ -103,7 +117,16 @@ export function TxnForm({ initial, onDone }: Props) {
         </div>
         <div className="space-y-1.5 min-w-0">
           <Label htmlFor="ticker">股票代码</Label>
-          <Input id="ticker" value={ticker} onChange={(e) => setTicker(e.target.value.toUpperCase())} required />
+          <Input
+            id="ticker"
+            value={ticker}
+            onChange={(e) => {
+              const next = e.target.value.toUpperCase();
+              if (next !== ticker && !priceTouched) setPrice('');
+              setTicker(next);
+            }}
+            required
+          />
         </div>
       </div>
 
@@ -140,7 +163,24 @@ export function TxnForm({ initial, onDone }: Props) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5 min-w-0">
           <Label htmlFor="price">成交价 (USD)</Label>
-          <Input id="price" type="number" step="0.0001" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} required />
+          <Input
+            id="price"
+            type="number"
+            step="0.0001"
+            inputMode="decimal"
+            value={price}
+            onChange={(e) => {
+              setPriceTouched(true);
+              setPrice(e.target.value);
+            }}
+            required
+          />
+          {!isEdit && quoteFetching && !price && (
+            <p className="text-[11px] text-muted-foreground">正在填入 {normalizedTicker || '当前标的'} 的最新报价…</p>
+          )}
+          {!isEdit && quoteError && !price && (
+            <p className="text-[11px] text-warn">当前报价暂时获取失败，可手动填写成交价。</p>
+          )}
         </div>
         <div className="space-y-1.5 min-w-0">
           <Label htmlFor="shares">股数</Label>

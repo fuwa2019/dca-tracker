@@ -54,10 +54,10 @@ export function PerformancePage() {
   const hasCache = !!cacheStatus.data?.exists || history.length > 0;
   const cacheError = cacheStatus.data?.error;
   const generatedAt = cacheStatus.data?.updated_at ?? cacheStatus.data?.generated_at ?? portfolioHistory.data?.generated_at;
-  const tradingCalendar = portfolioHistory.data?.trading_calendar ?? portfolioHistory.data?.benchmark ?? 'SPY';
+  const tradingCalendar = portfolioHistory.data?.trading_calendar ?? portfolioHistory.data?.benchmark ?? selectedBenchmark;
   const usesTradingDays = portfolioHistory.data?.excluded_non_trading_days ?? portfolioHistory.data?.date_basis === 'benchmark_price_dates';
   const reportLead = history.length > 0
-    ? `从 ${history[0].date} 到 ${last?.date}，组合累计 ${signedPct(portfolioReturn)}，相对 SPY ${signedPct(excess)}。`
+    ? `从 ${history[0].date} 到 ${last?.date}，组合累计 ${signedPct(portfolioReturn)}，相对 ${selectedBenchmark} ${signedPct(excess)}。`
     : '录入交易并补齐日线价格后，这里会生成一份可分享、可审计的业绩报告。';
 
   return (
@@ -67,7 +67,7 @@ export function PerformancePage() {
           <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
             Performance Report
           </div>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">交易业绩是否跑赢 SPY？</h2>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">交易业绩是否跑赢 {selectedBenchmark}？</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{reportLead}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
             <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">

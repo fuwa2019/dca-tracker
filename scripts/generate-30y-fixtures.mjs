@@ -283,7 +283,7 @@ function generateTransactions(prices) {
       price,
       shares: sellShares,
       kind: 'dca',
-      note: 'rebalance sell',
+      note: 'periodic sell',
       created_at: `${tradeDate}T14:00:00Z`,
       updated_at: `${tradeDate}T14:00:00Z`,
     });

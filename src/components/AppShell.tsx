@@ -7,7 +7,6 @@ import {
   BarChart3,
   LayoutDashboard,
   ListOrdered,
-  Scale,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -28,7 +27,6 @@ const NAV: ReadonlyArray<NavItem> = [
   { to: '/performance', label: '业绩', icon: BarChart3, group: 'overview' },
   { to: '/transactions', label: '交易', icon: ListOrdered, group: 'tracking' },
   { to: '/cashflows', label: '资金', icon: ArrowLeftRight, group: 'tracking' },
-  { to: '/rebalance', label: '再平衡', icon: Scale, group: 'tracking' },
   { to: '/health', label: '数据健康', icon: Activity, group: 'ops' },
   { to: '/settings', label: '设置', icon: Settings, group: 'ops' },
 ];
