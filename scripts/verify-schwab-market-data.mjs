@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const root = path.resolve(new URL('..', import.meta.url).pathname);
@@ -24,6 +25,7 @@ try {
   );
 
   const mod = await import(path.join(outDir, 'marketData.js'));
+  const workerMod = await importCompiledWorker(outDir);
   const env = {
     SCHWAB_CLIENT_ID: 'client-id',
     SCHWAB_CLIENT_SECRET: 'client-secret',
@@ -34,6 +36,18 @@ try {
 
   assert.deepEqual(mod.parseSymbolsParam(' voo, QQQM,voo,,smh '), ['VOO', 'QQQM', 'SMH'], 'symbols parse and de-dupe');
   assert.equal(mod.marketDataProviderFromEnv(env), 'schwab', 'provider env switch');
+  assert.equal(workerMod.dailyPriceSourceFromEnv(env), 'schwab', 'Schwab daily_prices source');
+  assert.equal(workerMod.dailyPriceSourceFromEnv({ ...env, MARKET_DATA_PROVIDER: 'yahoo' }), 'yahoo', 'Yahoo daily_prices source');
+  assert.equal(
+    workerMod.historyCacheKey('schwab', ['VOO', 'QQQM'], '5y'),
+    'history:schwab:VOO,QQQM:5y',
+    '/api/history cache key includes Schwab provider',
+  );
+  assert.equal(
+    workerMod.historyCacheKey('yahoo', ['VOO', 'QQQM'], '5y'),
+    'history:yahoo:VOO,QQQM:5y',
+    '/api/history cache key includes Yahoo provider',
+  );
   assert.throws(
     () => mod.assertSchwabMarketDataUrl('https://api.schwabapi.com/trader/v1/accounts'),
     /blocked_schwab_endpoint/,
@@ -49,6 +63,29 @@ try {
     'https://api.schwabapi.com/marketdata/v1/quotes?symbols=VOO',
     'allows marketdata quote endpoint',
   );
+
+  const upsertBodies = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init = {}) => {
+    upsertBodies.push(JSON.parse(String(init.body)));
+    return new Response('', { status: 200 });
+  };
+  try {
+    await workerMod.upsertDailyPrices(
+      { ...env, SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'service-role' },
+      'VOO',
+      [{ date: '2026-05-28', close: 500, adjustedClose: 499 }],
+    );
+    await workerMod.upsertDailyPrices(
+      { ...env, MARKET_DATA_PROVIDER: 'yahoo', SUPABASE_URL: 'https://example.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'service-role' },
+      'VOO',
+      [{ date: '2026-05-28', close: 500, adjustedClose: 499 }],
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(upsertBodies[0].p_rows[0].source, 'schwab', 'Schwab provider upserts daily_prices.source=schwab');
+  assert.equal(upsertBodies[1].p_rows[0].source, 'yahoo', 'Yahoo provider upserts daily_prices.source=yahoo');
 
   const calls = [];
   const fetcher = async (url, init = {}) => {
@@ -113,13 +150,30 @@ try {
   }));
   assert.doesNotMatch(sanitized, /client-secret|access-secret|refresh-secret/, 'secrets redacted from logs');
 
-  const perfSource = await import('node:fs/promises').then((fs) => fs.readFile(path.join(root, 'src/app/performance.tsx'), 'utf8'));
+  const perfSource = await readFile(path.join(root, 'src/app/performance.tsx'), 'utf8');
   assert.match(perfSource, /交易业绩是否跑赢 \{selectedBenchmark\}/, 'benchmark title uses selected benchmark');
   assert.doesNotMatch(perfSource, /交易业绩是否跑赢 SPY/, 'benchmark title does not hard-code SPY');
+
+  const readme = await readFile(path.join(root, 'README.md'), 'utf8');
+  const envExample = await readFile(path.join(root, '.env.example'), 'utf8');
+  const docs = `${readme}\n${envExample}`;
+  assert.match(docs, /SCHWAB_CLIENT_ID=your_schwab_app_key/, 'Schwab app key placeholder documented');
+  assert.doesNotMatch(docs, /SCHWAB_CLIENT_ID=(?!your_schwab_app_key\s*$)\S+/m, 'real Schwab app key not documented');
+  assert.doesNotMatch(docs, /SCHWAB_CLIENT_SECRET=\S+/, 'real Schwab client secret not documented');
+  assert.doesNotMatch(docs, /SCHWAB_REFRESH_TOKEN=\S+/, 'real Schwab refresh token not documented');
+  assert.doesNotMatch(docs, /access_token=\S+|Bearer\s+[A-Za-z0-9._~+/=-]+/, 'access and bearer tokens not documented');
 
   console.log('Schwab market data checks passed');
 } finally {
   await rm(outDir, { recursive: true, force: true });
+}
+
+async function importCompiledWorker(outDir) {
+  const indexPath = path.join(outDir, 'index.js');
+  const marketDataUrl = pathToFileURL(path.join(outDir, 'marketData.js')).href;
+  const source = await readFile(indexPath, 'utf8');
+  const loadableSource = source.replace("from './marketData';", `from '${marketDataUrl}';`);
+  return import(`data:text/javascript;charset=utf-8,${encodeURIComponent(loadableSource)}`);
 }
 
 function jsonResponse(body, init = {}) {

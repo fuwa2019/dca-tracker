@@ -286,6 +286,7 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
   const symbols = parseSymbolsParam(url.searchParams.get('symbols'), 10);
   const range = url.searchParams.get('range') ?? '5y';
   const persist = url.searchParams.get('persist') ?? '';
+  const provider = marketDataProviderFromEnv(env);
   if (symbols.length === 0) return json({ error: 'missing_symbols' }, 400);
   if (persist === 'sync' && (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY)) {
     return json({
@@ -294,7 +295,7 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
     }, 500);
   }
 
-  const cacheKey = `history:${symbols.join(',')}:${range}`;
+  const cacheKey = historyCacheKey(provider, symbols, range);
   const cached = await env.QUOTE_CACHE.get(cacheKey, 'json') as unknown;
   if (isHistorySeriesArray(cached)) {
     if (persist !== 'sync') return json({ series: cached, cache: 'hit' });
@@ -442,14 +443,23 @@ async function fetchYahooHistory(symbol: string, range: string): Promise<History
   return { ticker: symbol, points };
 }
 
-async function upsertDailyPrices(env: Env, ticker: string, points: HistoryPoint[]): Promise<void> {
+export function historyCacheKey(provider: ReturnType<typeof marketDataProviderFromEnv>, symbols: string[], range: string): string {
+  return `history:${provider}:${symbols.join(',')}:${range}`;
+}
+
+export function dailyPriceSourceFromEnv(env: Env): ReturnType<typeof marketDataProviderFromEnv> {
+  return marketDataProviderFromEnv(env);
+}
+
+export async function upsertDailyPrices(env: Env, ticker: string, points: HistoryPoint[]): Promise<void> {
   if (points.length === 0) return;
+  const source = dailyPriceSourceFromEnv(env);
   const rows = points.map((p) => ({
     ticker,
     trade_date: p.date,
     close: p.close,
     adjusted_close: p.adjustedClose ?? p.close,
-    source: 'yahoo',
+    source,
     updated_at: new Date().toISOString(),
   }));
   // Supabase RPC batch upsert. PostgREST limits payload, so chunk if >1000 rows.
