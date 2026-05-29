@@ -6,26 +6,26 @@
   :root,
   [data-theme='light'] {
     /* Surfaces */
-    --background: 220 14% 97%;        /* #F6F7F9 */
-    --surface: 0 0% 100%;             /* #FFFFFF — card */
-    --surface-elevated: 220 14% 97%;  /* #F6F7F9 — table headers / chips on cards */
-    --foreground: 220 39% 11%;        /* #111827 */
-    --muted-foreground: 220 9% 46%;   /* #6B7280 */
-    --border: 220 13% 91%;            /* #E5E7EB */
-    --input: 220 13% 91%;
-    --ring: 219 84% 56%;
+    --background: 225 24% 96%;
+    --surface: 0 0% 100%;
+    --surface-elevated: 232 30% 94%;
+    --foreground: 232 38% 12%;
+    --muted-foreground: 234 12% 43%;
+    --border: 229 22% 86%;
+    --input: 229 22% 86%;
+    --ring: 252 56% 50%;
 
     /* Brand & semantic */
-    --brand: 219 84% 56%;             /* #2F6FED — portfolio line, primary action */
+    --brand: 252 56% 50%;
     --brand-foreground: 0 0% 100%;
-    --gain: 142 71% 36%;              /* #16A34A — profit text */
-    --loss: 0 73% 51%;                /* #DC2626 — loss text */
-    --warn: 32 95% 44%;               /* #D97706 */
-    --info: 217 91% 60%;
-    --benchmark: 142 71% 36%;         /* SPY line — green family */
-    --chart-grid: 220 13% 91%;
-    --chart-axis: 220 9% 46%;
-    --crosshair: 220 9% 46%;
+    --gain: 158 64% 34%;
+    --loss: 348 72% 48%;
+    --warn: 38 92% 46%;
+    --info: 252 56% 58%;
+    --benchmark: 176 63% 37%;
+    --chart-grid: 230 20% 88%;
+    --chart-axis: 234 12% 43%;
+    --crosshair: 252 24% 42%;
 
     /* shadcn back-compat aliases */
     --card: var(--surface);
@@ -46,25 +46,25 @@
   }
 
   [data-theme='dark'] {
-    --background: 213 28% 6%;         /* #0B0F14 */
-    --surface: 213 30% 10%;           /* #111820 — card */
-    --surface-elevated: 211 33% 13%;  /* #16202B — elevated chip / table header */
-    --foreground: 220 13% 91%;        /* #E5E7EB */
-    --muted-foreground: 220 9% 65%;   /* #9CA3AF */
-    --border: 215 28% 17%;            /* #1F2937 */
-    --input: 215 28% 17%;
-    --ring: 217 75% 61%;
+    --background: 264 31% 7%;
+    --surface: 260 24% 11%;
+    --surface-elevated: 258 21% 15%;
+    --foreground: 240 24% 93%;
+    --muted-foreground: 244 14% 70%;
+    --border: 258 18% 24%;
+    --input: 258 18% 24%;
+    --ring: 255 83% 72%;
 
-    --brand: 217 75% 61%;             /* #4F86E8 */
-    --brand-foreground: 220 39% 11%;
-    --gain: 145 63% 49%;              /* #2BC275 — slightly lifted for dark bg */
-    --loss: 0 86% 70%;                /* #F87171 */
-    --warn: 38 95% 60%;               /* #FBBF24 */
-    --info: 217 91% 60%;
-    --benchmark: 158 64% 52%;         /* #34D399 */
-    --chart-grid: 215 28% 17%;
-    --chart-axis: 220 9% 65%;
-    --crosshair: 220 9% 65%;
+    --brand: 255 83% 72%;
+    --brand-foreground: 264 31% 7%;
+    --gain: 156 72% 52%;
+    --loss: 350 86% 70%;
+    --warn: 42 92% 62%;
+    --info: 255 83% 72%;
+    --benchmark: 174 70% 52%;
+    --chart-grid: 258 18% 24%;
+    --chart-axis: 244 14% 70%;
+    --crosshair: 255 48% 74%;
 
     --card: var(--surface);
     --card-foreground: var(--foreground);
@@ -173,5 +173,30 @@
   .bg-brand-soft {
     background-color: hsl(var(--brand) / 0.12);
     color: hsl(var(--brand));
+  }
+  .bg-benchmark-soft {
+    background-color: hsl(var(--benchmark) / 0.12);
+    color: hsl(var(--benchmark));
+  }
+  .share-report-bg {
+    background:
+      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--surface-elevated)) 52%, hsl(var(--background)) 100%);
+  }
+  .share-hero-surface {
+    background:
+      linear-gradient(135deg, hsl(var(--surface)) 0%, hsl(var(--brand) / 0.08) 48%, hsl(var(--benchmark) / 0.1) 100%);
+    box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.04);
+  }
+  .share-scope-surface {
+    background:
+      linear-gradient(160deg, hsl(var(--surface-elevated)) 0%, hsl(var(--warn) / 0.08) 100%);
+  }
+  .share-kpi-strip {
+    background:
+      linear-gradient(90deg, hsl(var(--brand) / 0.08), hsl(var(--surface)) 42%, hsl(var(--benchmark) / 0.08));
+  }
+  .share-weight-fill {
+    background:
+      linear-gradient(90deg, hsl(var(--brand)), hsl(var(--benchmark)));
   }
 }

@@ -2,7 +2,19 @@ import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { CalendarDays, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import {
+  Activity,
+  BarChart3,
+  CalendarDays,
+  Clock,
+  EyeOff,
+  FileText,
+  LineChart,
+  LockKeyhole,
+  ShieldCheck,
+  TrendingUp,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { PerformancePanel } from '@/components/IbkrPerformancePanel';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -13,11 +25,13 @@ import { cn } from '@/lib/utils';
 import { availableRanges, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
 import type { PerformanceHistory, SharedPortfolio, SharedHistory } from '@/lib/database.types';
 
+type SoftTone = 'brand' | 'benchmark' | 'gain' | 'warn';
+
 export function SharePage() {
   const { token } = useParams<{ token: string }>();
   const shareToken = isValidShareToken(token) ? token : null;
   const [range, setRange] = useState<RangeKey>('ALL');
-  const [showBenchmark, setShowBenchmark] = useState(true);
+  const showBenchmark = true;
 
   const portfolio = useQuery({
     queryKey: ['share', 'portfolio', shareToken],
@@ -84,7 +98,7 @@ export function SharePage() {
   const effectiveRange = ranges.includes(range) ? range : (ranges[ranges.length - 1] ?? 'ALL');
 
   if (!shareToken) return <Centered>分享链接无效或已过期</Centered>;
-  if (portfolio.isLoading) return <Centered>加载中…</Centered>;
+  if (portfolio.isLoading) return <Centered>加载中...</Centered>;
   if (portfolio.error) return <Centered>加载失败，请稍后再试</Centered>;
   const data = portfolio.data;
   if (!data || 'error' in data) return <Centered>分享链接无效或已过期</Centered>;
@@ -103,48 +117,64 @@ export function SharePage() {
   const tradingCalendar = rawHistory?.trading_calendar ?? rawHistory?.benchmark ?? 'SPY';
   const usesTradingDays = rawHistory?.excluded_non_trading_days ?? rawHistory?.date_basis === 'benchmark_price_dates';
   const generatedAt = rawHistory?.updated_at ?? rawHistory?.generated_at ?? data.generated_at;
-
   const hasSnapshotPrices = data.has_snapshot_price;
+  const pointCount = history.length;
+  const positionCount = data.positions.length;
 
   return (
-    <div className="min-h-full bg-background text-foreground">
-      <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/85 backdrop-blur">
-        <div className="container max-w-[1200px] flex items-center gap-3 px-4 py-3 sm:px-6">
+    <div className="share-report-bg min-h-full text-foreground">
+      <header className="safe-top sticky top-0 z-20 border-b border-border/80 bg-background/80 shadow-sm shadow-brand/5 backdrop-blur">
+        <div className="container flex max-w-[1200px] items-center gap-3 px-4 py-3 sm:px-6">
           <Logo />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold">DCA Tracker · 只读分享</div>
-            <div className="text-[11px] text-muted-foreground">仅显示比例与百分比，金额已隐藏</div>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="truncate text-sm font-semibold">DCA Tracker</div>
+              <span className="hidden rounded-md border border-border bg-surface-elevated px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline">
+                只读分享
+              </span>
+            </div>
+            <div className="truncate text-[11px] text-muted-foreground">仅显示比例、日期和权重，金额已隐藏</div>
+          </div>
+          <div className="hidden items-center gap-1.5 rounded-md border border-gain/20 bg-gain-soft px-2 py-1 text-[11px] sm:flex">
+            <ShieldCheck className="h-3.5 w-3.5 text-gain" />
+            Public report
           </div>
           <ThemeToggle />
         </div>
       </header>
 
-      <div className="container max-w-[1200px] space-y-5 px-4 py-5 sm:px-6 sm:py-7">
-        <section className="rounded-xl border border-border bg-surface px-5 py-5 sm:px-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-2xl">
-              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+      <main className="container max-w-[1200px] space-y-5 px-4 py-5 sm:px-6 sm:py-7">
+        <section className="share-hero-surface overflow-hidden rounded-lg border border-border">
+          <div className="grid gap-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
+            <div className="px-5 py-5 sm:px-6 sm:py-6">
+              <div className="inline-flex items-center gap-2 rounded-md border border-brand/20 bg-brand-soft px-2 py-1 text-[11px] font-medium">
+                <FileText className="h-3.5 w-3.5" />
                 Public Performance Report
               </div>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">只读业绩报告</h1>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                这份报告只展示持仓比例和收益率，不包含金额、入金、汇兑损耗或交易明细。
+              <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">只读业绩报告</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+                这份公开报告只展示时间加权收益率、基准对照、日期和持仓权重。金额、入金、汇兑损耗和交易明细不会通过分享 API 暴露。
               </p>
+              <div className="mt-4 flex flex-wrap gap-2 text-[11px]">
+                <ReportChip icon={ShieldCheck} label="隐私安全视图" tone="gain" />
+                <ReportChip icon={CalendarDays} label={usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'} tone="benchmark" />
+                <ReportChip icon={Clock} label={`更新 ${formatDateTime(generatedAt)}`} tone="warn" numeric />
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2 text-[11px]">
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface-elevated px-2 py-1 text-muted-foreground">
-                <CalendarDays className="h-3.5 w-3.5" />
-                {usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'}
-              </span>
-              <span className="rounded-md border border-border bg-surface-elevated px-2 py-1 text-muted-foreground tnum">
-                更新 {formatDateTime(generatedAt)}
-              </span>
+
+            <div className="share-scope-surface border-t border-border px-5 py-5 sm:px-6 lg:border-l lg:border-t-0">
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Report Scope</div>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                <ReportMeta label="基准" value={benchmark} icon={LineChart} tone="benchmark" />
+                <ReportMeta label="交易日点位" value={String(pointCount)} icon={Activity} tone="brand" />
+                <ReportMeta label="公开持仓" value={String(positionCount)} icon={LockKeyhole} tone="warn" />
+              </div>
             </div>
           </div>
         </section>
 
         {!hasSnapshotPrices && (
-          <Card className="flex items-start gap-3 border-warn/30 bg-warn/5 p-3 text-sm">
+          <Card className="flex items-start gap-3 rounded-lg border-warn/30 bg-warn/5 p-3 text-sm">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
             <div className="min-w-0 flex-1">
               <div className="font-medium text-foreground">行情快照未更新</div>
@@ -154,30 +184,33 @@ export function SharePage() {
             </div>
           </Card>
         )}
-        <Card className="overflow-hidden p-0">
-          <div className={cn('grid gap-0', showBenchmark ? 'md:grid-cols-3' : 'md:grid-cols-1')}>
+
+        <Card className="share-kpi-strip overflow-hidden rounded-lg p-0">
+          <div className="grid gap-0 md:grid-cols-3">
             <SummaryCell
-                label="组合累计表现"
-              value={last ? signedPct(portfolioReturn) : '—'}
+              icon={TrendingUp}
+              tone="brand"
+              label="组合累计表现"
+              value={last ? signedPct(portfolioReturn) : '-'}
               valueClass={cn(last ? changeColor(portfolioReturn) : 'text-muted-foreground', 'text-3xl')}
               sub={dateRange}
             />
-            {showBenchmark && (
-              <SummaryCell
-                label={`${benchmark} · 同期`}
-                value={last ? signedPct(spyReturn) : '—'}
-                valueClass={last ? changeColor(spyReturn) : 'text-muted-foreground'}
-                sub="基准对照"
-              />
-            )}
-            {showBenchmark && (
-              <SummaryCell
-                label={`超额 vs ${benchmark}`}
-                value={last ? signedPct(excess) : '—'}
-                valueClass={last ? changeColor(excess) : 'text-muted-foreground'}
-                sub={`组合 / ${benchmark} 同期`}
-              />
-            )}
+            <SummaryCell
+              icon={BarChart3}
+              tone="benchmark"
+              label={`${benchmark} · 同期`}
+              value={last ? signedPct(spyReturn) : '-'}
+              valueClass={last ? changeColor(spyReturn) : 'text-muted-foreground'}
+              sub="基准对照"
+            />
+            <SummaryCell
+              icon={Activity}
+              tone="warn"
+              label={`超额 vs ${benchmark}`}
+              value={last ? signedPct(excess) : '-'}
+              valueClass={last ? changeColor(excess) : 'text-muted-foreground'}
+              sub={`组合 / ${benchmark} 同期`}
+            />
           </div>
         </Card>
 
@@ -187,9 +220,10 @@ export function SharePage() {
           onRangeChange={setRange}
           availableRanges={ranges}
           showBenchmark={showBenchmark}
-          onShowBenchmarkChange={setShowBenchmark}
+          onShowBenchmarkChange={() => undefined}
           benchmarkLabel={benchmark}
           loading={historyQuery.isLoading}
+          hideBenchmarkToggle
           emptyMessage={
             historyQuery.error
               ? '历史数据加载失败，请刷新重试'
@@ -197,14 +231,18 @@ export function SharePage() {
           }
         />
 
-        <Card className="overflow-hidden p-0">
-          <div className="flex items-baseline justify-between border-b border-border px-4 py-3">
-            <div>
+        <Card className="overflow-hidden rounded-lg p-0">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-surface-elevated/40 px-4 py-3">
+            <div className="min-w-0">
               <div className="text-sm font-semibold">持仓权重</div>
-              <div className="text-[11px] text-muted-foreground">{data.positions.length} 只 · 不显示具体股数与金额</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">{positionCount} 只 · 不显示具体股数与金额</div>
+            </div>
+            <div className="inline-flex items-center gap-1.5 rounded-md border border-benchmark/20 bg-benchmark-soft px-2 py-1 text-[11px]">
+              <LockKeyhole className="h-3.5 w-3.5" />
+              权重和百分比
             </div>
           </div>
-          {data.positions.length === 0 ? (
+          {positionCount === 0 ? (
             <div className="px-4 py-6">
               <EmptyState icon={EyeOff} title="未公开持仓" description="分享者未启用持仓展示。" />
             </div>
@@ -216,27 +254,35 @@ export function SharePage() {
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.03 }}
-                  className="flex items-center gap-3 px-4 py-3"
+                  className="grid grid-cols-[minmax(56px,72px)_minmax(0,1fr)_64px] items-center gap-3 px-4 py-3 sm:grid-cols-[96px_minmax(0,1fr)_96px_96px]"
                 >
-                  <div className="w-14 shrink-0 font-semibold">{p.ticker}</div>
-                  <div className="flex-1">
-                    <div className="h-1.5 overflow-hidden rounded-full bg-surface-elevated">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.max(2, p.weight_pct * 100)}%` }}
-                        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 * i }}
-                        className="h-full rounded-full bg-brand"
-                      />
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold">{p.ticker}</div>
+                    <div className="mt-0.5 text-[10px] text-muted-foreground sm:hidden">累计 {signedPct(p.return_pct)}</div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-elevated ring-1 ring-border/60">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${clampPercent(p.weight_pct * 100)}%` }}
+                          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 * i }}
+                          className="share-weight-fill h-full rounded-full"
+                        />
+                      </div>
+                      <div className="w-12 text-right text-xs text-muted-foreground tnum">
+                        {pct(p.weight_pct, 1)}
+                      </div>
                     </div>
+                    <div className="mt-1 hidden text-[10px] text-muted-foreground sm:block">组合权重</div>
                   </div>
-                  <div className="w-14 text-right text-xs text-muted-foreground tnum">
-                    {pct(p.weight_pct, 1)}
-                  </div>
-                  <div className={cn('w-20 text-right font-medium tnum', changeColor(p.return_pct))}>
+                  <div className={cn('hidden text-right font-medium tnum sm:block', changeColor(p.return_pct))}>
                     {signedPct(p.return_pct)}
+                    <div className="mt-0.5 text-[10px] font-normal text-muted-foreground">累计</div>
                   </div>
-                  <div className={cn('hidden w-20 text-right text-[11px] tnum sm:block', changeColor(p.day_change_pct ?? 0))}>
-                    {p.day_change_pct !== null ? `${signedPct(p.day_change_pct)} 今日` : '—'}
+                  <div className={cn('text-right text-[11px] tnum', changeColor(p.day_change_pct ?? 0))}>
+                    {p.day_change_pct != null ? signedPct(p.day_change_pct) : '-'}
+                    <div className="mt-0.5 text-[10px] text-muted-foreground">今日</div>
                   </div>
                 </motion.div>
               ))}
@@ -244,26 +290,30 @@ export function SharePage() {
           )}
         </Card>
 
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface-elevated px-3 py-2 text-[11px] text-muted-foreground">
+        <footer className="share-scope-surface flex flex-col gap-2 rounded-lg border border-border px-3 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span className="inline-flex items-center gap-2">
-            <ShieldCheck className="h-3.5 w-3.5 text-gain" />
-            金额、入金、汇兑损耗、交易明细均不通过分享 API 暴露。
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-gain" />
+            <span>金额、入金、汇兑损耗、交易明细均不通过分享 API 暴露。</span>
           </span>
-          <span className="hidden text-[10px] sm:inline tnum">
-            Generated {new Date(data.generated_at).toLocaleString('zh-CN', { hour12: false })}
+          <span className="tnum sm:text-right">
+            Generated {formatDateTime(data.generated_at)}
           </span>
-        </div>
-      </div>
+        </footer>
+      </main>
     </div>
   );
 }
 
 function SummaryCell({
+  icon: Icon,
+  tone,
   label,
   value,
   valueClass,
   sub,
 }: {
+  icon: LucideIcon;
+  tone: SoftTone;
   label: string;
   value: string;
   valueClass: string;
@@ -272,18 +322,80 @@ function SummaryCell({
   return (
     <div className="border-t border-border px-5 py-5 first:border-t-0 md:border-l md:border-t-0 md:first:border-l-0">
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-        <Eye className="h-3 w-3" />
+        <span className={cn('inline-flex h-6 w-6 items-center justify-center rounded-md border', softToneClass(tone))}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
         {label}
       </div>
-      <div className={cn('mt-1 text-2xl font-semibold tnum', valueClass)}>{value}</div>
+      <div className={cn('mt-2 text-2xl font-semibold tnum', valueClass)}>{value}</div>
       <div className="mt-1 text-[11px] text-muted-foreground tnum">{sub}</div>
     </div>
   );
 }
 
+function ReportChip({
+  icon: Icon,
+  label,
+  tone,
+  numeric = false,
+}: {
+  icon: LucideIcon;
+  label: string;
+  tone: SoftTone;
+  numeric?: boolean;
+}) {
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-1.5 rounded-md border px-2 py-1',
+      softToneClass(tone),
+      numeric && 'tnum',
+    )}>
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </span>
+  );
+}
+
+function ReportMeta({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  icon: LucideIcon;
+  tone: SoftTone;
+}) {
+  return (
+    <div className="min-w-0 rounded-md border border-border bg-surface px-3 py-2">
+      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <span className={cn('inline-flex h-5 w-5 items-center justify-center rounded border', softToneClass(tone))}>
+          <Icon className="h-3 w-3" />
+        </span>
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="mt-1 truncate text-sm font-semibold tnum">{value}</div>
+    </div>
+  );
+}
+
+function softToneClass(tone: SoftTone) {
+  switch (tone) {
+    case 'brand':
+      return 'border-brand/20 bg-brand-soft';
+    case 'benchmark':
+      return 'border-benchmark/20 bg-benchmark-soft';
+    case 'gain':
+      return 'border-gain/20 bg-gain-soft';
+    case 'warn':
+      return 'border-warn/20 bg-warn-soft';
+  }
+}
+
 function Logo() {
   return (
-    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-brand-foreground text-sm font-bold">
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-foreground shadow-sm shadow-brand/25">
       $
     </div>
   );
@@ -291,10 +403,21 @@ function Logo() {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-full min-h-screen items-center justify-center bg-background p-8 text-sm text-muted-foreground">
-      {children}
+    <div className="share-report-bg flex min-h-screen p-4 text-foreground">
+      <div className="share-hero-surface m-auto w-full max-w-sm rounded-lg border border-border px-5 py-6 text-center">
+        <div className="flex justify-center">
+          <Logo />
+        </div>
+        <div className="mt-4 text-base font-semibold">只读分享</div>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">{children}</p>
+      </div>
     </div>
   );
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(2, value));
 }
 
 function isValidShareToken(value: string | undefined): value is string {
