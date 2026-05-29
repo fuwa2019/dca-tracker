@@ -28,7 +28,7 @@
       ▼               ▼
 ┌────────────┐  ┌──────────────────┐
 │  Supabase  │  │ Worker: quote    │──► Yahoo Finance / Schwab Market Data
-│  Postgres  │  │ (KV cache 5min)  │
+│  Postgres  │  │ (KV cache 1min)  │
 │  Auth+RLS  │  └──────────────────┘
 └────────────┘  ┌──────────────────────┐  ┌────────┐
                 │ Worker: email-cron   │──►│ Resend │──► Gmail
