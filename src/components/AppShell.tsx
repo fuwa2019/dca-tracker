@@ -210,7 +210,7 @@ function DesktopNav() {
         ))}
       </nav>
       <div className="mt-auto border-t border-border px-4 py-3 text-[10px] text-muted-foreground">
-        v2.1 · 交易日业绩分析与脱敏共享
+        v3.0 · 高级主题与公开报告
       </div>
     </aside>
   );
