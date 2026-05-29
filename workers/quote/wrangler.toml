@@ -6,7 +6,7 @@ compatibility_date = "2025-12-01"
 [triggers]
 crons = ["15 22 * * 1-5"]
 
-# Cache responses across requests (5 min for /api/quote, 1 hour for /api/chart, 1 hour for /api/history).
+# Cache responses across requests (1 min for /api/quote, 1 hour for /api/chart, 1 hour for /api/history).
 [[kv_namespaces]]
 binding = "QUOTE_CACHE"
 id = "2ed3dfa2431d4937be121ffb3883a847"

@@ -52,7 +52,7 @@ VITE_QUOTE_WORKER_URL=https://dca-quote.your-account.workers.dev
 
 ## 接口
 
-- `GET /api/quote?symbols=VOO,QQQM,SMH` — 多股报价，KV 缓存 5 分钟。返回：
+- `GET /api/quote?symbols=VOO,QQQM,SMH` — 多股报价，KV 缓存 1 分钟。返回：
 - `GET /api/market/quotes?symbols=VOO,QQQM,SMH` — 同上，前端默认使用这个路径；Schwab provider 会批量请求 `/marketdata/v1/quotes`。
   ```json
   {
@@ -70,7 +70,7 @@ VITE_QUOTE_WORKER_URL=https://dca-quote.your-account.workers.dev
 ## 注意
 
 - Yahoo 接口是非官方反向工程，实时性可能延迟，且未来可能被加限。Worker 会返回 `source`、`asOf`、`fetchedAt`、`realtime`、`delayMinutes`、`fallback` 等元数据，前端不要硬编码延迟分钟数。
-- 单 IP 频繁触发可能被 Yahoo 限流；5 分钟缓存 + 单用户场景下基本不会撞墙。
+- 单 IP 频繁触发可能被 Yahoo 限流；1 分钟缓存 + 前端限频轮询在单用户场景下基本不会撞墙。
 - `User-Agent` header **不能省**，否则 401。
 - Schwab provider 有硬性 endpoint allow-list：只允许 `https://api.schwabapi.com/marketdata/v1/`；任何 account/order/position/transaction/trader endpoint 都会在发出请求前被拒绝。
 - 401 会 refresh token 后重试一次；429 会按 `Retry-After` 或默认 1 秒退避一次，不会死循环。
