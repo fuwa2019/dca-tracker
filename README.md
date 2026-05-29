@@ -28,7 +28,7 @@
       │ supabase-js   │ fetch
       ▼               ▼
 ┌────────────┐  ┌──────────────────┐
-│  Supabase  │  │ Worker: quote    │──► Yahoo Finance
+│  Supabase  │  │ Worker: quote    │──► Yahoo Finance / Schwab Market Data
 │  Postgres  │  │ (KV cache 5min)  │
 │  Auth+RLS  │  └──────────────────┘
 └────────────┘  ┌──────────────────────┐  ┌────────┐
@@ -56,7 +56,7 @@
 │   ├── migrations/0001_init.sql  # 全部 schema + RLS + shared_portfolio 函数
 │   └── README.md                 # 部署步骤
 ├── workers/
-│   ├── quote/                    # 行情代理 Worker（Yahoo + KV 5min cache）
+│   ├── quote/                    # 行情代理 Worker（Yahoo/Schwab + KV cache）
 │   └── email-cron/               # 邮件提醒 Worker（NYSE 日历 + Resend + KV 去重）
 ├── public/
 ├── CLAUDE.md                     # 原始需求
@@ -90,6 +90,47 @@ npx wrangler login
 npx wrangler kv namespace create QUOTE_CACHE
 # 把 id 填到 wrangler.toml
 npm run deploy
+```
+
+Schwab Developer API 接入只使用 **Market Data Production**。本项目不会申请或调用 Accounts and Trading Production，不读取账户、持仓、现金、订单或交易记录，也不会下单、撤单或改单。
+
+需要的 Worker 环境变量：
+
+```bash
+MARKET_DATA_PROVIDER=schwab
+SCHWAB_CLIENT_ID=2DF8i6sNjUMOKCWjmCA3g4jMCNywp0o2ndq46s8nFp8nCCWz
+SCHWAB_CLIENT_SECRET=
+SCHWAB_REDIRECT_URI=
+SCHWAB_REFRESH_TOKEN=
+```
+
+这些变量都不能加 `VITE_` 前缀，不能放进前端 bundle，不能提交 `.env.local`、token 文件或任何 secret。你的 secret 自己填，方式是：
+
+```bash
+cd workers/quote
+npx wrangler secret put SCHWAB_CLIENT_SECRET
+```
+
+首次 OAuth 授权：
+
+1. 在 Schwab Developer Portal 确认 App 只选择 `Market Data Production`，Callback URL 填入你的 `SCHWAB_REDIRECT_URI`。
+2. 本地启动 quote Worker：`cd workers/quote && npm run dev`。
+3. 访问 `http://localhost:8787/api/schwab/oauth/url`，打开返回的 `authorizationUrl`。
+4. Schwab 回调到 `/api/schwab/oauth/callback` 后会返回新的 `refreshToken`。写入 Worker secret：`npx wrangler secret put SCHWAB_REFRESH_TOKEN`。
+5. 重启本地 Worker 或重新部署。之后 access token 过期前会自动刷新；refresh token 缺失或失效时需要重新授权。
+
+常见错误：
+
+- `redirect_uri mismatch`：`SCHWAB_REDIRECT_URI` 和 Developer Portal Callback URL 不完全一致，包括协议、域名、端口、路径。
+- `401 token expired`：Worker 会 refresh 后重试一次；仍失败说明 refresh token 失效，需要重新授权。
+- `refresh token invalid`：重新走 OAuth，把新的 refresh token 写入 Worker secret。
+- `429 rate limit`：Worker 会退避一次；前端不要高频轮询，报价会批量请求并走 KV 缓存。
+
+测试接口：
+
+```bash
+curl "http://localhost:8787/api/market/quotes?symbols=VOO,QQQM,SMH"
+curl "http://localhost:8787/api/market/price-history?symbol=VOO"
 ```
 
 ### 3. 邮件 Worker

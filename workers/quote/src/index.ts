@@ -2,6 +2,7 @@
  * DCA Quote Worker
  * --------------------------------
  * GET /api/quote?symbols=VOO,QQQM,SMH
+ * GET /api/market/quotes?symbols=VOO,QQQM,SMH
  *   → { quotes: [{ ticker, price, prevClose, change, changePct, marketState }] }
  *
  * GET /api/chart?symbol=VOO&range=1y&interval=1d&prepost=0
@@ -11,14 +12,28 @@
  *   → { results: [{ symbol, name, exchange, type }] }
  *
  * GET /api/history?symbols=VOO,QQQM,SMH,SPY&range=5y
+ * GET /api/market/price-history?symbol=VOO
  *   -> { series: [{ ticker, points: [{date, close, adjustedClose}] }] }
  *      and upserts daily_prices
  *
  * CRON `15 22 * * 1-5` (UTC) — backfills latest trading day's close into daily_prices.
  *
- * Source: query1.finance.yahoo.com (unofficial; 15-20min delayed during market hours).
- * Browser can't call Yahoo directly (no CORS, requires UA), so this Worker is the only proxy.
+ * Source: Yahoo by default, or Schwab Market Data when MARKET_DATA_PROVIDER=schwab.
+ * Browser can't call upstream providers directly; this Worker is the only proxy.
  */
+
+import {
+  buildSchwabAuthorizeUrl,
+  exchangeSchwabAuthorizationCode,
+  marketDataProviderFromEnv,
+  parseSymbolsParam,
+  refreshSchwabAccessToken,
+  sanitizeForLog,
+  SchwabMarketDataClient,
+  type HistoryPoint,
+  type HistorySeries,
+  type NormalizedQuote,
+} from './marketData';
 
 export interface Env {
   QUOTE_CACHE: KVNamespace;
@@ -27,6 +42,11 @@ export interface Env {
    *  `quote_snapshots` (so anonymous /share/[token] views have prices to compute returns). */
   SUPABASE_URL?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
+  MARKET_DATA_PROVIDER?: string;
+  SCHWAB_CLIENT_ID?: string;
+  SCHWAB_CLIENT_SECRET?: string;
+  SCHWAB_REDIRECT_URI?: string;
+  SCHWAB_REFRESH_TOKEN?: string;
 }
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
@@ -39,27 +59,7 @@ const SEARCH_TTL = 60 * 60 * 24;
 /** Default fallback watchlist for the scheduled cron when settings rows are unavailable. */
 const DEFAULT_CRON_TICKERS = ['VOO', 'QQQM', 'SMH', 'SPY'];
 
-interface QuoteOut {
-  ticker: string;
-  price: number | null;
-  displayPrice: number | null;
-  prevClose: number | null;
-  change: number | null;
-  changePct: number | null;
-  regularPrice: number | null;
-  preMarketPrice: number | null;
-  preMarketChange: number | null;
-  preMarketChangePct: number | null;
-  postMarketPrice: number | null;
-  postMarketChange: number | null;
-  postMarketChangePct: number | null;
-  session: 'pre_market' | 'regular' | 'after_hours' | 'overnight' | 'closed' | 'unknown';
-  sessionLabel: string;
-  isExtended: boolean;
-  marketState: string | null;
-  source: 'yahoo-v7' | 'yahoo-v8';
-  cachedAt: string;
-}
+type QuoteOut = NormalizedQuote;
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -71,6 +71,21 @@ export default {
     try {
       if (url.pathname === '/api/quote') {
         return withCors(await handleQuote(url, env, ctx), corsHeaders);
+      }
+      if (url.pathname === '/api/market/quotes') {
+        return withCors(await handleQuote(url, env, ctx), corsHeaders);
+      }
+      if (url.pathname === '/api/market/price-history') {
+        return withCors(await handlePriceHistory(url, env), corsHeaders);
+      }
+      if (url.pathname === '/api/schwab/oauth/url') {
+        return withCors(await handleSchwabAuthorizeUrl(url, env), corsHeaders);
+      }
+      if (url.pathname === '/api/schwab/oauth/callback') {
+        return withCors(await handleSchwabCallback(url, env), corsHeaders);
+      }
+      if (url.pathname === '/api/schwab/oauth/refresh') {
+        return withCors(await handleSchwabRefresh(env), corsHeaders);
       }
       if (url.pathname === '/api/chart') {
         return withCors(await handleChart(url, env), corsHeaders);
@@ -86,7 +101,7 @@ export default {
       }
       return withCors(json({ error: 'not_found' }, 404), corsHeaders);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = String(sanitizeForLog(err instanceof Error ? err.message : String(err)));
       return withCors(json({ error: 'worker_error', message: msg }, 500), corsHeaders);
     }
   },
@@ -110,7 +125,7 @@ async function runDailyPriceSync(env: Env): Promise<void> {
   console.log(`[cron] daily price sync for ${tickers.length} tickers: ${tickers.join(',')}`);
   for (const ticker of tickers) {
     try {
-      const series = await fetchYahooHistory(ticker, '5d');
+      const series = await fetchHistoryFromProvider(env, ticker, '5d');
       if (series.points.length === 0) {
         console.warn(`[cron] no points for ${ticker}`);
         continue;
@@ -149,12 +164,7 @@ async function collectCronTickers(env: Env): Promise<string[]> {
 }
 
 async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
-  const raw = url.searchParams.get('symbols') ?? '';
-  const symbols = raw
-    .split(',')
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean)
-    .slice(0, 20);
+  const symbols = parseSymbolsParam(url.searchParams.get('symbols'), 20);
 
   if (symbols.length === 0) {
     return json({ error: 'missing_symbols' }, 400);
@@ -166,19 +176,23 @@ async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<R
     return json({ quotes: cached, cache: 'hit' });
   }
 
-  // Primary: v7 quote endpoint (returns multiple symbols in one shot)
   let quotes: QuoteOut[] = [];
-  try {
-    quotes = await fetchV7Quotes(symbols);
-  } catch {
-    quotes = [];
-  }
+  if (marketDataProviderFromEnv(env) === 'schwab') {
+    quotes = await new SchwabMarketDataClient(env).getQuotes(symbols);
+  } else {
+    // Primary: v7 quote endpoint (returns multiple symbols in one shot)
+    try {
+      quotes = await fetchV7Quotes(symbols);
+    } catch {
+      quotes = [];
+    }
 
-  // Fallback per-symbol via v8 chart (more resilient when v7 is throttled)
-  const missing = symbols.filter((s) => !quotes.find((q) => q.ticker === s));
-  if (missing.length > 0) {
-    const fallback = await Promise.all(missing.map((s) => fetchV8Quote(s).catch(() => null)));
-    for (const q of fallback) if (q) quotes.push(q);
+    // Fallback per-symbol via v8 chart (more resilient when v7 is throttled)
+    const missing = symbols.filter((s) => !quotes.find((q) => q.ticker === s));
+    if (missing.length > 0) {
+      const fallback = await Promise.all(missing.map((s) => fetchV8Quote(s).catch(() => null)));
+      for (const q of fallback) if (q) quotes.push(q);
+    }
   }
 
   // Persist ordering matching request
@@ -268,23 +282,8 @@ async function handleSearch(url: URL, env: Env): Promise<Response> {
   return json({ results, cache: 'miss' });
 }
 
-interface HistoryPoint {
-  date: string; // YYYY-MM-DD
-  close: number;
-  adjustedClose?: number;
-}
-interface HistorySeries {
-  ticker: string;
-  points: HistoryPoint[];
-}
-
 async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
-  const raw = url.searchParams.get('symbols') ?? '';
-  const symbols = raw
-    .split(',')
-    .map((s) => s.trim().toUpperCase())
-    .filter(Boolean)
-    .slice(0, 10);
+  const symbols = parseSymbolsParam(url.searchParams.get('symbols'), 10);
   const range = url.searchParams.get('range') ?? '5y';
   const persist = url.searchParams.get('persist') ?? '';
   if (symbols.length === 0) return json({ error: 'missing_symbols' }, 400);
@@ -317,8 +316,8 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
   }
 
   const series = await Promise.all(
-    symbols.map((s) => fetchYahooHistory(s, range).catch((e) => {
-      console.warn(`[history] ${s} failed:`, e);
+    symbols.map((s) => fetchHistoryFromProvider(env, s, range, url.searchParams).catch((e) => {
+      console.warn(`[history] ${s} failed:`, sanitizeForLog(e));
       return { ticker: s, points: [] as HistoryPoint[] };
     })),
   );
@@ -346,6 +345,42 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
   return json({ series, cache: 'miss' });
 }
 
+async function handlePriceHistory(url: URL, env: Env): Promise<Response> {
+  const symbol = (url.searchParams.get('symbol') ?? '').trim().toUpperCase();
+  if (!symbol) return json({ error: 'missing_symbol' }, 400);
+  const range = url.searchParams.get('range') ?? '10y';
+  const cacheKey = `price-history:${marketDataProviderFromEnv(env)}:${symbol}:${url.searchParams.toString() || range}`;
+  const cached = await env.QUOTE_CACHE.get(cacheKey, 'json') as unknown;
+  if (isHistorySeries(cached)) return json({ series: cached, cache: 'hit' });
+  const series = await fetchHistoryFromProvider(env, symbol, range, url.searchParams);
+  await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(series), { expirationTtl: HISTORY_TTL * 6 });
+  return json({ series, cache: 'miss' });
+}
+
+function handleSchwabAuthorizeUrl(url: URL, env: Env): Response {
+  return json({ authorizationUrl: buildSchwabAuthorizeUrl(env, url.searchParams.get('state') ?? undefined) });
+}
+
+async function handleSchwabCallback(url: URL, env: Env): Promise<Response> {
+  const code = url.searchParams.get('code') ?? '';
+  const token = await exchangeSchwabAuthorizationCode(env, code);
+  return json({
+    ok: true,
+    message: 'Schwab OAuth complete. Copy the returned refresh token into SCHWAB_REFRESH_TOKEN as a Worker secret, then redeploy/restart. The token is shown only in this server response.',
+    refreshToken: token.refresh_token ?? null,
+    expiresIn: token.expires_in ?? null,
+  });
+}
+
+async function handleSchwabRefresh(env: Env): Promise<Response> {
+  const token = await refreshSchwabAccessToken(env);
+  return json({
+    ok: true,
+    hasRefreshToken: !!token.refresh_token,
+    expiresIn: token.expires_in ?? null,
+  });
+}
+
 function isHistorySeriesArray(value: unknown): value is HistorySeries[] {
   return Array.isArray(value) && value.every(isHistorySeries);
 }
@@ -368,6 +403,15 @@ function isHistoryPoint(value: unknown): value is HistoryPoint {
       || (typeof point.adjustedClose === 'number' && Number.isFinite(point.adjustedClose))
     )
   );
+}
+
+async function fetchHistoryFromProvider(env: Env, symbol: string, range: string, params = new URLSearchParams()): Promise<HistorySeries> {
+  if (marketDataProviderFromEnv(env) === 'schwab') {
+    const historyParams = new URLSearchParams(params);
+    if (!historyParams.has('range')) historyParams.set('range', range);
+    return new SchwabMarketDataClient(env).getPriceHistory(symbol, historyParams);
+  }
+  return fetchYahooHistory(symbol, range);
 }
 
 async function fetchYahooHistory(symbol: string, range: string): Promise<HistorySeries> {

@@ -3,8 +3,12 @@ dist
 dist-ssr
 *.local
 .env
+.env.local
 .env.*
+*.env
 !.env.example
+tokens.json
+schwab-token.json
 .DS_Store
 .vscode/*
 !.vscode/extensions.json

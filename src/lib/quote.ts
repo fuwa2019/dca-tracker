@@ -28,6 +28,8 @@ export interface Quote {
   cachedAt: string;
 }
 
+export type NormalizedQuote = Quote;
+
 export interface HistorySeries {
   ticker: string;
   points: Array<{ date: string; close: number; adjustedClose?: number }>;
@@ -80,7 +82,7 @@ async function fetchQuoteBatches(symbols: string[]): Promise<Quote[]> {
 }
 
 function quoteUrl(symbols: string[]) {
-  return `${WORKER_BASE}/api/quote?symbols=${encodeURIComponent(symbols.join(','))}`;
+  return `${WORKER_BASE}/api/market/quotes?symbols=${encodeURIComponent(symbols.join(','))}`;
 }
 
 async function limitedFetchJson<T>(endpoint: ApiEndpoint, url: string): Promise<T> {

@@ -16,3 +16,4 @@ preview_id = "52cfea8072f048c1a61b51b7727e4171"
 # https://abc123.dca-tracker.pages.dev). Use https://*.pages.dev sparingly.
 [vars]
 ALLOWED_ORIGINS = "http://localhost:5173,https://dca-tracker.pages.dev,https://*.dca-tracker.pages.dev,https://dca-tracker-git.pages.dev,https://*.dca-tracker-git.pages.dev,https://*.pages.dev"
+MARKET_DATA_PROVIDER = "schwab"
