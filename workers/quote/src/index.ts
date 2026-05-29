@@ -170,29 +170,33 @@ async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<R
     return json({ error: 'missing_symbols' }, 400);
   }
 
-  const cacheKey = `quote:${symbols.join(',')}`;
+  const provider = marketDataProviderFromEnv(env);
+  const cacheKey = `quote:${provider}:${symbols.join(',')}`;
   const cached = await env.QUOTE_CACHE.get(cacheKey, 'json');
   if (cached) {
     return json({ quotes: cached, cache: 'hit' });
   }
 
   let quotes: QuoteOut[] = [];
-  if (marketDataProviderFromEnv(env) === 'schwab') {
-    quotes = await new SchwabMarketDataClient(env).getQuotes(symbols);
-  } else {
-    // Primary: v7 quote endpoint (returns multiple symbols in one shot)
+  if (provider === 'schwab') {
     try {
-      quotes = await fetchV7Quotes(symbols);
-    } catch {
-      quotes = [];
+      quotes = await new SchwabMarketDataClient(env).getQuotes(symbols);
+    } catch (err) {
+      console.warn('[quote] Schwab quote fetch failed, falling back to Yahoo:', sanitizeForLog(err instanceof Error ? err.message : String(err)));
+      quotes = await fetchYahooQuotes(symbols, true);
     }
-
-    // Fallback per-symbol via v8 chart (more resilient when v7 is throttled)
-    const missing = symbols.filter((s) => !quotes.find((q) => q.ticker === s));
+    const missing = symbols.filter((s) => !quotes.find((q) => q.ticker === s && q.price !== null));
     if (missing.length > 0) {
-      const fallback = await Promise.all(missing.map((s) => fetchV8Quote(s).catch(() => null)));
-      for (const q of fallback) if (q) quotes.push(q);
+      const fallback = await fetchYahooQuotes(missing, true);
+      const byTicker = new Map(quotes.map((q) => [q.ticker, q]));
+      for (const q of fallback) byTicker.set(q.ticker, q);
+      quotes = symbols.flatMap((s) => {
+        const q = byTicker.get(s);
+        return q ? [q] : [];
+      });
     }
+  } else {
+    quotes = await fetchYahooQuotes(symbols, false);
   }
 
   // Persist ordering matching request
@@ -208,6 +212,24 @@ async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<R
   }
 
   return json({ quotes, cache: 'miss' });
+}
+
+async function fetchYahooQuotes(symbols: string[], fallback: boolean): Promise<QuoteOut[]> {
+  let quotes: QuoteOut[] = [];
+  // Primary: v7 quote endpoint (returns multiple symbols in one shot)
+  try {
+    quotes = await fetchV7Quotes(symbols, fallback);
+  } catch {
+    quotes = [];
+  }
+
+  // Fallback per-symbol via v8 chart (more resilient when v7 is throttled)
+  const missing = symbols.filter((s) => !quotes.find((q) => q.ticker === s));
+  if (missing.length > 0) {
+    const fallbackQuotes = await Promise.all(missing.map((s) => fetchV8Quote(s, fallback).catch(() => null)));
+    for (const q of fallbackQuotes) if (q) quotes.push(q);
+  }
+  return quotes;
 }
 
 async function upsertSnapshots(env: Env, quotes: QuoteOut[]): Promise<void> {
@@ -497,7 +519,7 @@ async function refreshDuePerformanceCaches(env: Env): Promise<void> {
   }
 }
 
-async function fetchV7Quotes(symbols: string[]): Promise<QuoteOut[]> {
+async function fetchV7Quotes(symbols: string[], fallback = false): Promise<QuoteOut[]> {
   const upstream = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbols.join(','))}`;
   const r = await fetch(upstream, {
     headers: { 'User-Agent': UA, Accept: 'application/json' },
@@ -505,6 +527,7 @@ async function fetchV7Quotes(symbols: string[]): Promise<QuoteOut[]> {
   if (!r.ok) throw new Error(`v7 ${r.status}`);
   const data = (await r.json()) as YahooV7Quote;
   return (data.quoteResponse?.result ?? []).map((row) => {
+    const fetchedAt = new Date().toISOString();
     const regularPrice = numOrNull(row.regularMarketPrice);
     const prevClose = numOrNull(row.regularMarketPreviousClose);
     const preMarketPrice = numOrNull(row.preMarketPrice);
@@ -541,13 +564,18 @@ async function fetchV7Quotes(symbols: string[]): Promise<QuoteOut[]> {
       sessionLabel: sessionLabel(session),
       isExtended: session === 'pre_market' || session === 'after_hours' || session === 'overnight',
       marketState,
-      source: 'yahoo-v7' as const,
-      cachedAt: new Date().toISOString(),
+      source: 'yahoo' as const,
+      currency: row.currency,
+      asOf: epochSecondsToIso(row.regularMarketTime),
+      fetchedAt,
+      fallback,
+      providerLabel: 'yahoo-v7',
+      cachedAt: fetchedAt,
     };
   });
 }
 
-async function fetchV8Quote(symbol: string): Promise<QuoteOut | null> {
+async function fetchV8Quote(symbol: string, fallback = false): Promise<QuoteOut | null> {
   const upstream = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m&includePrePost=true`;
   const r = await fetch(upstream, {
     headers: { 'User-Agent': UA, Accept: 'application/json' },
@@ -556,6 +584,7 @@ async function fetchV8Quote(symbol: string): Promise<QuoteOut | null> {
   const data = (await r.json()) as YahooV8Chart;
   const meta = data.chart?.result?.[0]?.meta;
   if (!meta) return null;
+  const fetchedAt = new Date().toISOString();
   const price = meta.regularMarketPrice ?? null;
   const prev = meta.chartPreviousClose ?? meta.previousClose ?? null;
   const session = sessionFromMarketState(meta.marketState ?? null);
@@ -579,8 +608,13 @@ async function fetchV8Quote(symbol: string): Promise<QuoteOut | null> {
     sessionLabel: sessionLabel(session),
     isExtended: session === 'pre_market' || session === 'after_hours' || session === 'overnight',
     marketState: meta.marketState ?? null,
-    source: 'yahoo-v8',
-    cachedAt: new Date().toISOString(),
+    source: 'yahoo',
+    currency: meta.currency,
+    asOf: epochSecondsToIso(meta.regularMarketTime),
+    fetchedAt,
+    fallback,
+    providerLabel: 'yahoo-v8',
+    cachedAt: fetchedAt,
   };
 }
 
@@ -621,6 +655,12 @@ function numOrNull(v: unknown): number | null {
 function pctFromV7(v: unknown): number | null {
   const n = numOrNull(v);
   return n !== null ? n / 100 : null;
+}
+
+function epochSecondsToIso(v: unknown): string | undefined {
+  const n = numOrNull(v);
+  if (n === null || n <= 0) return undefined;
+  return new Date(n * 1000).toISOString();
 }
 
 function json(body: unknown, status = 200): Response {
@@ -679,6 +719,7 @@ interface YahooV7Quote {
     result?: Array<{
       symbol: string;
       regularMarketPrice?: number;
+      regularMarketTime?: number;
       regularMarketPreviousClose?: number;
       regularMarketChange?: number;
       regularMarketChangePercent?: number;
@@ -689,6 +730,7 @@ interface YahooV7Quote {
       postMarketChange?: number;
       postMarketChangePercent?: number;
       marketState?: string;
+      currency?: string;
     }>;
   };
 }
@@ -708,9 +750,11 @@ interface YahooV8Chart {
     result?: Array<{
       meta?: {
         regularMarketPrice?: number;
+        regularMarketTime?: number;
         chartPreviousClose?: number;
         previousClose?: number;
         marketState?: string;
+        currency?: string;
       };
       timestamp?: number[];
       indicators?: {

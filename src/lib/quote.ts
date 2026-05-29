@@ -6,9 +6,22 @@ import {
   type ApiEndpoint,
 } from '@/lib/apiRateLimit';
 
-export interface Quote {
-  ticker: string;
+export type QuoteSource = 'schwab' | 'yahoo';
+
+export interface QuoteMeta {
+  source: QuoteSource;
   price: number | null;
+  currency?: string;
+  asOf?: string;
+  fetchedAt: string;
+  realtime?: boolean;
+  delayMinutes?: number;
+  fallback?: boolean;
+  providerLabel?: string;
+}
+
+export interface Quote extends QuoteMeta {
+  ticker: string;
   displayPrice?: number | null;
   prevClose: number | null;
   change: number | null;
@@ -24,8 +37,7 @@ export interface Quote {
   sessionLabel?: string;
   isExtended?: boolean;
   marketState: string | null;
-  source: string;
-  cachedAt: string;
+  cachedAt?: string;
 }
 
 export type NormalizedQuote = Quote;

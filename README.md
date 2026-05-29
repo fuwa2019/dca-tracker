@@ -181,7 +181,7 @@ npm run typecheck
 - [ ] iPhone Safari 打开 → 添加到主屏 → 像原生 App 启动
 - [ ] iPad Pro / MacBook Air / Windows Chrome 布局正常
 - [ ] 录入：1 笔现金流 + 3 笔交易（VOO/QQQM/SMH 各 1 笔，DCA 类型）
-- [ ] Dashboard 显示三只 ETF 实时报价（盘中应每分钟刷新；带"延迟 ~15min"标）
+- [ ] Dashboard 显示三只 ETF 行情（盘中应每分钟刷新；状态栏展示来源、实时性和更新时间）
 - [ ] 平均成本 / FIFO 切换数值正确
 - [ ] XIRR / TWR 与 Excel 手算误差 < 0.1%
 - [ ] $1M 进度环显示"X 年 Y 月达成"

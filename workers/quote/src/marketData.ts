@@ -9,8 +9,15 @@ export interface SchwabQuote {
     netChange?: number;
     netPercentChange?: number;
     quoteTime?: number;
+    realtime?: boolean;
+    delayed?: boolean;
+    delayMinutes?: number;
     securityStatus?: string;
   };
+  quoteTime?: number;
+  realtime?: boolean;
+  delayed?: boolean;
+  delayMinutes?: number;
   regular?: {
     regularMarketLastPrice?: number;
     regularMarketLastSize?: number;
@@ -38,6 +45,8 @@ export interface SchwabPriceHistoryResponse {
   }>;
 }
 
+export type QuoteSource = 'schwab' | 'yahoo';
+
 export interface NormalizedQuote {
   ticker: string;
   price: number | null;
@@ -56,7 +65,14 @@ export interface NormalizedQuote {
   sessionLabel: string;
   isExtended: boolean;
   marketState: string | null;
-  source: string;
+  source: QuoteSource;
+  currency?: string;
+  asOf?: string;
+  fetchedAt: string;
+  realtime?: boolean;
+  delayMinutes?: number;
+  fallback?: boolean;
+  providerLabel?: string;
   cachedAt: string;
 }
 
@@ -277,6 +293,9 @@ export function normalizeSchwabQuote(symbol: string, row: SchwabQuote): Normaliz
   const prevClose = numOrNull(row.quote?.closePrice);
   const change = numOrNull(row.quote?.netChange) ?? numOrNull(row.regular?.regularMarketNetChange) ?? diff(price, prevClose);
   const changePct = percentToRatio(row.quote?.netPercentChange ?? row.regular?.regularMarketPercentChange) ?? ratio(change, prevClose);
+  const fetchedAt = new Date().toISOString();
+  const realtime = boolOrUndefined(row.quote?.realtime ?? row.realtime);
+  const delayed = boolOrUndefined(row.quote?.delayed ?? row.delayed);
   return {
     ticker,
     price,
@@ -296,7 +315,12 @@ export function normalizeSchwabQuote(symbol: string, row: SchwabQuote): Normaliz
     isExtended: false,
     marketState: row.quote?.securityStatus ?? null,
     source: 'schwab',
-    cachedAt: new Date().toISOString(),
+    asOf: epochMillisToIso(row.quote?.quoteTime ?? row.quoteTime),
+    fetchedAt,
+    realtime: realtime ?? (delayed === true ? false : undefined),
+    delayMinutes: numOrUndefined(row.quote?.delayMinutes ?? row.delayMinutes),
+    providerLabel: 'schwab',
+    cachedAt: fetchedAt,
   };
 }
 
@@ -390,6 +414,21 @@ function rangeToSchwabPeriod(range: string): string {
   if (range === '2y') return '2';
   if (range === '5y') return '5';
   return '10';
+}
+
+function boolOrUndefined(v: unknown): boolean | undefined {
+  return typeof v === 'boolean' ? v : undefined;
+}
+
+function numOrUndefined(v: unknown): number | undefined {
+  const n = numOrNull(v);
+  return n !== null ? n : undefined;
+}
+
+function epochMillisToIso(v: unknown): string | undefined {
+  const n = numOrNull(v);
+  if (n === null || n <= 0) return undefined;
+  return new Date(n).toISOString();
 }
 
 function sleep(ms: number) {
