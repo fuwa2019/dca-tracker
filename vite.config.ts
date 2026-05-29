@@ -12,7 +12,7 @@ export default defineConfig({
       manifest: {
         name: 'DCA Tracker',
         short_name: 'DCA',
-        description: 'Personal US-stock DCA tracker',
+        description: 'DCA Tracker v3.0 · 高级主题与公开报告',
         theme_color: '#0a0a0a',
         background_color: '#fafafa',
         display: 'standalone',
@@ -24,6 +24,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
         runtimeCaching: [
           {
             urlPattern: ({ url, sameOrigin }) =>
