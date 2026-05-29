@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit && tsc --noEmit -p workers/quote && tsc --noEmit -p workers/email-cron",
     "test:finance": "node scripts/verify-performance-fixtures.mjs",
+    "test:quote-status": "node scripts/verify-quote-status.mjs",
     "test:schwab": "node scripts/verify-schwab-market-data.mjs",
     "test:ui": "node scripts/verify-ui-behavior.mjs",
     "test:stress": "node scripts/generate-30y-fixtures.mjs && node scripts/verify-30y-stress.mjs"

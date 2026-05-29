@@ -30,6 +30,9 @@ jobs:
       - name: Financial fixtures
         run: npm run test:finance
 
+      - name: Quote status labels
+        run: npm run test:quote-status
+
       - name: Typecheck
         run: npm run typecheck
 
