@@ -109,12 +109,16 @@ function normalizeHistory(history: PerformanceHistory | PortfolioHistory | Share
     flow_basis: history.flow_basis,
     date_basis: history.date_basis,
     trading_calendar: history.trading_calendar,
+    trading_date_timezone: history.trading_date_timezone,
     excluded_non_trading_days: history.excluded_non_trading_days,
     dirty: history.dirty,
     series: (history.series ?? []).map((p) => {
       const row = p as PortfolioHistory['series'][number];
       return {
         date: p.date,
+        trading_date: row.trading_date ?? p.date,
+        as_of_timestamp: row.as_of_timestamp ?? null,
+        is_provisional: !!row.is_provisional,
         invested: Number(row.invested) || 0,
         cost_basis: Number(row.cost_basis) || 0,
         nav_user: Number(row.nav_user) || 0,

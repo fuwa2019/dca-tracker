@@ -7,7 +7,7 @@
    - `migrations/0002_daily_prices.sql`（资产曲线和基准对照所需的历史价表）
    - `migrations/0003_shared_portfolio_v2.sql`（修复卖出后均价虚高，覆盖旧函数）
    - 后续已部署项目继续按编号运行新增 migration，当前最新版本到
-     `migrations/0027_dynamic_benchmarks_and_selected_performance.sql`
+     `migrations/0030_reset_daily_price_upsert_temp_table.sql`
 
    新部署只需按顺序跑一次；已部署的项目跑新增的 sql 即可（idempotent）。
 
@@ -30,7 +30,7 @@ auth.users (1) ──┬── settings (1)
                  └── email_log (N, monthly dedupe)
 
 quote_snapshots: 单表，service-role 写、所有人读（供 share 视图用）
-daily_prices: 日线价格，`adjusted_close` 用于业绩曲线的 total-return proxy
+daily_prices: 日线价格，`trade_date` 是美东交易日，`as_of_timestamp` 记录行情时间，`is_provisional` 标记等待正式 candle reconcile 的收盘后报价
 performance_history_cache: 主视图和分享视图共用的脱敏收益率曲线缓存
 ```
 

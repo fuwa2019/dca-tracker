@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { isoDateInNewYork } from '@/lib/nyse-calendar';
 
 const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
 
@@ -43,7 +44,7 @@ async function readFromSupabase(symbols: string[], earliestDate: string): Promis
  *  A single close near the event date is not enough for PortfolioAnalyst-style
  *  performance: we need enough closes after the start date to draw a line. */
 function coverageOk(map: PriceMap, symbols: string[], earliestDate: string): boolean {
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = isoDateInNewYork(new Date());
   const needsMultiPointSeries = addDays(earliestDate, 7) < todayIso;
   const freshEnoughDate = addDays(todayIso, -10);
 

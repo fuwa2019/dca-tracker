@@ -56,6 +56,15 @@ performance curve uses an adjusted-close total-return proxy:
 - benchmark units are bought from inferred trade-funding flows using the same
   adjusted-price logic.
 
+`daily_prices.trade_date` is always the US trading date in
+`America/New_York`. `daily_prices.as_of_timestamp` records when the provider
+observed the price. If the historical adjusted-close candle has not appeared
+after the close, the quote Worker stores a quote-based row with
+`is_provisional = true`. A later history sync replaces it with the final candle.
+Public-safe cache points include `trading_date`, `as_of_timestamp`, and
+`is_provisional` so the UI can label a provisional latest point without
+exposing amounts.
+
 The chart calendar is anchored to the benchmark (`SPY` by default). A trade
 entered on a non-trading day is applied on the next SPY price date for
 performance-series purposes. This keeps dashboard and share charts from

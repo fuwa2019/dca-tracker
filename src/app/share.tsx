@@ -72,15 +72,28 @@ export function SharePage() {
     return series
       .map((p) => ({
         date: normalizeDate(p.date),
+        tradingDate: normalizeDate(p.trading_date ?? p.date),
+        asOfTimestamp: p.as_of_timestamp ?? null,
+        provisional: !!p.is_provisional,
         returnPctUser: toFiniteNumber(p.return_pct_user),
         returnPctSpy: toFiniteNumber(p.return_pct_spy),
       }))
       .filter(
-        (p): p is { date: string; returnPctUser: number; returnPctSpy: number } =>
+        (p): p is {
+          date: string;
+          tradingDate: string;
+          asOfTimestamp: string | null;
+          provisional: boolean;
+          returnPctUser: number;
+          returnPctSpy: number;
+        } =>
           isIsoDate(p.date) && p.returnPctUser !== null && p.returnPctSpy !== null,
       )
       .map((p) => ({
         date: p.date,
+        tradingDate: p.tradingDate,
+        asOfTimestamp: p.asOfTimestamp,
+        provisional: p.provisional,
         invested: 0,
         costBasis: 0,
         navUser: 0,
@@ -120,6 +133,7 @@ export function SharePage() {
   const hasSnapshotPrices = data.has_snapshot_price;
   const pointCount = history.length;
   const positionCount = data.positions.length;
+  const hasProvisionalClose = !!last?.provisional;
 
   return (
     <div className="share-report-bg min-h-full text-foreground">
@@ -159,6 +173,7 @@ export function SharePage() {
                 <ReportChip icon={ShieldCheck} label="隐私安全视图" tone="gain" />
                 <ReportChip icon={CalendarDays} label={usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'} tone="benchmark" />
                 <ReportChip icon={Clock} label={`更新 ${formatDateTime(generatedAt)}`} tone="warn" numeric />
+                {hasProvisionalClose && <ReportChip icon={Clock} label="收盘价待核对" tone="warn" />}
               </div>
             </div>
 

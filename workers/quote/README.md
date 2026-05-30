@@ -61,10 +61,10 @@ VITE_QUOTE_WORKER_URL=https://dca-quote.your-account.workers.dev
   }
   ```
 - `GET /api/chart?symbol=VOO&range=1y&interval=1d` — Yahoo v8 chart 透传，KV 缓存 1 小时。
-- `GET /api/history?symbols=QQQ,SPY&range=10y` — 返回 `close` 和 `adjustedClose`，并写入 Supabase `daily_prices.close / adjusted_close`。
+- `GET /api/history?symbols=QQQ,SPY&range=10y` — 返回 `close` 和 `adjustedClose`，并写入 Supabase `daily_prices.close / adjusted_close`。`trade_date` 始终按 `America/New_York` 交易日保存。
 - `GET /api/market/price-history?symbol=VOO` — 单标的日线历史价格；Schwab provider 请求 `/marketdata/v1/pricehistory`，支持继续透传 `periodType`、`period`、`frequencyType`、`frequency`、`startDate`、`endDate`。
 
-定时任务在收盘后同步价格，并调用 `refresh_due_performance_caches` 小批量刷新 dirty 的业绩曲线缓存。
+定时任务在 UTC 22:15 收盘后同步价格，并在 UTC 12:15 再重试一次。若历史 candle 尚未发布，会先按收盘后 quote 写入 `is_provisional = true` 的日线；后续同步拿到正式 candle 后自动 reconcile。每次同步后都会调用 `refresh_due_performance_caches` 小批量刷新 dirty 的业绩曲线缓存。
 - `GET /health` — 健康检查。
 
 ## 注意

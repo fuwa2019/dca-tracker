@@ -1,3 +1,5 @@
+import { isoDateInNewYork } from './nyseCalendar.js';
+
 export type MarketDataProviderName = 'yahoo' | 'schwab';
 
 export interface SchwabQuote {
@@ -80,6 +82,7 @@ export interface HistoryPoint {
   date: string;
   close: number;
   adjustedClose?: number;
+  asOfTimestamp?: string;
 }
 
 export interface HistorySeries {
@@ -344,10 +347,12 @@ export function schwabHistoryToSeries(symbol: string, data: SchwabPriceHistoryRe
     const close = numOrNull(candle.close);
     const datetime = numOrNull(candle.datetime);
     if (close === null || datetime === null) return [];
+    const asOfTimestamp = new Date(datetime).toISOString();
     return [{
-      date: new Date(datetime).toISOString().slice(0, 10),
+      date: isoDateInNewYork(new Date(datetime)),
       close,
       adjustedClose: close,
+      asOfTimestamp,
     }];
   });
   return { ticker: (data.symbol ?? symbol).trim().toUpperCase(), points };

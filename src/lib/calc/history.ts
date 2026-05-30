@@ -1,10 +1,14 @@
 import type { TransactionRow, CashflowRow } from '@/lib/database.types';
 import type { PriceMap } from '@/hooks/useDailyPrices';
+import { isoDateInNewYork } from '@/lib/nyse-calendar';
 
 export const BENCHMARK_TICKER = 'SPY';
 
 export interface HistoryPoint {
   date: string;
+  tradingDate?: string;
+  asOfTimestamp?: string | null;
+  provisional?: boolean;
   invested: number;          // cumulative trade-funding flows up to and including this day
   costBasis: number;         // cumulative buy notional minus sell notional (signed cost)
   navUser: number;           // user's portfolio NAV: Σ netShares(d) × close(d)
@@ -61,7 +65,7 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
   }
 
   const today = asOf ?? new Date();
-  const todayIso = isoUtcDate(today);
+  const todayIso = isoDateInNewYork(today);
 
   // Pre-index events by date
   const flowByDate = inferTradeFundingFlows(transactions);
@@ -216,10 +220,6 @@ function inferTradeFundingFlows(transactions: TransactionRow[]): Map<string, num
   }
 
   return out;
-}
-
-function isoUtcDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
 }
 
 function addDays(iso: string, n: number): string {

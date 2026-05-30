@@ -16,7 +16,9 @@
  *   -> { series: [{ ticker, points: [{date, close, adjustedClose}] }] }
  *      and upserts daily_prices
  *
- * CRON `15 22 * * 1-5` (UTC) — backfills latest trading day's close into daily_prices.
+ * CRON `15 22 * * *`, `15 12 * * *` (UTC) — backfills closes, writes a
+ * quote-based provisional close when the historical candle lags, then retries
+ * so provisional rows reconcile to final history data.
  *
  * Source: Yahoo by default, or Schwab Market Data when MARKET_DATA_PROVIDER=schwab.
  * Browser can't call upstream providers directly; this Worker is the only proxy.
@@ -34,6 +36,11 @@ import {
   type HistorySeries,
   type NormalizedQuote,
 } from './marketData';
+import {
+  isQuoteEligibleForProvisionalClose,
+  isoDateInNewYork,
+  lastCompletedNyseTradingDate,
+} from './nyseCalendar.js';
 
 export interface Env {
   QUOTE_CACHE: KVNamespace;
@@ -107,7 +114,7 @@ export default {
   },
 
   /**
-   * Scheduled trigger — runs after US market close (UTC 22:15 = ET 17:15 EST / 18:15 EDT).
+   * Scheduled trigger — runs after US market close and again the next morning.
    * Pulls the union of every user's watchlist + configured benchmarks, fetches recent closes, and upserts
    * into daily_prices. Idempotent thanks to PK (ticker, trade_date).
    */
@@ -135,6 +142,14 @@ async function runDailyPriceSync(env: Env): Promise<void> {
     } catch (err) {
       console.error(`[cron] failed ${ticker}:`, err);
     }
+  }
+  try {
+    const tradingDate = lastCompletedNyseTradingDate();
+    const quotes = await fetchQuotesFromProvider(env, tickers);
+    await upsertSnapshots(env, quotes);
+    await upsertProvisionalDailyPrices(env, tradingDate, quotes);
+  } catch (err) {
+    console.warn('[cron] provisional close sync failed:', err);
   }
   await refreshDuePerformanceCaches(env);
 }
@@ -177,6 +192,25 @@ async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<R
     return json({ quotes: cached, cache: 'hit' });
   }
 
+  const quotes = await fetchQuotesFromProvider(env, symbols);
+
+  // Persist ordering matching request
+  quotes.sort((a, b) => symbols.indexOf(a.ticker) - symbols.indexOf(b.ticker));
+
+  if (quotes.length > 0) {
+    await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(quotes), { expirationTtl: QUOTE_TTL });
+    // Fire-and-forget snapshot to Supabase so anonymous /share/[token] pages
+    // can compute return_pct without needing direct Yahoo access.
+    if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+      ctx.waitUntil(upsertSnapshots(env, quotes).catch((e) => console.warn('snapshot upsert failed:', e)));
+    }
+  }
+
+  return json({ quotes, cache: 'miss' });
+}
+
+async function fetchQuotesFromProvider(env: Env, symbols: string[]): Promise<QuoteOut[]> {
+  const provider = marketDataProviderFromEnv(env);
   let quotes: QuoteOut[] = [];
   if (provider === 'schwab') {
     try {
@@ -198,20 +232,7 @@ async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<R
   } else {
     quotes = await fetchYahooQuotes(symbols, false);
   }
-
-  // Persist ordering matching request
-  quotes.sort((a, b) => symbols.indexOf(a.ticker) - symbols.indexOf(b.ticker));
-
-  if (quotes.length > 0) {
-    await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(quotes), { expirationTtl: QUOTE_TTL });
-    // Fire-and-forget snapshot to Supabase so anonymous /share/[token] pages
-    // can compute return_pct without needing direct Yahoo access.
-    if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
-      ctx.waitUntil(upsertSnapshots(env, quotes).catch((e) => console.warn('snapshot upsert failed:', e)));
-    }
-  }
-
-  return json({ quotes, cache: 'miss' });
+  return quotes;
 }
 
 async function fetchYahooQuotes(symbols: string[], fallback: boolean): Promise<QuoteOut[]> {
@@ -243,6 +264,7 @@ async function upsertSnapshots(env: Env, quotes: QuoteOut[]): Promise<void> {
       change_pct: q.changePct,
       market_state: q.marketState,
       source: q.source,
+      as_of_timestamp: q.asOf ?? q.fetchedAt,
       updated_at: new Date().toISOString(),
     }));
   if (rows.length === 0) return;
@@ -416,7 +438,7 @@ function isHistorySeries(value: unknown): value is HistorySeries {
 
 function isHistoryPoint(value: unknown): value is HistoryPoint {
   if (!value || typeof value !== 'object') return false;
-  const point = value as { date?: unknown; close?: unknown; adjustedClose?: unknown };
+  const point = value as { date?: unknown; close?: unknown; adjustedClose?: unknown; asOfTimestamp?: unknown };
   return (
     typeof point.date === 'string'
     && typeof point.close === 'number'
@@ -425,6 +447,7 @@ function isHistoryPoint(value: unknown): value is HistoryPoint {
       point.adjustedClose === undefined
       || (typeof point.adjustedClose === 'number' && Number.isFinite(point.adjustedClose))
     )
+    && (point.asOfTimestamp === undefined || typeof point.asOfTimestamp === 'string')
   );
 }
 
@@ -453,13 +476,12 @@ async function fetchYahooHistory(symbol: string, range: string): Promise<History
     const c = closes[i];
     const adjusted = adjustedCloses[i];
     if (typeof ts !== 'number' || typeof c !== 'number' || !Number.isFinite(c)) continue;
-    // Yahoo timestamps are at the trading-day open in ET; converting to UTC and
-    // slicing YYYY-MM-DD gives the correct calendar date as long as the open
-    // is past midnight UTC (which is always true since ET = UTC-4 / -5).
+    const asOfTimestamp = new Date(ts * 1000).toISOString();
     points.push({
-      date: new Date(ts * 1000).toISOString().slice(0, 10),
+      date: isoDateInNewYork(new Date(ts * 1000)),
       close: c,
       adjustedClose: typeof adjusted === 'number' && Number.isFinite(adjusted) ? adjusted : c,
+      asOfTimestamp,
     });
   }
   return { ticker: symbol, points };
@@ -482,8 +504,44 @@ export async function upsertDailyPrices(env: Env, ticker: string, points: Histor
     close: p.close,
     adjusted_close: p.adjustedClose ?? p.close,
     source,
+    as_of_timestamp: p.asOfTimestamp ?? new Date().toISOString(),
+    is_provisional: false,
     updated_at: new Date().toISOString(),
   }));
+  await upsertDailyPriceRows(env, rows);
+}
+
+export function provisionalDailyPriceRows(
+  tradingDate: string,
+  quotes: QuoteOut[],
+  updatedAt = new Date().toISOString(),
+) {
+  return quotes.flatMap((q) => {
+    if (q.price === null || !isQuoteEligibleForProvisionalClose(q.asOf, tradingDate)) return [];
+    return [{
+      ticker: q.ticker,
+      trade_date: tradingDate,
+      close: q.price,
+      adjusted_close: null,
+      source: `${q.source}-quote-provisional`,
+      as_of_timestamp: q.asOf,
+      is_provisional: true,
+      updated_at: updatedAt,
+    }];
+  });
+}
+
+export async function upsertProvisionalDailyPrices(env: Env, tradingDate: string, quotes: QuoteOut[]): Promise<void> {
+  const rows = provisionalDailyPriceRows(tradingDate, quotes);
+  if (rows.length === 0) {
+    console.warn(`[cron] no close-eligible provisional quotes for ${tradingDate}`);
+    return;
+  }
+  await upsertDailyPriceRows(env, rows);
+  console.log(`[cron] upserted ${rows.length} provisional close rows for ${tradingDate}`);
+}
+
+async function upsertDailyPriceRows(env: Env, rows: Array<Record<string, unknown>>): Promise<void> {
   // Supabase RPC batch upsert. PostgREST limits payload, so chunk if >1000 rows.
   const CHUNK = 1000;
   for (let i = 0; i < rows.length; i += CHUNK) {

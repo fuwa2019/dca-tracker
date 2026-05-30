@@ -71,6 +71,9 @@ export function DashboardPage() {
     const rows = portfolioHistory.data?.series ?? [];
     return rows.map((p) => ({
       date: p.date,
+      tradingDate: p.trading_date ?? p.date,
+      asOfTimestamp: p.as_of_timestamp ?? null,
+      provisional: !!p.is_provisional,
       invested: Number(p.invested) || 0,
       costBasis: Number(p.cost_basis) || 0,
       navUser: Number(p.nav_user) || 0,

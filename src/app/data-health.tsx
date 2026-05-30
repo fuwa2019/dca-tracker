@@ -22,6 +22,7 @@ import {
 import { aggregatePositions } from '@/lib/calc/position';
 import { supabase } from '@/lib/supabase';
 import { fetchHistory } from '@/lib/quote';
+import { isoDateInNewYork } from '@/lib/nyse-calendar';
 import { getBenchmarks, getSelectedBenchmark } from '@/lib/settings';
 import { cn } from '@/lib/utils';
 import type { Database as Db } from '@/lib/database.types';
@@ -509,7 +510,7 @@ function buildCoverage(
   rows: DailyPriceCoverageRow[],
   coverageStartDates: ReadonlyMap<string, string>,
 ): Coverage[] {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = isoDateInNewYork(new Date());
   const freshEnough = addDays(today, -10);
   const byTicker = new Map(rows.map((row) => [row.ticker, row]));
   return symbols.map((ticker) => {

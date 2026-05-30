@@ -25,6 +25,7 @@ try {
   );
 
   const mod = await import(path.join(outDir, 'marketData.js'));
+  const calendarMod = await import(path.join(outDir, 'nyseCalendar.js'));
   const workerMod = await importCompiledWorker(outDir);
   const env = {
     SCHWAB_CLIENT_ID: 'client-id',
@@ -38,6 +39,26 @@ try {
   assert.equal(mod.marketDataProviderFromEnv(env), 'schwab', 'provider env switch');
   assert.equal(workerMod.dailyPriceSourceFromEnv(env), 'schwab', 'Schwab daily_prices source');
   assert.equal(workerMod.dailyPriceSourceFromEnv({ ...env, MARKET_DATA_PROVIDER: 'yahoo' }), 'yahoo', 'Yahoo daily_prices source');
+  assert.equal(
+    calendarMod.lastCompletedNyseTradingDate(new Date('2026-05-29T19:59:00Z')),
+    '2026-05-28',
+    'before 16:00 ET uses the previous NYSE trading day',
+  );
+  assert.equal(
+    calendarMod.lastCompletedNyseTradingDate(new Date('2026-05-29T20:00:00Z')),
+    '2026-05-29',
+    '16:00 ET completes the current NYSE trading day',
+  );
+  assert.equal(
+    calendarMod.lastCompletedNyseTradingDate(new Date('2026-05-30T12:00:00Z')),
+    '2026-05-29',
+    'Saturday retry reconciles Friday',
+  );
+  assert.equal(
+    calendarMod.lastCompletedNyseTradingDate(new Date('2026-05-25T22:15:00Z')),
+    '2026-05-22',
+    'NYSE holiday does not create a trading day',
+  );
   assert.equal(
     workerMod.historyCacheKey('schwab', ['VOO', 'QQQM'], '5y'),
     'history:schwab:VOO,QQQM:5y',
@@ -63,6 +84,21 @@ try {
     'https://api.schwabapi.com/marketdata/v1/quotes?symbols=VOO',
     'allows marketdata quote endpoint',
   );
+  assert.deepEqual(
+    mod.schwabHistoryToSeries('SPY', {
+      candles: [{ datetime: Date.parse('2026-05-30T00:30:00Z'), close: 755.76 }],
+    }),
+    {
+      ticker: 'SPY',
+      points: [{
+        date: '2026-05-29',
+        close: 755.76,
+        adjustedClose: 755.76,
+        asOfTimestamp: '2026-05-30T00:30:00.000Z',
+      }],
+    },
+    'Schwab daily candle is labeled with its America/New_York trading date',
+  );
 
   const upsertBodies = [];
   const originalFetch = globalThis.fetch;
@@ -86,6 +122,30 @@ try {
   }
   assert.equal(upsertBodies[0].p_rows[0].source, 'schwab', 'Schwab provider upserts daily_prices.source=schwab');
   assert.equal(upsertBodies[1].p_rows[0].source, 'yahoo', 'Yahoo provider upserts daily_prices.source=yahoo');
+  assert.equal(upsertBodies[0].p_rows[0].is_provisional, false, 'historical candles reconcile provisional rows');
+
+  const provisionalRows = workerMod.provisionalDailyPriceRows(
+    '2026-05-29',
+    [
+      { ticker: 'SPY', price: 755.76, source: 'schwab', asOf: '2026-05-29T20:00:00.000Z' },
+      { ticker: 'VOO', price: 695.07, source: 'schwab', asOf: '2026-05-29T19:59:59.000Z' },
+    ],
+    '2026-05-30T02:54:21.600Z',
+  );
+  assert.deepEqual(
+    provisionalRows,
+    [{
+      ticker: 'SPY',
+      trade_date: '2026-05-29',
+      close: 755.76,
+      adjusted_close: null,
+      source: 'schwab-quote-provisional',
+      as_of_timestamp: '2026-05-29T20:00:00.000Z',
+      is_provisional: true,
+      updated_at: '2026-05-30T02:54:21.600Z',
+    }],
+    'only close-eligible New York quotes become provisional daily prices',
+  );
 
   const calls = [];
   const fetcher = async (url, init = {}) => {
@@ -171,8 +231,11 @@ try {
 async function importCompiledWorker(outDir) {
   const indexPath = path.join(outDir, 'index.js');
   const marketDataUrl = pathToFileURL(path.join(outDir, 'marketData.js')).href;
+  const nyseCalendarUrl = pathToFileURL(path.join(outDir, 'nyseCalendar.js')).href;
   const source = await readFile(indexPath, 'utf8');
-  const loadableSource = source.replace("from './marketData';", `from '${marketDataUrl}';`);
+  const loadableSource = source
+    .replace("from './marketData';", `from '${marketDataUrl}';`)
+    .replace("from './nyseCalendar.js';", `from '${nyseCalendarUrl}';`);
   return import(`data:text/javascript;charset=utf-8,${encodeURIComponent(loadableSource)}`);
 }
 

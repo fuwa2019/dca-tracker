@@ -1,3 +1,5 @@
+import { isoDateInNewYork } from '@/lib/nyse-calendar';
+
 /**
  * Time-weighted return (TWR) — geometric chain of sub-period returns that
  * removes the effect of cashflow timing/size. The goal: assess strategy
@@ -19,7 +21,7 @@ export interface TwrInput {
   cashflows: Array<{ usd_in_date: string | null; usd_amount: number | null }>;
   currentMarketValueUsd: number;
   asOfDate?: Date;
-  /** Optional callback to get historical price on a given date (UTC ISO date string). */
+  /** Optional callback to get historical price on a US trading-date ISO string. */
   priceOn?: (ticker: string, isoDate: string) => number | null;
 }
 
@@ -42,7 +44,7 @@ export function computeTwr(input: TwrInput): TwrResult | null {
   const startIso = [...flowDates].sort()[0];
   if (!startIso) return null;
   const today = asOfDate ?? new Date();
-  const todayIso = today.toISOString().slice(0, 10);
+  const todayIso = isoDateInNewYork(today);
   const breakpoints = [...flowDates].filter((d) => d <= todayIso).sort();
   // Always include "today" as the terminal breakpoint
   if (breakpoints[breakpoints.length - 1] !== todayIso) breakpoints.push(todayIso);

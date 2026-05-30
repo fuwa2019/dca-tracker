@@ -87,6 +87,7 @@ export interface QuoteSnapshotRow {
   change_pct: number | null;
   market_state: string | null;
   source: string | null;
+  as_of_timestamp: string | null;
   updated_at: string;
 }
 export interface QuoteSnapshotInsert {
@@ -97,6 +98,7 @@ export interface QuoteSnapshotInsert {
   change_pct?: number | null;
   market_state?: string | null;
   source?: string | null;
+  as_of_timestamp?: string | null;
   updated_at?: string;
 }
 export type QuoteSnapshotUpdate = Partial<QuoteSnapshotInsert>;
@@ -176,6 +178,9 @@ export type SharedPortfolio = {
 export type SharedHistory = {
   series: Array<{
     date: string;
+    trading_date?: string;
+    as_of_timestamp?: string | null;
+    is_provisional?: boolean;
     return_pct_user: number;
     return_pct_spy: number;
   }>;
@@ -189,6 +194,7 @@ export type SharedHistory = {
   flow_basis?: string;
   date_basis?: string;
   trading_calendar?: string;
+  trading_date_timezone?: string;
   excluded_non_trading_days?: boolean;
   dirty?: boolean;
 };
@@ -196,6 +202,9 @@ export type SharedHistory = {
 export type PortfolioHistory = {
   series: Array<{
     date: string;
+    trading_date?: string;
+    as_of_timestamp?: string | null;
+    is_provisional?: boolean;
     invested?: number;
     cost_basis?: number;
     nav_user?: number;
@@ -222,6 +231,7 @@ export type PortfolioHistory = {
   flow_basis?: string;
   date_basis?: string;
   trading_calendar?: string;
+  trading_date_timezone?: string;
   excluded_non_trading_days?: boolean;
   dirty?: boolean;
 };
