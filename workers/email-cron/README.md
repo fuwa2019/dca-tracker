@@ -5,8 +5,8 @@
 ## 工作原理
 
 1. Cloudflare 触发 cron `0 3 * * *`（UTC 03:00 = Beijing 11:00）
-2. 算出"美东今天"的下一个 NYSE 交易日
-3. 如果是当月**第一个**交易日 → 是候选发送日
+2. 算出 Asia/Shanghai 本地日期的"明天"
+3. 如果明天是 NYSE 交易日，且是当月**第一个**交易日 → 是候选发送日
 4. 查 Supabase `settings` 表里 `email_enabled = true` 且 `email_to` 不为空的用户
 5. KV 去重（`sent:<user_id>:<YYYY-MM>`，TTL 40 天）→ 调用 Resend 发邮件 → 写 `email_log` 二级去重
 

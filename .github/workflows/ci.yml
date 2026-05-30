@@ -30,6 +30,9 @@ jobs:
       - name: Financial fixtures
         run: npm run test:finance
 
+      - name: Email reminder dates
+        run: npm run test:email-reminder
+
       - name: Quote status labels
         run: npm run test:quote-status
 

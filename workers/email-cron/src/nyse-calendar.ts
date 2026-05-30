@@ -44,10 +44,21 @@ export const NYSE_HOLIDAYS: Record<string, string[]> = {
   ],
 };
 
+/** Returns ISO date string in the requested time zone for a given Date. */
+export function isoDateInTimeZone(d: Date, timeZone: string): string {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmt.format(d); // en-CA gives YYYY-MM-DD
+}
+
 /** Returns ISO date string in America/New_York for a given Date. */
 export function isoDateInNewYork(d: Date): string {
-  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
-  return fmt.format(d); // en-CA gives YYYY-MM-DD
+  return isoDateInTimeZone(d, 'America/New_York');
+}
+
+/** Adds calendar days to an ISO date string. */
+export function addIsoDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 /** True if ISO date is a NYSE trading day (Mon-Fri, not a listed holiday). */
@@ -80,4 +91,18 @@ export function firstNyseTradingDayOfMonth(year: number, month: number): string 
     if (isNyseTradingDay(iso)) return iso;
   }
   throw new Error(`no trading day in first week of ${year}-${month}`);
+}
+
+/** Returns the local tomorrow candidate and whether it is the month's first NYSE trading day. */
+export function monthlyReminderCandidate(now: Date, timeZone: string) {
+  const todayLocal = isoDateInTimeZone(now, timeZone);
+  const candidate = addIsoDays(todayLocal, 1);
+  const [year, month] = candidate.split('-').map(Number);
+  const firstOfMonth = firstNyseTradingDayOfMonth(year, month);
+  return {
+    todayLocal,
+    candidate,
+    firstOfMonth,
+    shouldSend: isNyseTradingDay(candidate) && candidate === firstOfMonth,
+  };
 }

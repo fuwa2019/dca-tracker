@@ -4,20 +4,16 @@
  * Fires daily at UTC 03:00 (Beijing 11:00).
  *
  * Logic:
- *   1. Compute "today" in America/New_York (ET).
- *   2. Find the next NYSE trading day strictly after today.
- *   3. If that day is the FIRST NYSE trading day of its month → candidate.
- *   4. For each user with email_enabled = true and email_to set:
+ *   1. Compute "tomorrow" in the reminder time zone (Asia/Shanghai).
+ *   2. If tomorrow is the FIRST NYSE trading day of its month → candidate.
+ *   3. For each user with email_enabled = true and email_to set:
  *        - Skip if email_log already has a row for this (user_id, year-month).
  *        - Send Resend email.
  *        - Record email_log entry to dedupe.
  */
 
 import {
-  isoDateInNewYork,
-  nextNyseTradingDay,
-  firstNyseTradingDayOfMonth,
-  isNyseTradingDay,
+  monthlyReminderCandidate,
 } from './nyse-calendar';
 
 export interface Env {
@@ -64,27 +60,21 @@ export default {
 };
 
 async function runDailyCheck(env: Env, opts: { force?: boolean } = {}) {
-  const nowEt = isoDateInNewYork(new Date());
-  const next = nextNyseTradingDay(nowEt);
-  const [y, m] = next.split('-').map(Number);
-  const firstOfMonth = firstNyseTradingDayOfMonth(y, m);
+  const { todayLocal, candidate, firstOfMonth, shouldSend } = monthlyReminderCandidate(new Date(), 'Asia/Shanghai');
+  const [y, m] = candidate.split('-').map(Number);
 
   if (!opts.force) {
-    if (next !== firstOfMonth) {
-      console.log(`[cron] today=${nowEt} next=${next} first=${firstOfMonth} — not the month's first trading day, skipping`);
-      return;
-    }
-    if (!isNyseTradingDay(next)) {
-      console.log(`[cron] next=${next} not a trading day, skipping`);
+    if (!shouldSend) {
+      console.log(`[cron] localToday=${todayLocal} candidate=${candidate} first=${firstOfMonth} — local tomorrow is not the month's first trading day, skipping`);
       return;
     }
   } else {
-    console.log(`[cron] FORCE mode — bypassing date and dedupe checks (today=${nowEt}, next=${next}, first=${firstOfMonth})`);
+    console.log(`[cron] FORCE mode — bypassing date check (localToday=${todayLocal}, candidate=${candidate}, first=${firstOfMonth})`);
   }
 
   const ym = `${y}-${String(m).padStart(2, '0')}`;
   const settingsList = await fetchEligibleSettings(env);
-  console.log(`[cron] et=${nowEt} → next first trading day=${next} (ym=${ym}); ${settingsList.length} subscriber(s)`);
+  console.log(`[cron] localToday=${todayLocal} → next first trading day=${candidate} (ym=${ym}); ${settingsList.length} subscriber(s)`);
 
   for (const s of settingsList) {
     if (!s.email_to) continue;
@@ -100,7 +90,7 @@ async function runDailyCheck(env: Env, opts: { force?: boolean } = {}) {
 
     try {
       await sendReminder(env, s.email_to, {
-        nextTradingDay: next,
+        nextTradingDay: candidate,
         ym,
         monthlyDca: s.monthly_dca_usd,
       });
