@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Database, PerformanceHistory, PortfolioHistory, SharedHistory } from '@/lib/database.types';
 import { aggregatePositions } from '@/lib/calc/position';
+import { normalizeSymbol } from '@/lib/symbols';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
@@ -48,7 +49,7 @@ export function useSettings() {
 }
 
 export function usePortfolioHistory(benchmark?: string) {
-  const normalizedBenchmark = benchmark?.trim().toUpperCase() || undefined;
+  const normalizedBenchmark = normalizeSymbol(benchmark ?? '') || undefined;
   return useQuery<PortfolioHistory | null>({
     queryKey: ['portfolio_history', normalizedBenchmark ?? 'default'],
     queryFn: async () => {

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { fetchHistory, type HistorySeries } from '@/lib/quote';
 import { useAuth } from '@/hooks/useAuth';
+import { normalizeSymbol } from '@/lib/symbols';
 
 const DEMO_NOTE = '[DCA_TEST_10Y_60_QQQ]';
 const LEGACY_DEMO_NOTE = '[DCA_TEST_10Y_60_VOO]';
@@ -117,7 +118,7 @@ export function useDemoDcaData() {
 }
 
 function hasHistoryPoints(series: HistorySeries[], ticker: string) {
-  return (series.find((s) => s.ticker.toUpperCase() === ticker)?.points.length ?? 0) > 0;
+  return (series.find((s) => normalizeSymbol(s.ticker) === ticker)?.points.length ?? 0) > 0;
 }
 
 async function invalidatePortfolioQueries(qc: ReturnType<typeof useQueryClient>) {
@@ -146,7 +147,7 @@ async function refreshPerformanceHistoryCache() {
 }
 
 function seriesToPriceMap(series: HistorySeries[], ticker: string) {
-  const row = series.find((s) => s.ticker.toUpperCase() === ticker);
+  const row = series.find((s) => normalizeSymbol(s.ticker) === ticker);
   return new Map((row?.points ?? []).map((p) => [p.date, p.close]));
 }
 

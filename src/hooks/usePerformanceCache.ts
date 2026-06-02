@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { normalizeSymbol } from '@/lib/symbols';
 import type {
   HistoryCacheRefresh,
   PerformanceCacheStatus,
@@ -20,7 +21,7 @@ function isMissingRpc(error: { code?: string; message?: string; status?: number 
 
 export function usePerformanceCacheStatus(benchmark?: string) {
   const qc = useQueryClient();
-  const normalizedBenchmark = benchmark?.trim().toUpperCase() || undefined;
+  const normalizedBenchmark = normalizeSymbol(benchmark ?? '') || undefined;
   const queryKey = ['performance_cache_status', normalizedBenchmark ?? 'default'];
   return useQuery<PerformanceCacheStatus | null>({
     queryKey,
@@ -88,7 +89,7 @@ function parseTimeMs(value?: string | null): number | null {
 
 export function useRefreshPerformanceCache(benchmark?: string) {
   const qc = useQueryClient();
-  const normalizedBenchmark = benchmark?.trim().toUpperCase() || undefined;
+  const normalizedBenchmark = normalizeSymbol(benchmark ?? '') || undefined;
   const statusKey = ['performance_cache_status', normalizedBenchmark ?? 'default'];
   return useMutation({
     mutationFn: async () => {

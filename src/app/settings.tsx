@@ -15,6 +15,8 @@ import { useAuth, signOut } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { searchSymbols, type SymbolSearchResult } from '@/lib/quote';
 import { DEFAULT_BENCHMARKS, DEFAULT_WATCHLIST, getBenchmarks, getSelectedBenchmark, splitTickers } from '@/lib/settings';
+import { backfillTrackedSymbols, registerTrackedSymbols } from '@/lib/trackedSymbols';
+import { normalizeSymbol } from '@/lib/symbols';
 import { cn } from '@/lib/utils';
 import type { Database } from '@/lib/database.types';
 
@@ -65,8 +67,9 @@ export function SettingsPage() {
       if (!user) throw new Error('not_authed');
       const watchlist = splitTickers(form.watchlist, DEFAULT_WATCHLIST);
       const benchmarks = splitTickers(form.benchmarks, DEFAULT_BENCHMARKS);
-      const selectedBenchmark = benchmarks.includes(form.selected_benchmark.toUpperCase())
-        ? form.selected_benchmark.toUpperCase()
+      const normalizedSelected = normalizeSymbol(form.selected_benchmark);
+      const selectedBenchmark = benchmarks.includes(normalizedSelected)
+        ? normalizedSelected
         : benchmarks[0] ?? 'SPY';
       const payload = {
         user_id: user.id,
@@ -81,14 +84,25 @@ export function SettingsPage() {
         selected_benchmark: selectedBenchmark,
       };
       const { error } = await supabase.from('settings').upsert(payload);
-      if (!error) return;
+      if (!error) {
+        const symbols = await registerTrackedSymbols([...watchlist, ...benchmarks], 'settings');
+        await backfillTrackedSymbols(symbols, 'max');
+        return;
+      }
       if (!/benchmarks|selected_benchmark|schema cache|column/i.test(error.message ?? '')) throw error;
       const { benchmarks: _benchmarks, selected_benchmark: _selected, ...legacyPayload } = payload;
       const retry = await supabase.from('settings').upsert(legacyPayload);
       if (retry.error) throw retry.error;
+      const symbols = await registerTrackedSymbols([...watchlist, ...benchmarks], 'settings');
+      await backfillTrackedSymbols(symbols, 'max');
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings'] });
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['settings'] }),
+        qc.invalidateQueries({ queryKey: ['tracked_symbol_coverage'] }),
+        qc.invalidateQueries({ queryKey: ['price_coverage'] }),
+      ]);
+      await qc.refetchQueries({ queryKey: ['tracked_symbol_coverage'] });
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1500);
     },
@@ -355,7 +369,7 @@ function BenchmarkManager({
   const safeSelected = benchmarks.includes(selected) ? selected : benchmarks[0] ?? 'SPY';
 
   async function runSearch() {
-    const q = query.trim().toUpperCase();
+    const q = normalizeSymbol(query);
     if (!q) return;
     setSearching(true);
     try {
@@ -367,7 +381,7 @@ function BenchmarkManager({
   }
 
   function add(symbol: string) {
-    const ticker = symbol.trim().toUpperCase();
+    const ticker = normalizeSymbol(symbol);
     if (!ticker) return;
     const next = benchmarks.includes(ticker) ? benchmarks : [...benchmarks, ticker];
     onChange(next, ticker);

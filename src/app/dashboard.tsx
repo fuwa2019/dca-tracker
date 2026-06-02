@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, YAxis, Tooltip } from 'recharts';
@@ -20,6 +20,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { HoldingsList } from '@/components/HoldingsList';
 import { TargetProgressRing } from '@/components/TargetProgressRing';
 import { useQuotes } from '@/hooks/useQuotes';
+import { registerTrackedSymbols } from '@/lib/trackedSymbols';
 import {
   useTransactions,
   useCashflows,
@@ -59,6 +60,11 @@ export function DashboardPage() {
     [positions, watchlist, selectedBenchmark],
   );
   const { data: quotes = [], isLoading: quotesLoading, isError: quotesError } = useQuotes(symbols);
+  useEffect(() => {
+    void registerTrackedSymbols(symbols, 'dashboard').catch((error) => {
+      if (import.meta.env.DEV) console.warn('[tracked-symbols] dashboard registration failed:', error);
+    });
+  }, [symbols]);
   const quoteByTicker = useMemo(() => new Map(quotes.map((q) => [q.ticker, q])), [quotes]);
   const quotesNone = !quotesLoading && quotes.length === 0 && positions.length > 0;
   const quotesPartial = !quotesLoading && positions.length > 0 && positions.some((p) => {

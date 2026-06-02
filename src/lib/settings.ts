@@ -1,4 +1,5 @@
 import type { SettingsRow } from '@/lib/database.types';
+import { normalizeSymbol } from '@/lib/symbols';
 
 export const DEFAULT_WATCHLIST = ['VOO', 'QQQM', 'SMH'];
 export const DEFAULT_BENCHMARK = 'SPY';
@@ -7,7 +8,7 @@ export const DEFAULT_BENCHMARKS = [DEFAULT_BENCHMARK];
 export function normalizeTickers(values: Iterable<string>, fallback: string[] = []): string[] {
   const out: string[] = [];
   for (const raw of values) {
-    const ticker = raw.trim().toUpperCase();
+    const ticker = normalizeSymbol(raw);
     if (!ticker || out.includes(ticker)) continue;
     out.push(ticker);
   }
@@ -24,7 +25,7 @@ export function getBenchmarks(settings: SettingsRow | null | undefined): string[
 
 export function getSelectedBenchmark(settings: SettingsRow | null | undefined): string {
   const benchmarks = getBenchmarks(settings);
-  const selected = settings?.selected_benchmark?.trim().toUpperCase();
+  const selected = normalizeSymbol(settings?.selected_benchmark ?? '');
   return selected && benchmarks.includes(selected) ? selected : benchmarks[0] ?? DEFAULT_BENCHMARK;
 }
 

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { isoDateInNewYork } from '@/lib/nyse-calendar';
+import { normalizeSymbol, normalizeSymbols } from '@/lib/symbols';
 
 const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
 
@@ -78,7 +79,7 @@ function mergePriceMaps(base: PriceMap, extra: PriceMap): PriceMap {
 function workerHistoryToMap(data: WorkerHistoryResponse): PriceMap {
   const map: PriceMap = new Map();
   for (const row of data.series ?? []) {
-    const ticker = row.ticker.toUpperCase();
+    const ticker = normalizeSymbol(row.ticker);
     let prices = map.get(ticker);
     if (!prices) {
       prices = new Map();
@@ -130,7 +131,7 @@ async function backfillViaWorker(symbols: string[], earliestDate: string): Promi
  * one-shot backfill via the quote worker, then re-reads.
  */
 export function useDailyPrices(symbols: string[], earliestDate: string | null) {
-  const uniqSorted = [...new Set(symbols.map((s) => s.toUpperCase()))].sort();
+  const uniqSorted = normalizeSymbols(symbols);
   const enabled = uniqSorted.length > 0 && !!earliestDate;
   return useQuery<PriceMap>({
     queryKey: ['daily_prices', uniqSorted.join(','), earliestDate],

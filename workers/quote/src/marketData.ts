@@ -130,10 +130,14 @@ export function marketDataProviderFromEnv(env: SchwabEnv): MarketDataProviderNam
   return env.MARKET_DATA_PROVIDER?.trim().toLowerCase() === 'schwab' ? 'schwab' : 'yahoo';
 }
 
+export function normalizeSymbol(symbol: string): string {
+  return symbol.trim().toUpperCase();
+}
+
 export function parseSymbolsParam(raw: string | null, max = 20): string[] {
   return [...new Set((raw ?? '')
     .split(',')
-    .map((s) => s.trim().toUpperCase())
+    .map(normalizeSymbol)
     .filter(Boolean))]
     .slice(0, max);
 }
@@ -230,7 +234,7 @@ export class SchwabMarketDataClient implements MarketDataProvider {
   ) {}
 
   async getQuotes(symbols: string[]): Promise<NormalizedQuote[]> {
-    const normalized = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))];
+    const normalized = [...new Set(symbols.map(normalizeSymbol).filter(Boolean))];
     if (normalized.length === 0) return [];
     const params = new URLSearchParams({ symbols: normalized.join(',') });
     const data = await this.requestMarketData<Record<string, SchwabQuote>>(`/quotes?${params.toString()}`);
@@ -240,7 +244,7 @@ export class SchwabMarketDataClient implements MarketDataProvider {
   }
 
   async getPriceHistory(symbol: string, params = new URLSearchParams()): Promise<HistorySeries> {
-    const ticker = symbol.trim().toUpperCase();
+    const ticker = normalizeSymbol(symbol);
     if (!ticker) throw new Error('missing_symbol');
     const upstreamParams = schwabHistoryParams(ticker, params);
     const data = await this.requestMarketData<SchwabPriceHistoryResponse>(`/pricehistory?${upstreamParams.toString()}`);
@@ -291,7 +295,7 @@ export class SchwabMarketDataClient implements MarketDataProvider {
 }
 
 export function normalizeSchwabQuote(symbol: string, row: SchwabQuote): NormalizedQuote {
-  const ticker = (row.reference?.symbol ?? row.symbol ?? symbol).trim().toUpperCase();
+  const ticker = normalizeSymbol(row.reference?.symbol ?? row.symbol ?? symbol);
   const price = numOrNull(row.quote?.lastPrice) ?? numOrNull(row.quote?.mark) ?? numOrNull(row.regular?.regularMarketLastPrice);
   const prevClose = numOrNull(row.quote?.closePrice);
   const change = numOrNull(row.quote?.netChange) ?? numOrNull(row.regular?.regularMarketNetChange) ?? diff(price, prevClose);
@@ -355,7 +359,7 @@ export function schwabHistoryToSeries(symbol: string, data: SchwabPriceHistoryRe
       asOfTimestamp,
     }];
   });
-  return { ticker: (data.symbol ?? symbol).trim().toUpperCase(), points };
+  return { ticker: normalizeSymbol(data.symbol ?? symbol), points };
 }
 
 async function requestSchwabToken(

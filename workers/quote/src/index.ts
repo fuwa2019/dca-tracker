@@ -28,6 +28,7 @@ import {
   buildSchwabAuthorizeUrl,
   exchangeSchwabAuthorizationCode,
   marketDataProviderFromEnv,
+  normalizeSymbol,
   parseSymbolsParam,
   refreshSchwabAccessToken,
   sanitizeForLog,
@@ -135,12 +136,14 @@ async function runDailyPriceSync(env: Env): Promise<void> {
       const series = await fetchHistoryFromProvider(env, ticker, '5d');
       if (series.points.length === 0) {
         console.warn(`[cron] no points for ${ticker}`);
+        await updateTrackedSymbolBackfill(env, ticker, 'missing');
         continue;
       }
       await upsertDailyPrices(env, series.ticker, series.points);
       console.log(`[cron] upserted ${series.points.length} rows for ${ticker}`);
     } catch (err) {
       console.error(`[cron] failed ${ticker}:`, err);
+      await updateTrackedSymbolBackfill(env, ticker, backfillFailureStatus(err), errorMessage(err));
     }
   }
   try {
@@ -156,19 +159,27 @@ async function runDailyPriceSync(env: Env): Promise<void> {
 
 async function collectCronTickers(env: Env): Promise<string[]> {
   try {
+    const tracked = await fetch(`${env.SUPABASE_URL!}/rest/v1/tracked_symbols?select=symbol&enabled=eq.true`, {
+      headers: supabaseHeaders(env),
+    });
+    if (!tracked.ok) throw new Error(`tracked_symbols ${tracked.status}`);
+    const trackedRows = (await tracked.json()) as Array<{ symbol?: string }>;
+    const trackedSymbols = parseSymbolsParam(trackedRows.map((row) => row.symbol ?? '').join(','), 1000);
+    if (trackedSymbols.length > 0) return trackedSymbols;
+  } catch (err) {
+    console.warn('[cron] tracked_symbols fetch failed, falling back to settings', err);
+  }
+  try {
     const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/settings?select=watchlist,benchmarks,selected_benchmark`, {
-      headers: {
-        apikey: env.SUPABASE_SERVICE_ROLE_KEY!,
-        Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY!}`,
-      },
+      headers: supabaseHeaders(env),
     });
     if (!r.ok) throw new Error(`settings ${r.status}`);
     const rows = (await r.json()) as Array<{ watchlist?: string[]; benchmarks?: string[]; selected_benchmark?: string }>;
     const set = new Set<string>();
     for (const row of rows) {
-      for (const t of row.watchlist ?? []) set.add(t.toUpperCase());
-      for (const t of row.benchmarks ?? []) set.add(t.toUpperCase());
-      if (row.selected_benchmark) set.add(row.selected_benchmark.toUpperCase());
+      for (const t of row.watchlist ?? []) set.add(normalizeSymbol(t));
+      for (const t of row.benchmarks ?? []) set.add(normalizeSymbol(t));
+      if (row.selected_benchmark) set.add(normalizeSymbol(row.selected_benchmark));
     }
     set.add('SPY'); // default benchmark fallback
     return [...set];
@@ -183,6 +194,9 @@ async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<R
 
   if (symbols.length === 0) {
     return json({ error: 'missing_symbols' }, 400);
+  }
+  if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    ctx.waitUntil(registerTrackedSymbols(env, symbols, 'quote').catch((e) => console.warn('[quote] symbol registration failed:', e)));
   }
 
   const provider = marketDataProviderFromEnv(env);
@@ -284,7 +298,7 @@ async function upsertSnapshots(env: Env, quotes: QuoteOut[]): Promise<void> {
 }
 
 async function handleChart(url: URL, env: Env): Promise<Response> {
-  const symbol = (url.searchParams.get('symbol') ?? '').trim().toUpperCase();
+  const symbol = normalizeSymbol(url.searchParams.get('symbol') ?? '');
   const range = url.searchParams.get('range') ?? '1y';
   const interval = url.searchParams.get('interval') ?? '1d';
   const prepost = url.searchParams.get('prepost') === '1' || url.searchParams.get('includePrePost') === 'true';
@@ -315,7 +329,7 @@ async function handleSearch(url: URL, env: Env): Promise<Response> {
   const data = (await r.json()) as YahooSearch;
   const results = (data.quotes ?? [])
     .map((row) => ({
-      symbol: (row.symbol ?? '').trim().toUpperCase(),
+      symbol: normalizeSymbol(row.symbol ?? ''),
       name: row.shortname ?? row.longname ?? row.symbol ?? '',
       exchange: row.exchange ?? null,
       type: row.quoteType ?? null,
@@ -338,6 +352,10 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
       message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for persist=sync',
     }, 500);
   }
+  if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    await registerTrackedSymbols(env, symbols, 'history');
+    await Promise.all(symbols.map((symbol) => updateTrackedSymbolBackfill(env, symbol, 'pending')));
+  }
 
   const cacheKey = historyCacheKey(provider, symbols, range);
   const cached = await env.QUOTE_CACHE.get(cacheKey, 'json') as unknown;
@@ -350,6 +368,7 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
           .filter((s) => s.points.length > 0)
           .map((s) => upsertDailyPrices(env, s.ticker, s.points)),
       );
+      await Promise.all(cached.map((s) => updateTrackedSymbolFromSeries(env, s)));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return json({ error: 'daily_prices_upsert_failed', message: msg }, 500);
@@ -360,12 +379,22 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
     console.warn('[history] ignoring invalid cached history payload');
   }
 
+  const failures = new Map<string, unknown>();
   const series = await Promise.all(
     symbols.map((s) => fetchHistoryFromProvider(env, s, range, url.searchParams).catch((e) => {
       console.warn(`[history] ${s} failed:`, sanitizeForLog(e));
+      failures.set(s, e);
       return { ticker: s, points: [] as HistoryPoint[] };
     })),
   );
+  if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    await Promise.all(series.map((item) => {
+      const failure = failures.get(item.ticker);
+      return failure
+        ? updateTrackedSymbolBackfill(env, item.ticker, backfillFailureStatus(failure), errorMessage(failure))
+        : updateTrackedSymbolFromSeries(env, item);
+    }));
+  }
 
   const successful = series.filter((s) => s.points.length > 0);
   if (successful.length > 0) {
@@ -391,7 +420,7 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
 }
 
 async function handlePriceHistory(url: URL, env: Env): Promise<Response> {
-  const symbol = (url.searchParams.get('symbol') ?? '').trim().toUpperCase();
+  const symbol = normalizeSymbol(url.searchParams.get('symbol') ?? '');
   if (!symbol) return json({ error: 'missing_symbol' }, 400);
   const range = url.searchParams.get('range') ?? '10y';
   const cacheKey = `price-history:${marketDataProviderFromEnv(env)}:${symbol}:${url.searchParams.toString() || range}`;
@@ -509,6 +538,7 @@ export async function upsertDailyPrices(env: Env, ticker: string, points: Histor
     updated_at: new Date().toISOString(),
   }));
   await upsertDailyPriceRows(env, rows);
+  await updateTrackedSymbolBackfill(env, ticker, 'ok', null, firstPointDate(points));
 }
 
 export function provisionalDailyPriceRows(
@@ -559,6 +589,87 @@ async function upsertDailyPriceRows(env: Env, rows: Array<Record<string, unknown
   }
 }
 
+function supabaseHeaders(env: Env): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    apikey: env.SUPABASE_SERVICE_ROLE_KEY!,
+    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY!}`,
+  };
+}
+
+async function registerTrackedSymbols(env: Env, symbols: string[], source: string): Promise<void> {
+  const rows = parseSymbolsParam(symbols.join(','), 1000).map((symbol) => ({ symbol, source }));
+  if (rows.length === 0) return;
+  const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/tracked_symbols?on_conflict=symbol`, {
+    method: 'POST',
+    headers: {
+      ...supabaseHeaders(env),
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify(rows),
+  });
+  if (!r.ok) throw new Error(`tracked_symbols upsert ${r.status}: ${await r.text()}`);
+}
+
+async function updateTrackedSymbolFromSeries(env: Env, series: HistorySeries): Promise<void> {
+  await updateTrackedSymbolBackfill(
+    env,
+    series.ticker,
+    series.points.length > 0 ? 'ok' : 'missing',
+    null,
+    firstPointDate(series.points),
+  );
+}
+
+async function updateTrackedSymbolBackfill(
+  env: Env,
+  symbol: string,
+  status: 'pending' | 'ok' | 'missing' | 'unsupported' | 'failed',
+  error: string | null = null,
+  firstTradeDate: string | null = null,
+): Promise<void> {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return;
+  const payload: Record<string, unknown> = {
+    backfill_status: status,
+    backfill_error: error,
+    last_backfill_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  if (firstTradeDate) {
+    const register = await fetch(`${env.SUPABASE_URL}/rest/v1/rpc/add_tracked_symbol`, {
+      method: 'POST',
+      headers: supabaseHeaders(env),
+      body: JSON.stringify({
+        p_symbol: normalizeSymbol(symbol),
+        p_source: 'history',
+        p_first_trade_date: firstTradeDate,
+      }),
+    });
+    if (!register.ok) throw new Error(`add_tracked_symbol rpc ${register.status}: ${await register.text()}`);
+  }
+  const r = await fetch(`${env.SUPABASE_URL}/rest/v1/tracked_symbols?symbol=eq.${encodeURIComponent(normalizeSymbol(symbol))}`, {
+    method: 'PATCH',
+    headers: {
+      ...supabaseHeaders(env),
+      Prefer: 'return=minimal',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error(`tracked_symbols patch ${r.status}: ${await r.text()}`);
+}
+
+function firstPointDate(points: HistoryPoint[]): string | null {
+  return points.reduce<string | null>((first, point) => !first || point.date < first ? point.date : first, null);
+}
+
+function errorMessage(error: unknown): string {
+  return String(sanitizeForLog(error instanceof Error ? error.message : String(error))).slice(0, 500);
+}
+
+function backfillFailureStatus(error: unknown): 'unsupported' | 'failed' {
+  return /unsupported|not supported|not found|404/i.test(errorMessage(error)) ? 'unsupported' : 'failed';
+}
+
 async function refreshDuePerformanceCaches(env: Env): Promise<void> {
   try {
     const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/refresh_due_performance_caches`, {
@@ -605,7 +716,7 @@ async function fetchV7Quotes(symbols: string[], fallback = false): Promise<Quote
         ? pctFromV7(row.postMarketChangePercent) ?? ratio(change, regularPrice ?? prevClose)
         : pctFromV7(row.regularMarketChangePercent);
     return {
-      ticker: (row.symbol ?? '').trim().toUpperCase(),
+      ticker: normalizeSymbol(row.symbol ?? ''),
       price: displayPrice,
       displayPrice,
       prevClose,
@@ -649,7 +760,7 @@ async function fetchV8Quote(symbol: string, fallback = false): Promise<QuoteOut 
   const change = price !== null && prev !== null ? price - prev : null;
   const changePct = price !== null && prev !== null && prev !== 0 ? (price - prev) / prev : null;
   return {
-    ticker: symbol.trim().toUpperCase(),
+    ticker: normalizeSymbol(symbol),
     price: numOrNull(price),
     displayPrice: numOrNull(price),
     prevClose: numOrNull(prev),

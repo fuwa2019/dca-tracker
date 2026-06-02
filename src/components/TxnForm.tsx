@@ -12,6 +12,8 @@ import { aggregatePositions } from '@/lib/calc/position';
 import { todayLocalIso } from '@/lib/format';
 import { formatDefaultNumber, shouldAutoFillField } from '@/lib/formAutoFill';
 import { cn } from '@/lib/utils';
+import { addTrackedSymbol } from '@/lib/trackedSymbols';
+import { normalizeSymbol } from '@/lib/symbols';
 import type { Database } from '@/lib/database.types';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
@@ -49,7 +51,7 @@ export function TxnForm({ initial, onDone }: Props) {
     }
   }, [initial]);
 
-  const normalizedTicker = ticker.trim().toUpperCase();
+  const normalizedTicker = normalizeSymbol(ticker);
   const { data: tickerQuotes = [], isFetching: quoteFetching, isError: quoteError } = useQuotes([normalizedTicker]);
   const quotePrice = tickerQuotes[0]?.price ?? tickerQuotes[0]?.displayPrice ?? tickerQuotes[0]?.regularPrice ?? null;
 
@@ -62,7 +64,7 @@ export function TxnForm({ initial, onDone }: Props) {
   // Max sellable shares for the current ticker (excluding this txn if editing).
   const maxSellable = useMemo(() => {
     if (side !== 'sell') return Infinity;
-    const upper = ticker.toUpperCase();
+    const upper = normalizeSymbol(ticker);
     const others = isEdit && initial ? allTxns.filter((t) => t.id !== initial.id) : allTxns;
     const positions = aggregatePositions(others as TxnRow[]);
     return positions.find((p) => p.ticker === upper)?.shares ?? 0;
@@ -77,7 +79,7 @@ export function TxnForm({ initial, onDone }: Props) {
       }
       const payload = {
         trade_date: tradeDate,
-        ticker: ticker.toUpperCase(),
+        ticker: normalizedTicker,
         side,
         price: Number(price),
         shares: Number(shares),
@@ -92,11 +94,18 @@ export function TxnForm({ initial, onDone }: Props) {
         const { error } = await supabase.from('transactions').insert({ ...payload, user_id: user.id });
         if (error) throw error;
       }
+      await addTrackedSymbol({
+        symbol: normalizedTicker,
+        source: 'transaction',
+        firstTradeDate: tradeDate,
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
+      qc.invalidateQueries({ queryKey: ['tracked_symbol_coverage'] });
+      qc.invalidateQueries({ queryKey: ['price_coverage'] });
       onDone?.();
     },
   });

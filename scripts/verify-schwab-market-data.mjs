@@ -36,6 +36,7 @@ try {
   };
 
   assert.deepEqual(mod.parseSymbolsParam(' voo, QQQM,voo,,smh '), ['VOO', 'QQQM', 'SMH'], 'symbols parse and de-dupe');
+  assert.equal(mod.normalizeSymbol(' ibit '), 'IBIT', 'symbol normalization trims and uppercases');
   assert.equal(mod.marketDataProviderFromEnv(env), 'schwab', 'provider env switch');
   assert.equal(workerMod.dailyPriceSourceFromEnv(env), 'schwab', 'Schwab daily_prices source');
   assert.equal(workerMod.dailyPriceSourceFromEnv({ ...env, MARKET_DATA_PROVIDER: 'yahoo' }), 'yahoo', 'Yahoo daily_prices source');
@@ -102,8 +103,8 @@ try {
 
   const upsertBodies = [];
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (_url, init = {}) => {
-    upsertBodies.push(JSON.parse(String(init.body)));
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).includes('/rpc/upsert_daily_prices')) upsertBodies.push(JSON.parse(String(init.body)));
     return new Response('', { status: 200 });
   };
   try {

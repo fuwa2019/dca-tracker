@@ -1,4 +1,5 @@
 import type { Database } from '../database.types';
+import { normalizeSymbol } from '@/lib/symbols';
 
 export type TxnRow = Database['public']['Tables']['transactions']['Row'];
 
@@ -28,7 +29,7 @@ export interface Position {
 export function aggregatePositions(transactions: TxnRow[]): Position[] {
   const byTicker = new Map<string, TxnRow[]>();
   for (const t of transactions) {
-    const tk = t.ticker.toUpperCase();
+    const tk = normalizeSymbol(t.ticker);
     const list = byTicker.get(tk) ?? [];
     list.push(t);
     byTicker.set(tk, list);

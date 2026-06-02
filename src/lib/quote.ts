@@ -5,6 +5,7 @@ import {
   splitIntoBatches,
   type ApiEndpoint,
 } from '@/lib/apiRateLimit';
+import { normalizeSymbol, normalizeSymbols } from '@/lib/symbols';
 
 export type QuoteSource = 'schwab' | 'yahoo';
 
@@ -73,7 +74,7 @@ export async function fetchQuotes(symbols: string[]): Promise<Quote[]> {
     if (import.meta.env.DEV) console.warn('[quote] VITE_QUOTE_WORKER_URL missing — quotes unavailable');
     return [];
   }
-  const normalized = [...new Set(symbols.map((s) => s.trim().toUpperCase()).filter(Boolean))].sort();
+  const normalized = normalizeSymbols(symbols);
   if (normalized.length === 0) return [];
   const key = normalized.join(',');
   const existing = quoteInflight.get(key);
@@ -116,7 +117,7 @@ export async function fetchCurrentExchangeRate(): Promise<number | null> {
 export async function fetchChart(symbol: string, range = '1y', interval = '1d') {
   if (!WORKER_BASE) return null;
   const includePrePost = range === '1d' || interval.endsWith('m');
-  const url = `${WORKER_BASE}/api/chart?symbol=${encodeURIComponent(symbol)}&range=${range}&interval=${interval}&prepost=${includePrePost ? '1' : '0'}`;
+  const url = `${WORKER_BASE}/api/chart?symbol=${encodeURIComponent(normalizeSymbol(symbol))}&range=${range}&interval=${interval}&prepost=${includePrePost ? '1' : '0'}`;
   const r = await rateLimited('chart', () => fetch(url), API_LIMIT_CONFIG);
   if (!r.ok) throw new Error(`chart http ${r.status}`);
   return r.json();
@@ -138,8 +139,9 @@ export async function fetchHistory(
   options?: { persist?: 'sync' },
 ): Promise<HistorySeries[]> {
   if (!WORKER_BASE) return [];
-  if (symbols.length === 0) return [];
-  const params = new URLSearchParams({ symbols: symbols.join(','), range });
+  const normalized = normalizeSymbols(symbols);
+  if (normalized.length === 0) return [];
+  const params = new URLSearchParams({ symbols: normalized.join(','), range });
   if (options?.persist === 'sync') params.set('persist', 'sync');
   const url = `${WORKER_BASE}/api/history?${params.toString()}`;
   const r = await rateLimited('history', () => fetch(url), API_LIMIT_CONFIG);

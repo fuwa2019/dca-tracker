@@ -103,6 +103,22 @@ export interface QuoteSnapshotInsert {
 }
 export type QuoteSnapshotUpdate = Partial<QuoteSnapshotInsert>;
 
+export interface TrackedSymbolRow {
+  symbol: string;
+  name: string | null;
+  asset_type: string | null;
+  enabled: boolean;
+  source: string;
+  first_trade_date: string | null;
+  last_backfill_at: string | null;
+  backfill_status: 'pending' | 'ok' | 'missing' | 'stale' | 'partial' | 'unsupported' | 'failed';
+  backfill_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+export type TrackedSymbolInsert = Partial<Omit<TrackedSymbolRow, 'symbol'>> & { symbol: string };
+export type TrackedSymbolUpdate = Partial<TrackedSymbolInsert>;
+
 export interface ShareLinkRow {
   token: string;
   user_id: string;
@@ -268,6 +284,7 @@ export interface Database {
       cashflows: { Row: CashflowRow; Insert: CashflowInsert; Update: CashflowUpdate };
       transactions: { Row: TransactionRow; Insert: TransactionInsert; Update: TransactionUpdate };
       quote_snapshots: { Row: QuoteSnapshotRow; Insert: QuoteSnapshotInsert; Update: QuoteSnapshotUpdate };
+      tracked_symbols: { Row: TrackedSymbolRow; Insert: TrackedSymbolInsert; Update: TrackedSymbolUpdate };
       share_links: { Row: ShareLinkRow; Insert: ShareLinkInsert; Update: ShareLinkUpdate };
       settings: { Row: SettingsRow; Insert: SettingsInsert; Update: SettingsUpdate };
       email_log: { Row: EmailLogRow; Insert: EmailLogInsert; Update: EmailLogUpdate };
@@ -326,6 +343,33 @@ export interface Database {
           first_date: string | null;
           last_date: string | null;
           updated_at: string | null;
+        }>;
+      };
+      add_tracked_symbol: {
+        Args: {
+          p_symbol: string;
+          p_name?: string | null;
+          p_asset_type?: string | null;
+          p_source?: string;
+          p_first_trade_date?: string | null;
+        };
+        Returns: TrackedSymbolRow;
+      };
+      tracked_symbol_coverage: {
+        Args: Record<string, never>;
+        Returns: Array<{
+          symbol: string;
+          name: string | null;
+          asset_type: string | null;
+          daily_rows: number;
+          adjusted_rows: number;
+          first_daily_date: string | null;
+          last_daily_date: string | null;
+          missing_days: number;
+          backfill_status: TrackedSymbolRow['backfill_status'];
+          last_backfill_at: string | null;
+          backfill_error: string | null;
+          first_trade_date: string | null;
         }>;
       };
       performance_cache_status: {

@@ -19,36 +19,34 @@ import {
   usePerformanceCacheStatus,
   useRefreshPerformanceCache,
 } from '@/hooks/usePerformanceCache';
-import { aggregatePositions } from '@/lib/calc/position';
 import { supabase } from '@/lib/supabase';
-import { fetchHistory } from '@/lib/quote';
+import { backfillTrackedSymbols } from '@/lib/trackedSymbols';
 import { isoDateInNewYork } from '@/lib/nyse-calendar';
-import { getBenchmarks, getSelectedBenchmark } from '@/lib/settings';
+import { getSelectedBenchmark } from '@/lib/settings';
 import { cn } from '@/lib/utils';
 import type { Database as Db } from '@/lib/database.types';
 
 type ShareRow = Db['public']['Tables']['share_links']['Row'];
-type DailyPriceCoverageRow = Db['public']['Functions']['daily_price_coverage']['Returns'][number];
-type DailyPriceCoverageRpcRow = {
-  ticker: string;
-  points: number | string;
-  adjusted_points: number | string;
-  first_date: string | null;
-  last_date: string | null;
-  updated_at: string | null;
-};
-type DailyPriceCoverageItem = {
-  ticker: string;
-  start_date: string | null;
+type TrackedSymbolCoverageRow = Db['public']['Functions']['tracked_symbol_coverage']['Returns'][number];
+type TrackedSymbolCoverageRpcRow = Omit<TrackedSymbolCoverageRow, 'daily_rows' | 'adjusted_rows' | 'missing_days'> & {
+  daily_rows: number | string;
+  adjusted_rows: number | string;
+  missing_days: number | string;
 };
 
 type Coverage = {
   ticker: string;
+  name: string | null;
+  assetType: string | null;
   points: number;
   adjustedPoints: number;
+  missingDays: number;
   firstDate: string | null;
   lastDate: string | null;
-  updatedAt: string | null;
+  lastBackfillAt: string | null;
+  backfillStatus: TrackedSymbolCoverageRow['backfill_status'];
+  backfillError: string | null;
+  firstTradeDate: string | null;
   status: 'ok' | 'warn' | 'bad';
   note: string;
 };
@@ -58,59 +56,21 @@ export function DataHealthPage() {
   const { data: txns = [], isLoading: txnsLoading } = useTransactions();
   const { data: cashflows = [], isLoading: cashLoading } = useCashflows();
   const { data: settings } = useSettings();
-  const benchmarks = useMemo(() => getBenchmarks(settings), [settings]);
   const selectedBenchmark = useMemo(() => getSelectedBenchmark(settings), [settings]);
 
-  const positions = useMemo(
-    () => aggregatePositions(txns).filter((p) => p.shares > 1e-9),
-    [txns],
-  );
   const earliestDate = useMemo(() => {
     const tradeDates = txns.map((t) => t.trade_date);
     return [...tradeDates].sort()[0] ?? null;
   }, [txns]);
-  const coverageStartDates = useMemo(() => {
-    const byTicker = new Map<string, string>();
-    for (const txn of txns) {
-      const ticker = txn.ticker.toUpperCase();
-      const current = byTicker.get(ticker);
-      if (!current || txn.trade_date < current) byTicker.set(ticker, txn.trade_date);
-    }
-    if (earliestDate) {
-      for (const benchmark of benchmarks) byTicker.set(benchmark, earliestDate);
-    }
-    return byTicker;
-  }, [benchmarks, earliestDate, txns]);
-  const symbols = useMemo(
-    () => [
-      ...new Set([
-        ...positions.map((p) => p.ticker),
-        ...(settings?.watchlist ?? []),
-        ...benchmarks,
-      ].map((s) => s.toUpperCase())),
-    ].sort(),
-    [benchmarks, positions, settings?.watchlist],
-  );
-  const coverageItems = useMemo<DailyPriceCoverageItem[]>(
-    () => symbols.map((ticker) => ({
-      ticker,
-      start_date: coverageStartDates.get(ticker) ?? null,
-    })),
-    [coverageStartDates, symbols],
-  );
-
   const cacheStatus = usePerformanceCacheStatus(selectedBenchmark);
   const refreshCache = useRefreshPerformanceCache(selectedBenchmark);
 
-  const priceRows = useQuery<DailyPriceCoverageRow[]>({
-    queryKey: ['price_coverage', symbols.join(','), JSON.stringify(coverageItems)],
-    enabled: symbols.length > 0,
+  const priceRows = useQuery<TrackedSymbolCoverageRow[]>({
+    queryKey: ['tracked_symbol_coverage'],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('daily_price_coverage_v2', {
-        p_items: coverageItems,
-      });
+      const { data, error } = await supabase.rpc('tracked_symbol_coverage');
       if (error) throw error;
-      return ((data as DailyPriceCoverageRpcRow[]) ?? []).map(normalizeCoverageRow);
+      return ((data as TrackedSymbolCoverageRpcRow[]) ?? []).map(normalizeCoverageRow);
     },
     staleTime: 5 * 60_000,
   });
@@ -128,10 +88,8 @@ export function DataHealthPage() {
     staleTime: 60_000,
   });
 
-  const coverage = useMemo(
-    () => buildCoverage(symbols, priceRows.data ?? [], coverageStartDates),
-    [symbols, priceRows.data, coverageStartDates],
-  );
+  const coverage = useMemo(() => buildCoverage(priceRows.data ?? []), [priceRows.data]);
+  const symbols = useMemo(() => coverage.map((row) => row.ticker), [coverage]);
 
   const activeShares = (shareLinks.data ?? []).filter((s) => !s.revoked);
   const stalePrices = coverage.filter((c) => c.status !== 'ok');
@@ -145,16 +103,18 @@ export function DataHealthPage() {
   const backfillPrices = useMutation({
     mutationFn: async () => {
       if (symbols.length === 0) return 0;
-      const series = await fetchHistory(symbols, pickRange(earliestDate), { persist: 'sync' });
+      const series = await backfillTrackedSymbols(symbols, pickRange(earliestDate));
       return series.reduce((sum, s) => sum + (s.points?.length ?? 0), 0);
     },
     onSuccess: async () => {
       await Promise.all([
+        qc.invalidateQueries({ queryKey: ['tracked_symbol_coverage'] }),
         qc.invalidateQueries({ queryKey: ['price_coverage'] }),
         qc.invalidateQueries({ queryKey: ['performance_cache_status'] }),
         qc.invalidateQueries({ queryKey: ['portfolio_history'] }),
       ]);
       await Promise.all([
+        qc.refetchQueries({ queryKey: ['tracked_symbol_coverage'] }),
         qc.refetchQueries({ queryKey: ['price_coverage'] }),
         qc.refetchQueries({ queryKey: ['performance_cache_status'] }),
         qc.refetchQueries({ queryKey: ['portfolio_history'] }),
@@ -292,6 +252,7 @@ export function DataHealthPage() {
               <thead>
                 <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
                   <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Ticker</th>
+                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">名称</th>
                   <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">点数</th>
                   <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">复权覆盖</th>
                   <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">起始</th>
@@ -302,7 +263,7 @@ export function DataHealthPage() {
               <tbody>
                 {coverage.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-xs text-muted-foreground">
+                    <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted-foreground">
                       还没有监控代码 — 录入交易后会自动开始监控。
                     </td>
                   </tr>
@@ -310,6 +271,7 @@ export function DataHealthPage() {
                   coverage.map((c) => (
                     <tr key={c.ticker} className="border-b border-border last:border-0">
                       <td className="px-4 py-2.5 font-medium">{c.ticker}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{c.name ?? '—'}</td>
                       <td className="px-4 py-2.5 text-right tnum">{c.points}</td>
                       <td className="px-4 py-2.5 text-right tnum">
                         {c.points > 0 ? `${Math.round((c.adjustedPoints / c.points) * 100)}%` : '—'}
@@ -320,6 +282,9 @@ export function DataHealthPage() {
                         <StatusBadge tone={toStatusTone(c.status)} dot>
                           {c.note}
                         </StatusBadge>
+                        {c.backfillError && (
+                          <p className="mt-1 max-w-[260px] break-words text-[11px] text-loss">{c.backfillError}</p>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -505,27 +470,26 @@ function DemoDataPanel() {
   );
 }
 
-function buildCoverage(
-  symbols: string[],
-  rows: DailyPriceCoverageRow[],
-  coverageStartDates: ReadonlyMap<string, string>,
-): Coverage[] {
+function buildCoverage(rows: TrackedSymbolCoverageRow[]): Coverage[] {
   const today = isoDateInNewYork(new Date());
   const freshEnough = addDays(today, -10);
-  const byTicker = new Map(rows.map((row) => [row.ticker, row]));
-  return symbols.map((ticker) => {
-    const row = byTicker.get(ticker);
-    const points = row?.points ?? 0;
-    const adjustedPoints = row?.adjusted_points ?? 0;
-    const first = row?.first_date ?? null;
-    const last = row?.last_date ?? null;
-    const updatedAt = row?.updated_at ?? null;
-    const startDate = coverageStartDates.get(ticker) ?? null;
+  return rows.map((row) => {
+    const points = row.daily_rows;
+    const adjustedPoints = row.adjusted_rows;
+    const first = row.first_daily_date;
+    const last = row.last_daily_date;
+    const startDate = row.first_trade_date;
     let status: Coverage['status'] = 'ok';
     let note = '正常';
-    if (points === 0) {
+    if (row.backfill_status === 'failed' || row.backfill_status === 'unsupported') {
       status = 'bad';
-      note = '缺价格';
+      note = row.backfill_status === 'failed' ? '补齐失败' : '暂不支持';
+    } else if (points === 0) {
+      status = row.backfill_status === 'pending' ? 'warn' : 'bad';
+      note = row.backfill_status === 'pending' ? '等待补齐' : '缺价格';
+    } else if (row.backfill_status === 'partial' || row.missing_days > 0) {
+      status = 'warn';
+      note = `缺 ${row.missing_days} 个交易日`;
     } else if (startDate && first && first > addDays(startDate, 7)) {
       status = 'bad';
       note = '起始覆盖不足';
@@ -537,26 +501,30 @@ function buildCoverage(
       note = '缺复权价';
     }
     return {
-      ticker,
+      ticker: row.symbol,
+      name: row.name,
+      assetType: row.asset_type,
       points,
       adjustedPoints,
+      missingDays: row.missing_days,
       firstDate: first,
       lastDate: last,
-      updatedAt,
+      lastBackfillAt: row.last_backfill_at,
+      backfillStatus: row.backfill_status,
+      backfillError: row.backfill_error,
+      firstTradeDate: row.first_trade_date,
       status,
       note,
     };
   });
 }
 
-function normalizeCoverageRow(row: DailyPriceCoverageRpcRow): DailyPriceCoverageRow {
+function normalizeCoverageRow(row: TrackedSymbolCoverageRpcRow): TrackedSymbolCoverageRow {
   return {
-    ticker: row.ticker,
-    points: Number(row.points) || 0,
-    adjusted_points: Number(row.adjusted_points) || 0,
-    first_date: row.first_date,
-    last_date: row.last_date,
-    updated_at: row.updated_at,
+    ...row,
+    daily_rows: Number(row.daily_rows) || 0,
+    adjusted_rows: Number(row.adjusted_rows) || 0,
+    missing_days: Number(row.missing_days) || 0,
   };
 }
 
