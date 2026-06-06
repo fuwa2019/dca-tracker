@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { LOCAL_MODE, LOCAL_USER } from '@/lib/localMode';
 
 const DEV_BYPASS_AUTH = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH !== '0';
 const DEV_USER = {
@@ -10,10 +11,12 @@ const DEV_USER = {
 
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(LOCAL_MODE ? LOCAL_USER : null);
+  const [loading, setLoading] = useState(!LOCAL_MODE);
 
   useEffect(() => {
+    // Local build: no Supabase session, inject a synthetic user and skip auth.
+    if (LOCAL_MODE) return;
     let mounted = true;
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;

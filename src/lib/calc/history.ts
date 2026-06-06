@@ -229,11 +229,15 @@ function addDays(iso: string, n: number): string {
 }
 
 /** Slice the history to the requested range, anchored on the last point. */
-export type RangeKey = '1M' | '3M' | '6M' | '1Y' | 'ALL';
+export type RangeKey = '1M' | '3M' | '6M' | 'YTD' | '1Y' | 'ALL';
 
 export function sliceByRange(history: HistoryPoint[], range: RangeKey): HistoryPoint[] {
   if (range === 'ALL' || history.length === 0) return history;
   const last = history[history.length - 1];
+  if (range === 'YTD') {
+    const startOfYear = `${last.date.slice(0, 4)}-01-01`;
+    return history.filter((p) => p.date >= startOfYear);
+  }
   const days = { '1M': 30, '3M': 92, '6M': 184, '1Y': 365 }[range];
   const cutoff = addDays(last.date, -days);
   return history.filter((p) => p.date >= cutoff);
@@ -242,7 +246,7 @@ export function sliceByRange(history: HistoryPoint[], range: RangeKey): HistoryP
 /** What ranges have enough data to display (≥ 5 points). */
 export function availableRanges(history: HistoryPoint[]): RangeKey[] {
   if (history.length === 0) return ['ALL'];
-  const all: RangeKey[] = ['1M', '3M', '6M', '1Y', 'ALL'];
+  const all: RangeKey[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
   return all.filter((r) => sliceByRange(history, r).length >= 5);
 }
 
@@ -314,6 +318,6 @@ function isoWeekKey(iso: string): string {
 /** Pick a marker aggregation granularity based on the visible range. */
 export function markerGranularityFor(range: RangeKey): 'day' | 'week' | 'month' {
   if (range === '1M' || range === '3M') return 'day';
-  if (range === '6M' || range === '1Y') return 'week';
+  if (range === '6M' || range === 'YTD' || range === '1Y') return 'week';
   return 'month';
 }

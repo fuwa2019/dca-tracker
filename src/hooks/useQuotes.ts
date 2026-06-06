@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchQuotes, isUsMarketDataActive, type Quote } from '@/lib/quote';
 import { apiLimitConfigFromEnv, calculateRefreshInterval } from '@/lib/apiRateLimit';
 import { normalizeSymbols } from '@/lib/symbols';
+import { LOCAL_MODE } from '@/lib/localMode';
+import { localQuotes } from '@/lib/localData';
 
 const API_LIMIT_CONFIG = apiLimitConfigFromEnv(import.meta.env);
 
@@ -9,7 +11,10 @@ export function useQuotes(symbols: string[]) {
   const uniqSorted = normalizeSymbols(symbols);
   return useQuery<Quote[]>({
     queryKey: ['quotes', uniqSorted.join(',')],
-    queryFn: () => fetchQuotes(uniqSorted),
+    queryFn: () =>
+      LOCAL_MODE
+        ? localQuotes.filter((q) => uniqSorted.includes(q.ticker))
+        : fetchQuotes(uniqSorted),
     enabled: uniqSorted.length > 0,
     refetchInterval: () => {
       if (!isUsMarketDataActive()) return false;

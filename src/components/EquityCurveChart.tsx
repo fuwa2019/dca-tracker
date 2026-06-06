@@ -141,7 +141,7 @@ function formatXTick(iso: string, range: RangeKey): string {
     // MM/DD
     return iso.slice(5).replace('-', '/');
   }
-  if (range === '6M' || range === '1Y') {
+  if (range === '6M' || range === 'YTD' || range === '1Y') {
     // MMM (e.g. Jan)
     const [, mm] = iso.split('-');
     return `${Number(mm)}月`;
@@ -250,7 +250,7 @@ export function RangeToggle({
   onChange: (v: RangeKey) => void;
   available: RangeKey[];
 }) {
-  const all: RangeKey[] = ['1M', '3M', '6M', '1Y', 'ALL'];
+  const all: RangeKey[] = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'];
   return (
     <div className="relative inline-flex rounded-lg bg-muted p-1 text-xs">
       {all.map((opt) => {

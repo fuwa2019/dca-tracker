@@ -356,7 +356,7 @@ export interface Database {
         Returns: TrackedSymbolRow;
       };
       tracked_symbol_coverage: {
-        Args: Record<string, never>;
+        Args: { p_benchmark?: string | null };
         Returns: Array<{
           symbol: string;
           name: string | null;
@@ -365,11 +365,24 @@ export interface Database {
           adjusted_rows: number;
           first_daily_date: string | null;
           last_daily_date: string | null;
+          price_min_date: string | null;
+          price_max_date: string | null;
+          required_start: string | null;
+          required_end: string | null;
+          coverage: number;
           missing_days: number;
+          current_position: 'active' | 'closed' | 'benchmark' | 'watchlist';
           backfill_status: TrackedSymbolRow['backfill_status'];
           last_backfill_at: string | null;
           backfill_error: string | null;
           first_trade_date: string | null;
+        }>;
+      };
+      active_monitor_universe: {
+        Args: { p_benchmark?: string | null };
+        Returns: Array<{
+          symbol: string;
+          current_position: 'active' | 'benchmark' | 'watchlist';
         }>;
       };
       performance_cache_status: {

@@ -18,16 +18,26 @@ export default {
     extend: {
       fontFamily: {
         sans: [
+          '"Hanken Grotesk"',
           '-apple-system',
           'BlinkMacSystemFont',
-          '"SF Pro Display"',
-          '"SF Pro Text"',
           'system-ui',
           '"PingFang SC"',
           '"Helvetica Neue"',
           'sans-serif',
         ],
-        mono: ['"SF Mono"', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+        display: [
+          '"Hanken Grotesk"',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"PingFang SC"',
+          'sans-serif',
+        ],
+        // Editorial serif for magazine-style headlines / hero figures.
+        serif: ['Fraunces', 'Georgia', '"Songti SC"', 'serif'],
+        // Tabular ledger figures — the "terminal" voice for money.
+        num: ['"JetBrains Mono"', '"SF Mono"', 'Menlo', 'Consolas', 'monospace'],
+        mono: ['"JetBrains Mono"', '"SF Mono"', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
       },
       fontFeatureSettings: {
         tnum: '"tnum"',
@@ -80,6 +90,9 @@ export default {
         loss: 'hsl(var(--loss))',
         warn: 'hsl(var(--warn))',
         benchmark: 'hsl(var(--benchmark))',
+        // Per-variant editorial accents (theme-aware).
+        'accent-rose': 'hsl(var(--accent-rose))',
+        'accent-amber': 'hsl(var(--accent-amber))',
       },
       borderRadius: {
         lg: 'var(--radius)',

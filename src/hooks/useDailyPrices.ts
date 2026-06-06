@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { isoDateInNewYork } from '@/lib/nyse-calendar';
 import { normalizeSymbol, normalizeSymbols } from '@/lib/symbols';
+import { LOCAL_MODE } from '@/lib/localMode';
+import { localPriceMap } from '@/lib/localData';
 
 const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
 
@@ -138,6 +140,14 @@ export function useDailyPrices(symbols: string[], earliestDate: string | null) {
     enabled,
     staleTime: 10 * 60 * 1000,
     queryFn: async () => {
+      if (LOCAL_MODE) {
+        const map: PriceMap = new Map();
+        for (const s of uniqSorted) {
+          const m = localPriceMap.get(s);
+          if (m) map.set(s, new Map(m));
+        }
+        return map;
+      }
       const ed = earliestDate as string;
       let map = await readFromSupabase(uniqSorted, ed);
       if (!coverageOk(map, uniqSorted, ed)) {

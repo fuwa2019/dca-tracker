@@ -58,6 +58,7 @@ const RANGE_OPTIONS: ReadonlyArray<{ value: RangeKey; label: string }> = [
   { value: '1M', label: '1M' },
   { value: '3M', label: '3M' },
   { value: '6M', label: '6M' },
+  { value: 'YTD', label: 'YTD' },
   { value: '1Y', label: '1Y' },
   { value: 'ALL', label: '开仓至今' },
 ];
@@ -691,6 +692,10 @@ function excessReturn(portfolio: number, benchmark: number): number {
 function sliceRowsByRange(rows: PerfRow[], range: RangeKey): PerfRow[] {
   if (range === 'ALL' || rows.length === 0) return rows;
   const last = rows[rows.length - 1];
+  if (range === 'YTD') {
+    const startOfYear = `${last.date.slice(0, 4)}-01-01`;
+    return rows.filter((row) => row.date >= startOfYear);
+  }
   const days = { '1M': 30, '3M': 92, '6M': 184, '1Y': 365 }[range];
   const cutoff = addDays(last.date, -days);
   return rows.filter((row) => row.date >= cutoff);

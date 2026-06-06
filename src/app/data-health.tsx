@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Kicker } from '@/components/Kicker';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { useCashflows, useSettings, useTransactions } from '@/hooks/usePortfolio';
@@ -20,7 +21,7 @@ import {
   useRefreshPerformanceCache,
 } from '@/hooks/usePerformanceCache';
 import { supabase } from '@/lib/supabase';
-import { backfillTrackedSymbols } from '@/lib/trackedSymbols';
+import { backfillTrackedTargets, type BackfillRunProgress } from '@/lib/trackedSymbols';
 import { isoDateInNewYork } from '@/lib/nyse-calendar';
 import { getSelectedBenchmark } from '@/lib/settings';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,7 @@ type TrackedSymbolCoverageRpcRow = Omit<TrackedSymbolCoverageRow, 'daily_rows' |
   daily_rows: number | string;
   adjusted_rows: number | string;
   missing_days: number | string;
+  coverage: number | string;
 };
 
 type Coverage = {
@@ -41,8 +43,14 @@ type Coverage = {
   points: number;
   adjustedPoints: number;
   missingDays: number;
+  requiredStart: string | null;
+  requiredEnd: string | null;
+  priceMinDate: string | null;
+  priceMaxDate: string | null;
+  coveragePct: number;
   firstDate: string | null;
   lastDate: string | null;
+  currentPosition: string;
   lastBackfillAt: string | null;
   backfillStatus: TrackedSymbolCoverageRow['backfill_status'];
   backfillError: string | null;
@@ -64,11 +72,12 @@ export function DataHealthPage() {
   }, [txns]);
   const cacheStatus = usePerformanceCacheStatus(selectedBenchmark);
   const refreshCache = useRefreshPerformanceCache(selectedBenchmark);
+  const [backfillProgress, setBackfillProgress] = useState<BackfillRunProgress | null>(null);
 
   const priceRows = useQuery<TrackedSymbolCoverageRow[]>({
-    queryKey: ['tracked_symbol_coverage'],
+    queryKey: ['tracked_symbol_coverage', selectedBenchmark],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('tracked_symbol_coverage');
+      const { data, error } = await supabase.rpc('tracked_symbol_coverage', { p_benchmark: selectedBenchmark });
       if (error) throw error;
       return ((data as TrackedSymbolCoverageRpcRow[]) ?? []).map(normalizeCoverageRow);
     },
@@ -90,6 +99,16 @@ export function DataHealthPage() {
 
   const coverage = useMemo(() => buildCoverage(priceRows.data ?? []), [priceRows.data]);
   const symbols = useMemo(() => coverage.map((row) => row.ticker), [coverage]);
+  const backfillTargets = useMemo(
+    () => coverage
+      .filter((row) => row.requiredStart)
+      .map((row) => ({
+        symbol: row.ticker,
+        requiredStart: row.requiredStart,
+        requiredEnd: row.requiredEnd,
+      })),
+    [coverage],
+  );
 
   const activeShares = (shareLinks.data ?? []).filter((s) => !s.revoked);
   const stalePrices = coverage.filter((c) => c.status !== 'ok');
@@ -102,8 +121,12 @@ export function DataHealthPage() {
 
   const backfillPrices = useMutation({
     mutationFn: async () => {
-      if (symbols.length === 0) return 0;
-      const series = await backfillTrackedSymbols(symbols, pickRange(earliestDate));
+      if (backfillTargets.length === 0) return 0;
+      setBackfillProgress(null);
+      const series = await backfillTrackedTargets(backfillTargets, {
+        limit: 10,
+        onProgress: setBackfillProgress,
+      });
       return series.reduce((sum, s) => sum + (s.points?.length ?? 0), 0);
     },
     onSuccess: async () => {
@@ -125,7 +148,8 @@ export function DataHealthPage() {
   return (
     <div className="container max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-5">
       <header>
-        <p className="text-xs text-muted-foreground">
+        <Kicker en="Data Health" zh="数据健康" />
+        <p className="mt-1.5 text-xs text-muted-foreground">
           检查价格覆盖、业绩缓存、分享安全和计算输入状态。
         </p>
       </header>
@@ -165,7 +189,7 @@ export function DataHealthPage() {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-base">运维操作</CardTitle>
+              <CardTitle className="font-serif text-lg">运维操作</CardTitle>
               <CardDescription className="text-xs">
                 按顺序：先补价格，再刷缓存。业绩曲线使用当前基准的实际价格日，处理完成后回到「业绩」页确认曲线。
               </CardDescription>
@@ -175,7 +199,7 @@ export function DataHealthPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => backfillPrices.mutate()}
-                disabled={backfillPrices.isPending || symbols.length === 0}
+                disabled={backfillPrices.isPending || backfillTargets.length === 0}
               >
                 <RefreshCw className={cn('h-3.5 w-3.5', backfillPrices.isPending && 'animate-spin')} />
                 补齐日线价格
@@ -195,9 +219,15 @@ export function DataHealthPage() {
               日线价格已写入 {backfillPrices.data ?? 0} 个数据点。
             </p>
           )}
+          {backfillPrices.isPending && backfillProgress && (
+            <p className="text-xs text-muted-foreground">
+              正在补齐 {backfillProgress.currentTicker ?? '价格'}：已完成 {backfillProgress.completed}/{backfillProgress.total}，
+              剩余 {backfillProgress.remaining}。失败后会从当前批次 cursor 继续。
+            </p>
+          )}
           {backfillPrices.isError && (
             <p className="text-xs text-loss break-words">
-              补齐失败：{(backfillPrices.error as Error)?.message ?? '未知错误'}
+              补齐失败：{(backfillPrices.error as Error)?.message ?? '未知错误'}。进度已保留，下次会继续当前批次。
             </p>
           )}
           {refreshCache.isSuccess && (
@@ -235,35 +265,37 @@ export function DataHealthPage() {
             tone={adjustedMissing.length === 0 ? 'ok' : 'warn'}
           />
           <StatusLine label="当前基准" value={selectedBenchmark} />
-          <StatusLine label="监控代码" value={symbols.join(', ') || '暂无'} />
+          <StatusLine label="历史价格宇宙" value={symbols.join(', ') || '暂无'} />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">价格覆盖</CardTitle>
+          <CardTitle className="font-serif text-lg">价格覆盖</CardTitle>
           <CardDescription className="text-xs">
             历史业绩曲线优先用 adjusted close（总回报口径）；缺失时回退 close。
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0 sm:px-5 sm:pb-5">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
+            <table className="w-full min-w-[920px] text-sm">
               <thead>
                 <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
                   <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Ticker</th>
                   <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">名称</th>
-                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">点数</th>
+                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">监控状态</th>
+                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Required Start</th>
+                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Price Min</th>
+                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Price Max</th>
+                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">Coverage</th>
                   <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">复权覆盖</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">起始</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">最新</th>
                   <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">状态</th>
                 </tr>
               </thead>
               <tbody>
                 {coverage.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6 text-center text-xs text-muted-foreground">
+                    <td colSpan={9} className="px-4 py-6 text-center text-xs text-muted-foreground">
                       还没有监控代码 — 录入交易后会自动开始监控。
                     </td>
                   </tr>
@@ -272,12 +304,14 @@ export function DataHealthPage() {
                     <tr key={c.ticker} className="border-b border-border last:border-0">
                       <td className="px-4 py-2.5 font-medium">{c.ticker}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{c.name ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-right tnum">{c.points}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{positionLabel(c.currentPosition)}</td>
+                      <td className="px-4 py-2.5 tnum text-muted-foreground">{c.requiredStart ?? '—'}</td>
+                      <td className="px-4 py-2.5 tnum text-muted-foreground">{c.priceMinDate ?? '—'}</td>
+                      <td className="px-4 py-2.5 tnum text-muted-foreground">{c.priceMaxDate ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-right tnum">{Math.round(c.coveragePct)}%</td>
                       <td className="px-4 py-2.5 text-right tnum">
                         {c.points > 0 ? `${Math.round((c.adjustedPoints / c.points) * 100)}%` : '—'}
                       </td>
-                      <td className="px-4 py-2.5 tnum text-muted-foreground">{c.firstDate ?? '—'}</td>
-                      <td className="px-4 py-2.5 tnum text-muted-foreground">{c.lastDate ?? '—'}</td>
                       <td className="px-4 py-2.5">
                         <StatusBadge tone={toStatusTone(c.status)} dot>
                           {c.note}
@@ -297,7 +331,7 @@ export function DataHealthPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">分享链接审计</CardTitle>
+          <CardTitle className="font-serif text-lg">分享链接审计</CardTitle>
           <CardDescription className="text-xs">
             分享页只读公开收益率曲线和持仓比例，不返回金额、现金流或交易明细。
           </CardDescription>
@@ -478,7 +512,11 @@ function buildCoverage(rows: TrackedSymbolCoverageRow[]): Coverage[] {
     const adjustedPoints = row.adjusted_rows;
     const first = row.first_daily_date;
     const last = row.last_daily_date;
-    const startDate = row.first_trade_date;
+    const requiredStart = row.required_start;
+    const requiredEnd = row.required_end;
+    const priceMinDate = row.price_min_date ?? row.first_daily_date;
+    const priceMaxDate = row.price_max_date ?? row.last_daily_date;
+    const coveragePct = Number(row.coverage ?? 0) * 100;
     let status: Coverage['status'] = 'ok';
     let note = '正常';
     if (row.backfill_status === 'failed' || row.backfill_status === 'unsupported') {
@@ -490,10 +528,10 @@ function buildCoverage(rows: TrackedSymbolCoverageRow[]): Coverage[] {
     } else if (row.backfill_status === 'partial' || row.missing_days > 0) {
       status = 'warn';
       note = `缺 ${row.missing_days} 个交易日`;
-    } else if (startDate && first && first > addDays(startDate, 7)) {
+    } else if (requiredStart && first && first > addDays(requiredStart, 7)) {
       status = 'bad';
       note = '起始覆盖不足';
-    } else if (last && last < freshEnough) {
+    } else if (priceMaxDate && priceMaxDate < freshEnough) {
       status = 'warn';
       note = '价格偏旧';
     } else if (adjustedPoints < points) {
@@ -507,12 +545,18 @@ function buildCoverage(rows: TrackedSymbolCoverageRow[]): Coverage[] {
       points,
       adjustedPoints,
       missingDays: row.missing_days,
+      requiredStart,
+      requiredEnd,
+      priceMinDate,
+      priceMaxDate,
+      coveragePct,
       firstDate: first,
       lastDate: last,
       lastBackfillAt: row.last_backfill_at,
       backfillStatus: row.backfill_status,
       backfillError: row.backfill_error,
       firstTradeDate: row.first_trade_date,
+      currentPosition: row.current_position ?? 'closed',
       status,
       note,
     };
@@ -525,26 +569,20 @@ function normalizeCoverageRow(row: TrackedSymbolCoverageRpcRow): TrackedSymbolCo
     daily_rows: Number(row.daily_rows) || 0,
     adjusted_rows: Number(row.adjusted_rows) || 0,
     missing_days: Number(row.missing_days) || 0,
+    coverage: Number(row.coverage) || 0,
   };
-}
-
-function pickRange(earliestDate: string | null) {
-  if (!earliestDate) return '10y';
-  const earliest = new Date(earliestDate + 'T00:00:00Z').getTime();
-  const days = (Date.now() - earliest) / 86_400_000;
-  if (days <= 30) return '3mo';
-  if (days <= 90) return '6mo';
-  if (days <= 200) return '1y';
-  if (days <= 500) return '2y';
-  if (days <= 1500) return '5y';
-  if (days <= 3650) return '10y';
-  // Yahoo v8 supports 'max' for full history (20-30+ years).
-  return 'max';
 }
 
 function addDays(iso: string, n: number): string {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d) + n * 86_400_000).toISOString().slice(0, 10);
+}
+
+function positionLabel(value: string) {
+  if (value === 'benchmark') return 'benchmark';
+  if (value === 'watchlist') return 'watchlist';
+  if (value === 'active') return 'active';
+  return 'closed';
 }
 
 function toStatusTone(status: 'ok' | 'warn' | 'bad'): StatusTone {

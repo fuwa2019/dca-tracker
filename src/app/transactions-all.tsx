@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TxnList } from '@/components/TxnList';
+import { Kicker } from '@/components/Kicker';
 import { useTransactions } from '@/hooks/usePortfolio';
 
 type Filter = 'all' | 'buy' | 'sell' | 'dca' | 'lumpsum';
@@ -44,6 +45,7 @@ export function TransactionsAllPage() {
 
   return (
     <div className="container max-w-5xl px-4 py-5 sm:px-6 sm:py-6 space-y-4">
+      <Kicker en="All Trades" zh="全部交易" />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative min-w-0 flex-1 sm:min-w-[260px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { CashflowForm } from '@/components/CashflowForm';
 import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
+import { Kicker } from '@/components/Kicker';
 import { useCashflows, useExchangeLoss } from '@/hooks/usePortfolio';
 import { supabase } from '@/lib/supabase';
 import { cny, usd, signedUsd, signedPct, changeColor, shortDate } from '@/lib/format';
@@ -40,8 +41,8 @@ export function CashflowsPage() {
     <div className="container max-w-5xl px-4 py-5 sm:px-6 sm:py-6 space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold tracking-tight">资金流水</h2>
-          <p className="text-[11px] text-muted-foreground">每笔 CNY → USD 转账单独记一行，自动汇总汇兑损耗。</p>
+          <Kicker en="Cash Flow" zh="资金流水" />
+          <p className="mt-1.5 text-[11px] text-muted-foreground">每笔 CNY → USD 转账单独记一行，自动汇总汇兑损耗。</p>
         </div>
         <Dialog open={adding} onOpenChange={setAdding}>
           <DialogTrigger asChild>

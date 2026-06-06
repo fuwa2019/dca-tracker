@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { normalizeSymbol } from '@/lib/symbols';
+import { LOCAL_MODE } from '@/lib/localMode';
+import { localCacheStatus } from '@/lib/localData';
 import type {
   HistoryCacheRefresh,
   PerformanceCacheStatus,
@@ -26,6 +28,7 @@ export function usePerformanceCacheStatus(benchmark?: string) {
   return useQuery<PerformanceCacheStatus | null>({
     queryKey,
     queryFn: async () => {
+      if (LOCAL_MODE) return localCacheStatus;
       const previous = qc.getQueryData<PerformanceCacheStatus | null>(queryKey);
       const { data, error } = await rpcPerformanceCacheStatus(normalizedBenchmark);
       if (error) {
@@ -93,6 +96,7 @@ export function useRefreshPerformanceCache(benchmark?: string) {
   const statusKey = ['performance_cache_status', normalizedBenchmark ?? 'default'];
   return useMutation({
     mutationFn: async () => {
+      if (LOCAL_MODE) return localCacheStatus as unknown as HistoryCacheRefresh;
       const startedAt = performance.now();
       const { data, error } = await rpcRefreshPerformanceCache(normalizedBenchmark);
       const elapsedMs = Math.max(0, Math.round(performance.now() - startedAt));

@@ -28,17 +28,17 @@ export function StatCard({ label, value, sub, trailing, tone = 'default', classN
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, type: 'spring', damping: 26, stiffness: 220 }}
-      className="rounded-2xl border border-border bg-card p-4"
+      className="surface-card rounded-2xl p-4"
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
           {label}
         </div>
         {trailing}
       </div>
       <div
         className={cn(
-          'mt-2 text-[26px] font-semibold leading-tight tnum',
+          'font-num mt-2.5 text-[27px] font-semibold leading-none',
           toneClass[tone],
           className,
         )}
@@ -46,7 +46,7 @@ export function StatCard({ label, value, sub, trailing, tone = 'default', classN
         {value}
       </div>
       {sub && (
-        <div className="mt-1 text-xs text-muted-foreground tnum">{sub}</div>
+        <div className="font-num mt-1.5 text-xs text-muted-foreground">{sub}</div>
       )}
     </motion.div>
   );

@@ -3,6 +3,13 @@ import { supabase } from '@/lib/supabase';
 import type { Database, PerformanceHistory, PortfolioHistory, SharedHistory } from '@/lib/database.types';
 import { aggregatePositions } from '@/lib/calc/position';
 import { normalizeSymbol } from '@/lib/symbols';
+import { LOCAL_MODE } from '@/lib/localMode';
+import {
+  localCashflows,
+  localPortfolioHistory,
+  localSettings,
+  localTransactions,
+} from '@/lib/localData';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
@@ -12,6 +19,7 @@ export function useTransactions() {
   return useQuery<TxnRow[]>({
     queryKey: ['transactions'],
     queryFn: async () => {
+      if (LOCAL_MODE) return localTransactions;
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
@@ -27,6 +35,7 @@ export function useCashflows() {
   return useQuery<CashRow[]>({
     queryKey: ['cashflows'],
     queryFn: async () => {
+      if (LOCAL_MODE) return localCashflows;
       const { data, error } = await supabase
         .from('cashflows')
         .select('*')
@@ -41,6 +50,7 @@ export function useSettings() {
   return useQuery<SettingsRow | null>({
     queryKey: ['settings'],
     queryFn: async () => {
+      if (LOCAL_MODE) return localSettings;
       const { data, error } = await supabase.from('settings').select('*').maybeSingle();
       if (error) throw error;
       return data;
@@ -53,6 +63,7 @@ export function usePortfolioHistory(benchmark?: string) {
   return useQuery<PortfolioHistory | null>({
     queryKey: ['portfolio_history', normalizedBenchmark ?? 'default'],
     queryFn: async () => {
+      if (LOCAL_MODE) return localPortfolioHistory;
       const performance = await rpcPerformanceHistory(normalizedBenchmark);
       if (!performance.error && performance.data && !('error' in performance.data)) {
         return normalizeHistory(performance.data as PerformanceHistory);

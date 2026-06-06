@@ -336,7 +336,7 @@ export function schwabHistoryParams(symbol: string, params: URLSearchParams): UR
   const passthrough = ['periodType', 'period', 'frequencyType', 'frequency', 'startDate', 'endDate', 'needExtendedHoursData', 'needPreviousClose'];
   for (const key of passthrough) {
     const value = params.get(key);
-    if (value) out.set(key, value);
+    if (value) out.set(key, schwabHistoryDateParam(key, value));
   }
   if (!out.has('periodType')) out.set('periodType', 'year');
   if (!out.has('period')) out.set('period', rangeToSchwabPeriod(params.get('range') ?? '10y'));
@@ -344,6 +344,14 @@ export function schwabHistoryParams(symbol: string, params: URLSearchParams): UR
   if (!out.has('frequency')) out.set('frequency', '1');
   if (!out.has('needExtendedHoursData')) out.set('needExtendedHoursData', 'false');
   return out;
+}
+
+function schwabHistoryDateParam(key: string, value: string): string {
+  if ((key === 'startDate' || key === 'endDate') && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number);
+    return String(Date.UTC(year, month - 1, day));
+  }
+  return value;
 }
 
 export function schwabHistoryToSeries(symbol: string, data: SchwabPriceHistoryResponse): HistorySeries {

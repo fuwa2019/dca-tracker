@@ -5,27 +5,37 @@
 @layer base {
   :root,
   [data-theme='light'] {
-    /* Surfaces */
-    --background: 225 24% 96%;
-    --surface: 0 0% 100%;
-    --surface-elevated: 232 30% 94%;
-    --foreground: 232 38% 12%;
-    --muted-foreground: 234 12% 43%;
-    --border: 229 22% 86%;
-    --input: 229 22% 86%;
-    --ring: 252 56% 50%;
+    /* Surfaces — warm paper × ink */
+    --background: 38 33% 96%;
+    --surface: 40 46% 99%;
+    --surface-elevated: 38 26% 92%;
+    --foreground: 230 17% 13%;
+    --muted-foreground: 232 9% 42%;
+    --border: 36 20% 86%;
+    --input: 36 20% 86%;
+    --ring: 348 78% 48%;
 
-    /* Brand & semantic */
-    --brand: 252 56% 50%;
+    /* Brand & semantic — editorial crimson ink + magazine figures */
+    --brand: 348 78% 48%;
     --brand-foreground: 0 0% 100%;
-    --gain: 158 64% 34%;
-    --loss: 348 72% 48%;
-    --warn: 38 92% 46%;
-    --info: 252 56% 58%;
-    --benchmark: 176 63% 37%;
-    --chart-grid: 230 20% 88%;
-    --chart-axis: 234 12% 43%;
-    --crosshair: 252 24% 42%;
+    --gain: 158 66% 32%;
+    --loss: 8 76% 48%;
+    --warn: 32 90% 44%;
+    --info: 348 78% 56%;
+    --benchmark: 222 12% 48%;
+    --chart-grid: 36 18% 88%;
+    --chart-axis: 232 9% 42%;
+    --crosshair: 230 30% 40%;
+
+    /* Editorial accent hues for the two dashboard variants */
+    --accent-rose: 348 78% 48%;
+    --accent-amber: 33 92% 44%;
+
+    /* Atmospheric tints used by the body backdrop (kept faint on paper) */
+    --halo-a: 38 64% 64%;
+    --halo-b: 348 64% 60%;
+    --elevation: 230 17% 13%;
+    --shadow-card: 0 1px 2px hsl(var(--elevation) / 0.05), 0 10px 30px -16px hsl(var(--elevation) / 0.16);
 
     /* shadcn back-compat aliases */
     --card: var(--surface);
@@ -46,25 +56,33 @@
   }
 
   [data-theme='dark'] {
-    --background: 264 31% 7%;
-    --surface: 260 24% 11%;
-    --surface-elevated: 258 21% 15%;
-    --foreground: 240 24% 93%;
-    --muted-foreground: 244 14% 70%;
-    --border: 258 18% 24%;
-    --input: 258 18% 24%;
-    --ring: 255 83% 72%;
+    --background: 240 13% 6%;
+    --surface: 240 12% 9%;
+    --surface-elevated: 240 10% 13%;
+    --foreground: 40 32% 92%;
+    --muted-foreground: 38 10% 66%;
+    --border: 240 8% 19%;
+    --input: 240 8% 19%;
+    --ring: 348 88% 70%;
 
-    --brand: 255 83% 72%;
-    --brand-foreground: 264 31% 7%;
-    --gain: 156 72% 52%;
-    --loss: 350 86% 70%;
-    --warn: 42 92% 62%;
-    --info: 255 83% 72%;
-    --benchmark: 174 70% 52%;
-    --chart-grid: 258 18% 24%;
-    --chart-axis: 244 14% 70%;
-    --crosshair: 255 48% 74%;
+    --brand: 348 88% 70%;
+    --brand-foreground: 0 0% 100%;
+    --gain: 156 70% 52%;
+    --loss: 6 90% 68%;
+    --warn: 40 94% 64%;
+    --info: 348 88% 70%;
+    --benchmark: 222 10% 60%;
+    --chart-grid: 240 8% 19%;
+    --chart-axis: 38 10% 66%;
+    --crosshair: 230 60% 78%;
+
+    --accent-rose: 348 86% 66%;
+    --accent-amber: 36 94% 60%;
+
+    --halo-a: 348 74% 56%;
+    --halo-b: 38 58% 48%;
+    --elevation: 240 40% 1%;
+    --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.03) inset, 0 1px 2px hsl(var(--elevation) / 0.5), 0 16px 40px -20px hsl(var(--elevation) / 0.8);
 
     --card: var(--surface);
     --card-foreground: var(--foreground);
@@ -99,9 +117,24 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: 'tnum', 'ss01';
+    font-family: theme('fontFamily.sans');
+    font-feature-settings: 'tnum', 'ss01', 'cv05';
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: none;
+    /* Layered atmosphere: two soft halos that give the dark theme depth
+       without fighting the surfaces. Fixed so it doesn't scroll away. */
+    background-image:
+      radial-gradient(60rem 60rem at 12% -8%, hsl(var(--halo-a) / 0.14), transparent 60%),
+      radial-gradient(52rem 52rem at 108% 8%, hsl(var(--halo-b) / 0.1), transparent 55%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: theme('fontFamily.display');
+    letter-spacing: -0.012em;
   }
   input,
   select,
@@ -149,6 +182,61 @@
 }
 
 @layer utilities {
+  /* Ledger figures: tabular mono for money/percentages. */
+  .font-num {
+    font-family: theme('fontFamily.num');
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  /* Refined card surface: hairline border, soft elevation, faint top sheen. */
+  .surface-card {
+    background-color: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-card);
+  }
+  /* Editorial serif figures — magazine headline numerals, still tabular. */
+  .font-serif-fig {
+    font-family: theme('fontFamily.serif');
+    font-variant-numeric: tabular-nums lining-nums;
+    font-optical-sizing: auto;
+    letter-spacing: -0.02em;
+    font-feature-settings: 'tnum', 'lnum';
+  }
+  /* Section kicker: small uppercase label, often paired with an index number. */
+  .kicker {
+    font-family: theme('fontFamily.display');
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  /* Hairline editorial rule. */
+  .rule-top {
+    border-top: 1px solid hsl(var(--foreground) / 0.16);
+  }
+  /* Faint terminal grid backdrop (variant B). */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(var(--foreground) / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--foreground) / 0.04) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  /* Slow shimmer used for KPI "scan" reveals. */
+  @keyframes sheen {
+    0% { background-position: -150% 0; }
+    100% { background-position: 250% 0; }
+  }
+  .animate-sheen {
+    background-image: linear-gradient(
+      100deg,
+      transparent 30%,
+      hsl(var(--foreground) / 0.08) 50%,
+      transparent 70%
+    );
+    background-size: 200% 100%;
+    animation: sheen 2.4s ease-in-out;
+  }
   .text-gain {
     color: hsl(var(--gain));
   }

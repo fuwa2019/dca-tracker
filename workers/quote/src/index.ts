@@ -63,6 +63,8 @@ const QUOTE_TTL = 60;        // 1 min; front-end only polls while an app tab is 
 const CHART_TTL = 60 * 60;   // 1 h
 const HISTORY_TTL = 60 * 60; // 1 h (per symbol+range bucket)
 const SEARCH_TTL = 60 * 60 * 24;
+const HISTORY_MAX_PROVIDER_FETCHES_PER_INVOCATION = 10;
+const HISTORY_MAX_REQUESTED_SYMBOLS = 1000;
 
 /** Default fallback watchlist for the scheduled cron when settings rows are unavailable. */
 const DEFAULT_CRON_TICKERS = ['VOO', 'QQQM', 'SMH', 'SPY'];
@@ -158,6 +160,19 @@ async function runDailyPriceSync(env: Env): Promise<void> {
 }
 
 async function collectCronTickers(env: Env): Promise<string[]> {
+  try {
+    const active = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/active_monitor_universe`, {
+      method: 'POST',
+      headers: supabaseHeaders(env),
+      body: JSON.stringify({ p_benchmark: null }),
+    });
+    if (!active.ok) throw new Error(`active_monitor_universe ${active.status}`);
+    const rows = (await active.json()) as Array<{ symbol?: string }>;
+    const symbols = parseSymbolsParam(rows.map((row) => row.symbol ?? '').join(','), 1000);
+    if (symbols.length > 0) return symbols;
+  } catch (err) {
+    console.warn('[cron] active_monitor_universe fetch failed, falling back to tracked_symbols', err);
+  }
   try {
     const tracked = await fetch(`${env.SUPABASE_URL!}/rest/v1/tracked_symbols?select=symbol&enabled=eq.true`, {
       headers: supabaseHeaders(env),
@@ -341,11 +356,26 @@ async function handleSearch(url: URL, env: Env): Promise<Response> {
 }
 
 async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
-  const symbols = parseSymbolsParam(url.searchParams.get('symbols'), 10);
+  const allSymbols = parseSymbolsParam(url.searchParams.get('symbols'), HISTORY_MAX_REQUESTED_SYMBOLS);
   const range = url.searchParams.get('range') ?? '5y';
   const persist = url.searchParams.get('persist') ?? '';
   const provider = marketDataProviderFromEnv(env);
-  if (symbols.length === 0) return json({ error: 'missing_symbols' }, 400);
+  const cursor = clampInt(url.searchParams.get('cursor'), 0, allSymbols.length);
+  const requestedLimit = clampInt(url.searchParams.get('limit'), HISTORY_MAX_PROVIDER_FETCHES_PER_INVOCATION, HISTORY_MAX_PROVIDER_FETCHES_PER_INVOCATION);
+  const limit = Math.max(1, Math.min(requestedLimit, HISTORY_MAX_PROVIDER_FETCHES_PER_INVOCATION));
+  const symbols = allSymbols.slice(cursor, cursor + limit);
+  const nextCursor = Math.min(cursor + symbols.length, allSymbols.length);
+  const progress = {
+    total: allSymbols.length,
+    completed: nextCursor,
+    remaining: Math.max(0, allSymbols.length - nextCursor),
+    currentTicker: symbols[symbols.length - 1] ?? null,
+    limit,
+  };
+  if (allSymbols.length === 0) return json({ error: 'missing_symbols' }, 400);
+  if (symbols.length === 0) {
+    return json({ series: [], progress, hasMore: false, nextCursor: null });
+  }
   if (persist === 'sync' && (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY)) {
     return json({
       error: 'supabase_config_missing',
@@ -354,39 +384,40 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
   }
   if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
     await registerTrackedSymbols(env, symbols, 'history');
-    await Promise.all(symbols.map((symbol) => updateTrackedSymbolBackfill(env, symbol, 'pending')));
   }
 
-  const cacheKey = historyCacheKey(provider, symbols, range);
+  const startDates = parseSymbolDateMap(url.searchParams.get('startDates'));
+  const endDates = parseSymbolDateMap(url.searchParams.get('endDates'));
+  const defaultStartDate = normalizeIsoDate(url.searchParams.get('startDate'));
+  const defaultEndDate = normalizeIsoDate(url.searchParams.get('endDate'));
+  const cacheKey = historyCacheKey(provider, symbols, range, startDates, endDates, defaultStartDate, defaultEndDate);
   const cached = await env.QUOTE_CACHE.get(cacheKey, 'json') as unknown;
   if (isHistorySeriesArray(cached)) {
     if (persist !== 'sync') return json({ series: cached, cache: 'hit' });
 
     try {
-      await Promise.all(
-        cached
-          .filter((s) => s.points.length > 0)
-          .map((s) => upsertDailyPrices(env, s.ticker, s.points)),
-      );
+      await upsertDailyPriceSeriesBulk(env, cached.filter((s) => s.points.length > 0));
       await Promise.all(cached.map((s) => updateTrackedSymbolFromSeries(env, s)));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return json({ error: 'daily_prices_upsert_failed', message: msg }, 500);
     }
-    return json({ series: cached, cache: 'hit', persisted: true });
+    return json({ series: cached, cache: 'hit', persisted: true, progress, hasMore: nextCursor < allSymbols.length, nextCursor: nextCursor < allSymbols.length ? String(nextCursor) : null });
   }
   if (cached) {
     console.warn('[history] ignoring invalid cached history payload');
   }
 
   const failures = new Map<string, unknown>();
-  const series = await Promise.all(
-    symbols.map((s) => fetchHistoryFromProvider(env, s, range, url.searchParams).catch((e) => {
+  const series: HistorySeries[] = [];
+  for (const s of symbols) {
+    const item = await fetchHistoryFromProvider(env, s, range, historyParamsForSymbol(url.searchParams, s, startDates, endDates, defaultStartDate, defaultEndDate)).catch((e) => {
       console.warn(`[history] ${s} failed:`, sanitizeForLog(e));
       failures.set(s, e);
       return { ticker: s, points: [] as HistoryPoint[] };
-    })),
-  );
+    });
+    series.push(item);
+  }
   if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
     await Promise.all(series.map((item) => {
       const failure = failures.get(item.ticker);
@@ -401,22 +432,22 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
     await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(series), { expirationTtl: HISTORY_TTL });
     if (persist === 'sync') {
       try {
-        await Promise.all(successful.map((s) => upsertDailyPrices(env, s.ticker, s.points)));
+        await upsertDailyPriceSeriesBulk(env, successful);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         return json({ error: 'daily_prices_upsert_failed', message: msg }, 500);
       }
-      return json({ series, cache: 'miss', persisted: true });
+      return json({ series, cache: 'miss', persisted: true, progress, hasMore: nextCursor < allSymbols.length, nextCursor: nextCursor < allSymbols.length ? String(nextCursor) : null });
     }
     if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
       ctx.waitUntil(
-        Promise.all(successful.map((s) => upsertDailyPrices(env, s.ticker, s.points)))
+        upsertDailyPriceSeriesBulk(env, successful)
           .catch((e) => console.warn('[history] daily_prices upsert failed:', e)),
       );
     }
   }
 
-  return json({ series, cache: 'miss' });
+  return json({ series, cache: 'miss', progress, hasMore: nextCursor < allSymbols.length, nextCursor: nextCursor < allSymbols.length ? String(nextCursor) : null });
 }
 
 async function handlePriceHistory(url: URL, env: Env): Promise<Response> {
@@ -486,11 +517,24 @@ async function fetchHistoryFromProvider(env: Env, symbol: string, range: string,
     if (!historyParams.has('range')) historyParams.set('range', range);
     return new SchwabMarketDataClient(env).getPriceHistory(symbol, historyParams);
   }
-  return fetchYahooHistory(symbol, range);
+  return fetchYahooHistory(symbol, range, params);
 }
 
-async function fetchYahooHistory(symbol: string, range: string): Promise<HistorySeries> {
-  const upstream = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=1d&includePrePost=false&events=div%2Csplit`;
+async function fetchYahooHistory(symbol: string, range: string, params = new URLSearchParams()): Promise<HistorySeries> {
+  const startDate = normalizeIsoDate(params.get('startDate'));
+  const endDate = normalizeIsoDate(params.get('endDate'));
+  const upstreamParams = new URLSearchParams({
+    interval: '1d',
+    includePrePost: 'false',
+    events: 'div,split',
+  });
+  if (startDate) {
+    upstreamParams.set('period1', String(utcSecondsForDate(startDate)));
+    upstreamParams.set('period2', String(utcSecondsForDate(addDays(endDate ?? isoDateInNewYork(new Date()), 1))));
+  } else {
+    upstreamParams.set('range', range);
+  }
+  const upstream = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${upstreamParams.toString()}`;
   const r = await fetch(upstream, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
   if (!r.ok) throw new Error(`yahoo ${r.status}`);
   const data = (await r.json()) as YahooV8Chart;
@@ -506,8 +550,11 @@ async function fetchYahooHistory(symbol: string, range: string): Promise<History
     const adjusted = adjustedCloses[i];
     if (typeof ts !== 'number' || typeof c !== 'number' || !Number.isFinite(c)) continue;
     const asOfTimestamp = new Date(ts * 1000).toISOString();
+    const date = isoDateInNewYork(new Date(ts * 1000));
+    if (startDate && date < startDate) continue;
+    if (endDate && date > endDate) continue;
     points.push({
-      date: isoDateInNewYork(new Date(ts * 1000)),
+      date,
       close: c,
       adjustedClose: typeof adjusted === 'number' && Number.isFinite(adjusted) ? adjusted : c,
       asOfTimestamp,
@@ -516,8 +563,17 @@ async function fetchYahooHistory(symbol: string, range: string): Promise<History
   return { ticker: symbol, points };
 }
 
-export function historyCacheKey(provider: ReturnType<typeof marketDataProviderFromEnv>, symbols: string[], range: string): string {
-  return `history:${provider}:${symbols.join(',')}:${range}`;
+export function historyCacheKey(
+  provider: ReturnType<typeof marketDataProviderFromEnv>,
+  symbols: string[],
+  range: string,
+  startDates = new Map<string, string>(),
+  endDates = new Map<string, string>(),
+  defaultStartDate: string | null = null,
+  defaultEndDate: string | null = null,
+): string {
+  const bounds = symbols.map((s) => `${s}:${startDates.get(s) ?? defaultStartDate ?? ''}:${endDates.get(s) ?? defaultEndDate ?? ''}`).join('|');
+  return `history:${provider}:${symbols.join(',')}:${range}:${bounds}`;
 }
 
 export function dailyPriceSourceFromEnv(env: Env): ReturnType<typeof marketDataProviderFromEnv> {
@@ -539,6 +595,22 @@ export async function upsertDailyPrices(env: Env, ticker: string, points: Histor
   }));
   await upsertDailyPriceRows(env, rows);
   await updateTrackedSymbolBackfill(env, ticker, 'ok', null, firstPointDate(points));
+}
+
+async function upsertDailyPriceSeriesBulk(env: Env, series: HistorySeries[]): Promise<void> {
+  const source = dailyPriceSourceFromEnv(env);
+  const updatedAt = new Date().toISOString();
+  const rows = series.flatMap((item) => item.points.map((p) => ({
+    ticker: item.ticker,
+    trade_date: p.date,
+    close: p.close,
+    adjusted_close: p.adjustedClose ?? p.close,
+    source,
+    as_of_timestamp: p.asOfTimestamp ?? updatedAt,
+    is_provisional: false,
+    updated_at: updatedAt,
+  })));
+  await upsertDailyPriceRows(env, rows);
 }
 
 export function provisionalDailyPriceRows(
@@ -660,6 +732,66 @@ async function updateTrackedSymbolBackfill(
 
 function firstPointDate(points: HistoryPoint[]): string | null {
   return points.reduce<string | null>((first, point) => !first || point.date < first ? point.date : first, null);
+}
+
+function clampInt(raw: string | null, fallback: number, max: number): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.min(Math.floor(parsed), max));
+}
+
+function parseSymbolDateMap(raw: string | null): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const item of (raw ?? '').split(',')) {
+    const [symbol, date] = item.split(':');
+    const normalized = normalizeSymbol(symbol ?? '');
+    const iso = normalizeIsoDate(date ?? '');
+    if (normalized && iso) out.set(normalized, iso);
+  }
+  return out;
+}
+
+function historyParamsForSymbol(
+  base: URLSearchParams,
+  symbol: string,
+  startDates: Map<string, string>,
+  endDates: Map<string, string>,
+  defaultStartDate: string | null,
+  defaultEndDate: string | null,
+): URLSearchParams {
+  const params = new URLSearchParams(base);
+  const startDate = startDates.get(symbol) ?? defaultStartDate;
+  const endDate = endDates.get(symbol) ?? defaultEndDate;
+  if (startDate) {
+    params.set('startDate', startDate);
+    params.set('startDateIso', startDate);
+    params.set('startDateMillis', String(utcMillisForDate(startDate)));
+  }
+  if (endDate) {
+    params.set('endDate', endDate);
+    params.set('endDateIso', endDate);
+    params.set('endDateMillis', String(utcMillisForDate(addDays(endDate, 1))));
+  }
+  return params;
+}
+
+function normalizeIsoDate(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+}
+
+function utcMillisForDate(iso: string): number {
+  const [year, month, day] = iso.split('-').map(Number);
+  return Date.UTC(year, month - 1, day);
+}
+
+function utcSecondsForDate(iso: string): number {
+  return Math.floor(utcMillisForDate(iso) / 1000);
+}
+
+function addDays(iso: string, days: number): string {
+  return new Date(utcMillisForDate(iso) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
 function errorMessage(error: unknown): string {

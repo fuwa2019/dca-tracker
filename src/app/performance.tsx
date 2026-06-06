@@ -67,11 +67,16 @@ export function PerformancePage() {
     <div className="container max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="max-w-3xl">
-          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            Performance Report
+          <div className="flex items-baseline gap-3">
+            <span className="font-serif text-3xl italic leading-none text-brand">02</span>
+            <div>
+              <div className="kicker">Performance Report</div>
+              <h2 className="mt-0.5 font-serif text-3xl font-semibold tracking-tight sm:text-[2.6rem] sm:leading-[1.05]">
+                交易业绩是否跑赢 {selectedBenchmark}？
+              </h2>
+            </div>
           </div>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">交易业绩是否跑赢 {selectedBenchmark}？</h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">{reportLead}</p>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">{reportLead}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
             <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
               <CalendarDays className="h-3.5 w-3.5" />

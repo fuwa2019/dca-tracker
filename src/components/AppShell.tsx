@@ -13,6 +13,22 @@ import {
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { MarketStatusBar } from '@/components/MarketStatusBar';
+import { LOCAL_MODE } from '@/lib/localMode';
+
+function LocalBadge({ className }: { className?: string }) {
+  if (!LOCAL_MODE) return null;
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full border border-brand/30 bg-brand/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-brand',
+        className,
+      )}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+      本地预览
+    </span>
+  );
+}
 
 interface NavItem {
   to: string;
@@ -138,6 +154,7 @@ function TopBar({ title }: { title: string }) {
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Logo className="lg:hidden" />
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight">{title}</h1>
+          <LocalBadge className="lg:hidden" />
           <div className="lg:hidden">
             <ThemeToggle />
           </div>
@@ -162,19 +179,18 @@ function DesktopNav() {
   const groups: Array<NavItem['group']> = ['overview', 'tracking', 'ops'];
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface lg:flex">
-      <div className="flex items-center gap-2 px-4 pt-4">
-        <Logo />
+      <div className="flex items-center gap-2.5 px-4 pt-5">
+        <Logo className="h-9 w-9" />
         <div className="leading-tight">
-          <div className="text-sm font-semibold">DCA Tracker</div>
-          <div className="text-[11px] text-muted-foreground">个人定投分析</div>
+          <div className="font-serif text-lg font-semibold tracking-tight">DCA Tracker</div>
+          <div className="kicker mt-0.5">Investing Journal</div>
         </div>
       </div>
+      {LOCAL_MODE && <div className="px-4 pt-3"><LocalBadge /></div>}
       <nav className="mt-5 flex flex-col gap-4 px-2.5 pb-6">
         {groups.map((group) => (
           <div key={group}>
-            <div className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {GROUP_LABELS[group]}
-            </div>
+            <div className="kicker px-3 pb-1.5">{GROUP_LABELS[group]}</div>
             <div className="flex flex-col gap-0.5">
               {NAV.filter((n) => n.group === group).map(({ to, label, icon: Icon }) => (
                 <NavLink
@@ -209,8 +225,9 @@ function DesktopNav() {
           </div>
         ))}
       </nav>
-      <div className="mt-auto border-t border-border px-4 py-3 text-[10px] text-muted-foreground">
-        v3.0 · 高级主题与公开报告
+      <div className="mt-auto border-t border-border px-4 py-3">
+        <div className="kicker">DCA Tracker · v3.0</div>
+        <div className="mt-0.5 text-[10px] text-muted-foreground">高级主题与公开报告</div>
       </div>
     </aside>
   );
@@ -256,7 +273,9 @@ function Logo({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'flex h-8 w-8 items-center justify-center rounded-md bg-brand text-brand-foreground text-sm font-bold',
+        'relative flex h-8 w-8 items-center justify-center rounded-[10px] text-white font-serif text-base font-semibold',
+        'bg-gradient-to-br from-[hsl(348_86%_58%)] to-[hsl(332_74%_42%)] shadow-[0_4px_14px_-4px_hsl(var(--brand)/0.7)]',
+        'ring-1 ring-inset ring-white/15',
         className,
       )}
     >

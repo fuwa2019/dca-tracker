@@ -48,6 +48,21 @@ export interface HistorySeries {
   points: Array<{ date: string; close: number; adjustedClose?: number }>;
 }
 
+export interface HistoryProgress {
+  total: number;
+  completed: number;
+  remaining: number;
+  currentTicker: string | null;
+  limit: number;
+}
+
+export interface HistoryResponse {
+  series: HistorySeries[];
+  progress?: HistoryProgress;
+  hasMore?: boolean;
+  nextCursor?: string | null;
+}
+
 export interface SymbolSearchResult {
   symbol: string;
   name: string;
@@ -136,13 +151,46 @@ export async function searchSymbols(query: string): Promise<SymbolSearchResult[]
 export async function fetchHistory(
   symbols: string[],
   range = '10y',
-  options?: { persist?: 'sync' },
+  options?: {
+    persist?: 'sync';
+    startDate?: string | null;
+    endDate?: string | null;
+    startDates?: Record<string, string | null | undefined>;
+    endDates?: Record<string, string | null | undefined>;
+    cursor?: string | number | null;
+    limit?: number;
+  },
 ): Promise<HistorySeries[]> {
-  if (!WORKER_BASE) return [];
+  const data = await fetchHistoryPage(symbols, range, options);
+  return data.series;
+}
+
+export async function fetchHistoryPage(
+  symbols: string[],
+  range = '10y',
+  options?: {
+    persist?: 'sync';
+    startDate?: string | null;
+    endDate?: string | null;
+    startDates?: Record<string, string | null | undefined>;
+    endDates?: Record<string, string | null | undefined>;
+    cursor?: string | number | null;
+    limit?: number;
+  },
+): Promise<HistoryResponse> {
+  if (!WORKER_BASE) return { series: [], hasMore: false, nextCursor: null };
   const normalized = normalizeSymbols(symbols);
-  if (normalized.length === 0) return [];
+  if (normalized.length === 0) return { series: [], hasMore: false, nextCursor: null };
   const params = new URLSearchParams({ symbols: normalized.join(','), range });
   if (options?.persist === 'sync') params.set('persist', 'sync');
+  if (options?.startDate) params.set('startDate', options.startDate);
+  if (options?.endDate) params.set('endDate', options.endDate);
+  if (options?.cursor != null) params.set('cursor', String(options.cursor));
+  if (options?.limit != null) params.set('limit', String(options.limit));
+  const startDates = serializeDateMap(options?.startDates);
+  const endDates = serializeDateMap(options?.endDates);
+  if (startDates) params.set('startDates', startDates);
+  if (endDates) params.set('endDates', endDates);
   const url = `${WORKER_BASE}/api/history?${params.toString()}`;
   const r = await rateLimited('history', () => fetch(url), API_LIMIT_CONFIG);
   if (!r.ok) {
@@ -150,8 +198,23 @@ export async function fetchHistory(
     const msg = (body as { message?: string }).message ?? `http ${r.status}`;
     throw new Error(msg);
   }
-  const data = (await r.json()) as { series?: HistorySeries[] };
-  return data.series ?? [];
+  const data = (await r.json()) as HistoryResponse;
+  return {
+    ...data,
+    series: data.series ?? [],
+    hasMore: !!data.hasMore,
+    nextCursor: data.nextCursor ?? null,
+  };
+}
+
+function serializeDateMap(input?: Record<string, string | null | undefined>): string {
+  if (!input) return '';
+  return Object.entries(input)
+    .flatMap(([symbol, date]) => {
+      const normalized = normalizeSymbol(symbol);
+      return normalized && date ? [`${normalized}:${date}`] : [];
+    })
+    .join(',');
 }
 
 function getEtClockParts(now: Date) {

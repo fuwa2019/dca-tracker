@@ -10,11 +10,12 @@ import { SharePage } from '@/app/share';
 import { DataHealthPage } from '@/app/data-health';
 import { AppShell } from '@/components/AppShell';
 import { RequireAuth } from '@/components/RequireAuth';
+import { LOCAL_MODE } from '@/lib/localMode';
 
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/login" element={LOCAL_MODE ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/share/:token" element={<SharePage />} />
       <Route
         element={

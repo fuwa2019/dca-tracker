@@ -72,10 +72,11 @@ export function LoginPage() {
         className="w-full max-w-sm space-y-6"
       >
         <div className="space-y-2 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground text-xl font-bold">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(348_86%_58%)] to-[hsl(332_74%_42%)] font-serif text-2xl font-semibold text-white shadow-[0_8px_24px_-8px_hsl(var(--brand)/0.6)] ring-1 ring-inset ring-white/15">
             $
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">DCA Tracker</h1>
+          <div className="kicker">Personal Investing Journal</div>
+          <h1 className="font-serif text-3xl font-semibold tracking-tight">DCA Tracker</h1>
           <p className="text-sm text-muted-foreground">
             {step === 'email' ? '输入邮箱，下一步会收到 6 位验证码' : '请输入邮件里的 6 位验证码'}
           </p>
@@ -136,7 +137,7 @@ export function LoginPage() {
                   placeholder="000000"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="text-center text-2xl tracking-[0.4em] tnum"
+                  className="font-num text-center text-2xl tracking-[0.4em]"
                   required
                 />
               </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Copy, Trash2, Plus, LogOut, Check, ShieldCheck, Mail } from 'lucide-react';
+import { Kicker } from '@/components/Kicker';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -86,7 +87,7 @@ export function SettingsPage() {
       const { error } = await supabase.from('settings').upsert(payload);
       if (!error) {
         const symbols = await registerTrackedSymbols([...watchlist, ...benchmarks], 'settings');
-        await backfillTrackedSymbols(symbols, 'max');
+        await backfillTrackedSymbols(symbols, { limit: 10 });
         return;
       }
       if (!/benchmarks|selected_benchmark|schema cache|column/i.test(error.message ?? '')) throw error;
@@ -94,7 +95,7 @@ export function SettingsPage() {
       const retry = await supabase.from('settings').upsert(legacyPayload);
       if (retry.error) throw retry.error;
       const symbols = await registerTrackedSymbols([...watchlist, ...benchmarks], 'settings');
-      await backfillTrackedSymbols(symbols, 'max');
+      await backfillTrackedSymbols(symbols, { limit: 10 });
     },
     onSuccess: async () => {
       await Promise.all([
@@ -142,9 +143,10 @@ export function SettingsPage() {
 
   return (
     <div className="container max-w-3xl px-4 py-5 sm:px-6 sm:py-6 space-y-5">
+      <Kicker en="Settings" zh="设置" />
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">目标与定投</CardTitle>
+          <CardTitle className="font-serif text-lg">目标与定投</CardTitle>
           <CardDescription className="text-xs">用于 $1M 进度环和入金提醒邮件</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -165,7 +167,7 @@ export function SettingsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">邮件提醒</CardTitle>
+          <CardTitle className="font-serif text-lg">邮件提醒</CardTitle>
           <CardDescription className="text-xs">每月第一个美股交易日前一天 11:00（北京）提醒入金</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -186,7 +188,7 @@ export function SettingsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">持仓与自选</CardTitle>
+          <CardTitle className="font-serif text-lg">持仓与自选</CardTitle>
           <CardDescription className="text-xs">控制盈亏计算口径、首页自选股和业绩基准</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -249,7 +251,7 @@ export function SettingsPage() {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <CardTitle className="text-base">分享链接</CardTitle>
+              <CardTitle className="font-serif text-lg">分享链接</CardTitle>
               <CardDescription className="text-xs">
                 只读视图 · 显示持仓权重 % 和收益率 %，永远不会暴露金额、CNY 和现金流。
               </CardDescription>
@@ -335,7 +337,7 @@ export function SettingsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">外观</CardTitle>
+          <CardTitle className="font-serif text-lg">外观</CardTitle>
           <CardDescription className="text-xs">默认跟随系统，也可以手动固定浅色或深色。</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-between">

@@ -5,7 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local": "VITE_LOCAL_MODE=1 vite",
     "build": "tsc -b && vite build",
+    "build:local": "VITE_LOCAL_MODE=1 tsc -b && VITE_LOCAL_MODE=1 vite build",
+    "build:dataset": "node scripts/build-local-dataset.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit && tsc --noEmit -p workers/quote && tsc --noEmit -p workers/email-cron",
     "test:finance": "node scripts/verify-performance-fixtures.mjs",
