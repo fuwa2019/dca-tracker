@@ -60,6 +60,7 @@ export async function backfillTrackedSymbols(
   rangeOrOptions: string | {
     defaultStartDate?: string | null;
     requiredEnd?: string | null;
+    calendarSymbol?: string | null;
     limit?: number;
     onProgress?: (progress: BackfillRunProgress) => void;
   } = '1y',
@@ -80,6 +81,7 @@ export async function backfillTrackedSymbols(
     })),
     {
       range: '1y',
+      calendarSymbol: rangeOrOptions.calendarSymbol,
       limit: rangeOrOptions.limit,
       onProgress: rangeOrOptions.onProgress,
     },
@@ -90,6 +92,7 @@ export async function backfillTrackedTargets(
   targets: BackfillTarget[],
   options: {
     range?: string;
+    calendarSymbol?: string | null;
     limit?: number;
     onProgress?: (progress: BackfillRunProgress) => void;
   } = {},
@@ -113,6 +116,7 @@ export async function backfillTrackedTargets(
       persist: 'sync',
       startDates,
       endDates,
+      calendarSymbol: options.calendarSymbol,
       cursor,
       limit: options.limit ?? 10,
     });

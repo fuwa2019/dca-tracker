@@ -124,6 +124,7 @@ export function DataHealthPage() {
       if (backfillTargets.length === 0) return 0;
       setBackfillProgress(null);
       const series = await backfillTrackedTargets(backfillTargets, {
+        calendarSymbol: selectedBenchmark,
         limit: 10,
         onProgress: setBackfillProgress,
       });

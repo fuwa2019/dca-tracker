@@ -237,6 +237,254 @@ try {
     globalThis.fetch = originalFetch;
   }
 
+  let dbProviderCalls = 0;
+  let dbReadCalls = 0;
+  globalThis.fetch = async (url) => {
+    const target = String(url);
+    if (
+      target.includes('/rest/v1/tracked_symbols')
+      || target.includes('/rest/v1/rpc/add_tracked_symbol')
+    ) {
+      return new Response('', { status: 200 });
+    }
+    if (target.includes('/rest/v1/rpc/daily_price_readthrough')) {
+      dbReadCalls += 1;
+      return jsonResponse([
+        { symbol: 'VOO', trade_date: '2026-06-01', close: 500, adjusted_close: 499.5, source: 'schwab', as_of_timestamp: '2026-06-01T20:00:00.000Z', is_provisional: false, updated_at: '2026-06-01T21:00:00.000Z' },
+        { symbol: 'VOO', trade_date: '2026-06-02', close: 501, adjusted_close: 500.5, source: 'schwab', as_of_timestamp: '2026-06-02T20:00:00.000Z', is_provisional: false, updated_at: '2026-06-02T21:00:00.000Z' },
+      ]);
+    }
+    if (target.includes('/rest/v1/rpc/daily_price_missing_ranges')) {
+      return jsonResponse([]);
+    }
+    if (target.includes('query1.finance.yahoo.com') || target.includes('api.schwabapi.com/marketdata')) {
+      dbProviderCalls += 1;
+      return jsonResponse({});
+    }
+    throw new Error(`unexpected db hit fetch ${target}`);
+  };
+  try {
+    const response = await workerMod.default.fetch(
+      new Request('https://worker.test/api/history?symbols=VOO&startDate=2026-06-01&endDate=2026-06-02&persist=sync'),
+      {
+        MARKET_DATA_PROVIDER: 'yahoo',
+        ALLOWED_ORIGINS: '*',
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+        QUOTE_CACHE: { get: async () => null, put: async () => {} },
+      },
+      { waitUntil: () => {} },
+    );
+    assert.equal(response.status, 200, 'DB-backed history hit succeeds');
+    const body = await response.json();
+    assert.equal(body.cache, 'database', 'complete daily_prices coverage returns database cache marker');
+    assert.equal(body.persisted, true, 'persist=sync is acknowledged for DB hits');
+    assert.equal(body.series[0].points.length, 2, 'DB-backed history returns persisted points');
+    assert.equal(dbProviderCalls, 0, 'complete daily_prices coverage does not call provider history');
+    assert.equal(dbReadCalls, 1, 'complete daily_prices coverage reads DB once');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  let partialReadCalls = 0;
+  const partialUpserts = [];
+  const partialProviderUrls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (
+      target.includes('/rest/v1/tracked_symbols')
+      || target.includes('/rest/v1/rpc/add_tracked_symbol')
+    ) {
+      return new Response('', { status: 200 });
+    }
+    if (target.includes('/rest/v1/rpc/daily_price_readthrough')) {
+      partialReadCalls += 1;
+      return partialReadCalls === 1
+        ? jsonResponse([
+          { symbol: 'VOO', trade_date: '2026-06-01', close: 500, adjusted_close: 499.5, source: 'yahoo', as_of_timestamp: '2026-06-01T20:00:00.000Z', is_provisional: false, updated_at: '2026-06-01T21:00:00.000Z' },
+        ])
+        : jsonResponse([
+          { symbol: 'VOO', trade_date: '2026-06-01', close: 500, adjusted_close: 499.5, source: 'yahoo', as_of_timestamp: '2026-06-01T20:00:00.000Z', is_provisional: false, updated_at: '2026-06-01T21:00:00.000Z' },
+          { symbol: 'VOO', trade_date: '2026-06-02', close: 501, adjusted_close: 500.5, source: 'yahoo', as_of_timestamp: '2026-06-02T20:00:00.000Z', is_provisional: false, updated_at: '2026-06-02T21:00:00.000Z' },
+          { symbol: 'VOO', trade_date: '2026-06-03', close: 502, adjusted_close: 501.5, source: 'yahoo', as_of_timestamp: '2026-06-03T20:00:00.000Z', is_provisional: false, updated_at: '2026-06-03T21:00:00.000Z' },
+        ]);
+    }
+    if (target.includes('/rest/v1/rpc/daily_price_missing_ranges')) {
+      return jsonResponse([{ symbol: 'VOO', start_date: '2026-06-02', end_date: '2026-06-03' }]);
+    }
+    if (target.includes('/rest/v1/rpc/upsert_daily_prices')) {
+      partialUpserts.push(JSON.parse(String(init.body)));
+      return new Response('', { status: 200 });
+    }
+    if (target.includes('query1.finance.yahoo.com/v8/finance/chart/VOO')) {
+      partialProviderUrls.push(target);
+      return jsonResponse({
+        chart: {
+          result: [{
+            timestamp: [
+              Math.floor(Date.parse('2026-06-02T20:00:00.000Z') / 1000),
+              Math.floor(Date.parse('2026-06-03T20:00:00.000Z') / 1000),
+            ],
+            indicators: {
+              quote: [{ close: [501, 502] }],
+              adjclose: [{ adjclose: [500.5, 501.5] }],
+            },
+          }],
+        },
+      });
+    }
+    throw new Error(`unexpected partial fetch ${target}`);
+  };
+  try {
+    const response = await workerMod.default.fetch(
+      new Request('https://worker.test/api/history?symbols=VOO&startDate=2026-06-01&endDate=2026-06-03&persist=sync'),
+      {
+        MARKET_DATA_PROVIDER: 'yahoo',
+        ALLOWED_ORIGINS: '*',
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+        QUOTE_CACHE: { get: async () => null, put: async () => {} },
+      },
+      { waitUntil: () => {} },
+    );
+    assert.equal(response.status, 200, 'partial daily_prices coverage succeeds');
+    const body = await response.json();
+    assert.equal(body.cache, 'database-refresh', 'partial coverage fetches and returns refreshed DB data');
+    assert.equal(body.series[0].points.length, 3, 'partial coverage returns merged DB series after upsert');
+    assert.equal(partialProviderUrls.length, 1, 'partial coverage makes one bounded provider request');
+    assert.match(partialProviderUrls[0], /period1=/, 'bounded provider request includes start bound');
+    assert.match(partialProviderUrls[0], /period2=/, 'bounded provider request includes end bound');
+    assert.equal(partialUpserts[0].p_rows.length, 2, 'only missing provider rows are upserted');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(
+    calendarMod.lastCompletedNyseTradingDate(new Date('2026-06-07T12:00:00Z')),
+    '2026-06-05',
+    'Sunday 2026-06-07 does not require a 2026-06-06 NYSE daily price',
+  );
+
+  const RealDate = globalThis.Date;
+  let quoteProviderCalls = 0;
+  globalThis.Date = class FixedClosedDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length === 0 ? ['2026-06-07T12:00:00.000Z'] : args));
+    }
+    static now() {
+      return new RealDate('2026-06-07T12:00:00.000Z').getTime();
+    }
+  };
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.includes('/rest/v1/tracked_symbols')) return new Response('', { status: 200 });
+    if (target.includes('/rest/v1/quote_snapshots') && init.method !== 'POST') {
+      return jsonResponse([{
+        ticker: 'VOO',
+        price: 501,
+        prev_close: 500,
+        change: 1,
+        change_pct: 0.002,
+        market_state: 'CLOSED',
+        source: 'schwab',
+        as_of_timestamp: '2026-06-05T21:00:00.000Z',
+        updated_at: '2026-06-05T21:01:00.000Z',
+      }]);
+    }
+    if (target.includes('query1.finance.yahoo.com') || target.includes('api.schwabapi.com/marketdata')) {
+      quoteProviderCalls += 1;
+      return jsonResponse({});
+    }
+    throw new Error(`unexpected closed quote fetch ${target}`);
+  };
+  try {
+    const response = await workerMod.default.fetch(
+      new Request('https://worker.test/api/market/quotes?symbols=VOO'),
+      {
+        MARKET_DATA_PROVIDER: 'yahoo',
+        ALLOWED_ORIGINS: '*',
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+        QUOTE_CACHE: { get: async () => null, put: async () => {} },
+      },
+      { waitUntil: () => {} },
+    );
+    const body = await response.json();
+    assert.equal(response.status, 200, 'closed-market snapshot quote succeeds');
+    assert.equal(body.cache, 'snapshot', 'closed-market fresh quote_snapshot is returned directly');
+    assert.equal(body.quotes[0].providerLabel, 'schwab-snapshot', 'snapshot quote exposes snapshot provenance');
+    assert.equal(quoteProviderCalls, 0, 'closed-market fresh quote_snapshot does not call provider quotes');
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.Date = RealDate;
+  }
+
+  let activeProviderCalls = 0;
+  globalThis.Date = class FixedActiveDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length === 0 ? ['2026-06-05T14:00:00.000Z'] : args));
+    }
+    static now() {
+      return new RealDate('2026-06-05T14:00:00.000Z').getTime();
+    }
+  };
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.includes('/rest/v1/tracked_symbols')) return new Response('', { status: 200 });
+    if (target.includes('/rest/v1/quote_snapshots') && init.method === 'POST') return new Response('', { status: 200 });
+    if (target.includes('/rest/v1/quote_snapshots')) {
+      return jsonResponse([{
+        ticker: 'VOO',
+        price: 500,
+        prev_close: 499,
+        change: 1,
+        change_pct: 0.002,
+        market_state: 'REGULAR',
+        source: 'yahoo',
+        as_of_timestamp: '2026-06-05T13:30:00.000Z',
+        updated_at: '2026-06-05T13:30:00.000Z',
+      }]);
+    }
+    if (target.includes('query1.finance.yahoo.com/v7/finance/quote')) {
+      activeProviderCalls += 1;
+      return jsonResponse({
+        quoteResponse: {
+          result: [{
+            symbol: 'VOO',
+            regularMarketPrice: 502,
+            regularMarketPreviousClose: 500,
+            regularMarketChange: 2,
+            regularMarketChangePercent: 0.4,
+            regularMarketTime: Math.floor(Date.parse('2026-06-05T14:00:00.000Z') / 1000),
+            marketState: 'REGULAR',
+          }],
+        },
+      });
+    }
+    throw new Error(`unexpected active quote fetch ${target}`);
+  };
+  try {
+    const response = await workerMod.default.fetch(
+      new Request('https://worker.test/api/market/quotes?symbols=VOO'),
+      {
+        MARKET_DATA_PROVIDER: 'yahoo',
+        ALLOWED_ORIGINS: '*',
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+        QUOTE_CACHE: { get: async () => null, put: async () => {} },
+      },
+      { waitUntil: () => {} },
+    );
+    const body = await response.json();
+    assert.equal(response.status, 200, 'active-market stale snapshot quote succeeds');
+    assert.equal(body.cache, 'miss', 'active-market stale quote_snapshot refreshes through provider');
+    assert.equal(body.quotes[0].price, 502, 'active refresh returns provider quote');
+    assert.equal(activeProviderCalls, 1, 'active-market stale quote_snapshot calls provider once');
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.Date = RealDate;
+  }
+
   const provisionalRows = workerMod.provisionalDailyPriceRows(
     '2026-05-29',
     [

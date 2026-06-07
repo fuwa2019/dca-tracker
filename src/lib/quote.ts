@@ -157,6 +157,7 @@ export async function fetchHistory(
     endDate?: string | null;
     startDates?: Record<string, string | null | undefined>;
     endDates?: Record<string, string | null | undefined>;
+    calendarSymbol?: string | null;
     cursor?: string | number | null;
     limit?: number;
   },
@@ -174,6 +175,7 @@ export async function fetchHistoryPage(
     endDate?: string | null;
     startDates?: Record<string, string | null | undefined>;
     endDates?: Record<string, string | null | undefined>;
+    calendarSymbol?: string | null;
     cursor?: string | number | null;
     limit?: number;
   },
@@ -185,6 +187,7 @@ export async function fetchHistoryPage(
   if (options?.persist === 'sync') params.set('persist', 'sync');
   if (options?.startDate) params.set('startDate', options.startDate);
   if (options?.endDate) params.set('endDate', options.endDate);
+  if (options?.calendarSymbol) params.set('calendarSymbol', normalizeSymbol(options.calendarSymbol));
   if (options?.cursor != null) params.set('cursor', String(options.cursor));
   if (options?.limit != null) params.set('limit', String(options.limit));
   const startDates = serializeDateMap(options?.startDates);

@@ -41,6 +41,7 @@ import {
 import {
   isQuoteEligibleForProvisionalClose,
   isoDateInNewYork,
+  isNyseTradingDay,
   lastCompletedNyseTradingDate,
 } from './nyseCalendar.js';
 
@@ -67,11 +68,48 @@ const HISTORY_TTL = 60 * 60; // 1 h (per symbol+range bucket)
 const SEARCH_TTL = 60 * 60 * 24;
 const HISTORY_MAX_PROVIDER_FETCHES_PER_INVOCATION = 10;
 const HISTORY_MAX_REQUESTED_SYMBOLS = 1000;
+const QUOTE_SNAPSHOT_ACTIVE_MAX_AGE_MS = QUOTE_TTL * 1000;
 
 /** Default fallback watchlist for the scheduled cron when settings rows are unavailable. */
 const DEFAULT_CRON_TICKERS = ['VOO', 'QQQM', 'SMH', 'SPY'];
 
 type QuoteOut = NormalizedQuote;
+
+interface DailyPriceReadItem {
+  symbol: string;
+  start_date: string;
+  end_date: string;
+}
+
+interface DailyPriceReadRow {
+  symbol?: string;
+  ticker?: string;
+  trade_date?: string;
+  close?: number | string | null;
+  adjusted_close?: number | string | null;
+  source?: string | null;
+  as_of_timestamp?: string | null;
+  is_provisional?: boolean | null;
+  updated_at?: string | null;
+}
+
+interface DailyPriceMissingRange {
+  symbol?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+interface QuoteSnapshotRow {
+  ticker?: string;
+  price?: number | string | null;
+  prev_close?: number | string | null;
+  change?: number | string | null;
+  change_pct?: number | string | null;
+  market_state?: string | null;
+  source?: string | null;
+  as_of_timestamp?: string | null;
+  updated_at?: string | null;
+}
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -217,23 +255,45 @@ async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<R
   }
 
   const provider = marketDataProviderFromEnv(env);
+  const snapshots = hasSupabase(env)
+    ? await readQuoteSnapshots(env, symbols).catch((e) => {
+      console.warn('[quote] quote_snapshots read failed:', sanitizeForLog(e));
+      return [] as QuoteOut[];
+    })
+    : [];
+  if (snapshotsCoverClosedMarket(symbols, snapshots)) {
+    return json({ quotes: orderQuotes(symbols, snapshots), cache: 'snapshot' });
+  }
+
   const cacheKey = `quote:${provider}:${symbols.join(',')}`;
   const cached = await env.QUOTE_CACHE.get(cacheKey, 'json');
   if (cached) {
     return json({ quotes: cached, cache: 'hit' });
   }
 
-  const quotes = await fetchQuotesFromProvider(env, symbols);
+  const refreshSymbols = symbolsNeedingQuoteRefresh(symbols, snapshots);
+  if (refreshSymbols.length === 0 && snapshots.length > 0) {
+    return json({ quotes: orderQuotes(symbols, snapshots), cache: 'snapshot' });
+  }
 
-  // Persist ordering matching request
-  quotes.sort((a, b) => symbols.indexOf(a.ticker) - symbols.indexOf(b.ticker));
+  let providerQuotes: QuoteOut[] = [];
+  try {
+    providerQuotes = await fetchQuotesFromProvider(env, refreshSymbols.length > 0 ? refreshSymbols : symbols);
+  } catch (err) {
+    if (snapshots.length > 0) {
+      console.warn('[quote] provider fetch failed, returning quote_snapshots:', sanitizeForLog(err));
+      return json({ quotes: orderQuotes(symbols, snapshots), cache: 'snapshot-fallback' });
+    }
+    throw err;
+  }
+  const quotes = mergeQuotes(symbols, snapshots, providerQuotes);
 
   if (quotes.length > 0) {
     await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(quotes), { expirationTtl: QUOTE_TTL });
     // Fire-and-forget snapshot to Supabase so anonymous /share/[token] pages
     // can compute return_pct without needing direct Yahoo access.
-    if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
-      ctx.waitUntil(upsertSnapshots(env, quotes).catch((e) => console.warn('snapshot upsert failed:', e)));
+    if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && providerQuotes.length > 0) {
+      ctx.waitUntil(upsertSnapshots(env, providerQuotes).catch((e) => console.warn('snapshot upsert failed:', e)));
     }
   }
 
@@ -282,6 +342,126 @@ async function fetchYahooQuotes(symbols: string[], fallback: boolean): Promise<Q
     for (const q of fallbackQuotes) if (q) quotes.push(q);
   }
   return quotes;
+}
+
+async function readQuoteSnapshots(env: Env, symbols: string[]): Promise<QuoteOut[]> {
+  if (!hasSupabase(env) || symbols.length === 0) return [];
+  const inFilter = `in.(${symbols.map(encodePostgrestInValue).join(',')})`;
+  const fields = 'ticker,price,prev_close,change,change_pct,market_state,source,as_of_timestamp,updated_at';
+  const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/quote_snapshots?select=${fields}&ticker=${encodeURIComponent(inFilter)}`, {
+    headers: supabaseHeaders(env),
+  });
+  if (!r.ok) throw new Error(`quote_snapshots ${r.status}: ${await r.text()}`);
+  const rows = (await r.json()) as QuoteSnapshotRow[];
+  return rows.flatMap(snapshotRowToQuote);
+}
+
+function snapshotRowToQuote(row: QuoteSnapshotRow): QuoteOut[] {
+  const ticker = normalizeSymbol(row.ticker ?? '');
+  const price = numOrNull(row.price);
+  if (!ticker || price === null) return [];
+  const source = row.source?.trim().toLowerCase() === 'schwab' ? 'schwab' : 'yahoo';
+  const fetchedAt = row.updated_at ?? new Date().toISOString();
+  return [{
+    ticker,
+    price,
+    displayPrice: price,
+    prevClose: numOrNull(row.prev_close),
+    change: numOrNull(row.change),
+    changePct: numOrNull(row.change_pct),
+    regularPrice: price,
+    preMarketPrice: null,
+    preMarketChange: null,
+    preMarketChangePct: null,
+    postMarketPrice: null,
+    postMarketChange: null,
+    postMarketChangePct: null,
+    session: sessionFromMarketState(row.market_state ?? null),
+    sessionLabel: sessionLabel(sessionFromMarketState(row.market_state ?? null)),
+    isExtended: false,
+    marketState: row.market_state ?? null,
+    source,
+    asOf: row.as_of_timestamp ?? row.updated_at ?? undefined,
+    fetchedAt,
+    fallback: false,
+    providerLabel: `${source}-snapshot`,
+    cachedAt: fetchedAt,
+  }];
+}
+
+function snapshotsCoverClosedMarket(symbols: string[], quotes: QuoteOut[], now = new Date()): boolean {
+  if (isUsMarketDataActive(now)) return false;
+  const completedDate = lastCompletedNyseTradingDate(now);
+  return symbols.every((symbol) => {
+    const quote = quotes.find((q) => q.ticker === symbol && q.price !== null);
+    return !!quote && quoteDateInNewYork(quote) >= completedDate;
+  });
+}
+
+function symbolsNeedingQuoteRefresh(symbols: string[], snapshots: QuoteOut[], now = new Date()): string[] {
+  const active = isUsMarketDataActive(now);
+  const completedDate = lastCompletedNyseTradingDate(now);
+  return symbols.filter((symbol) => {
+    const quote = snapshots.find((q) => q.ticker === symbol && q.price !== null);
+    if (!quote) return true;
+    if (active) return quoteAgeMs(quote, now) > QUOTE_SNAPSHOT_ACTIVE_MAX_AGE_MS;
+    return quoteDateInNewYork(quote) < completedDate;
+  });
+}
+
+function mergeQuotes(symbols: string[], snapshots: QuoteOut[], providerQuotes: QuoteOut[]): QuoteOut[] {
+  const byTicker = new Map<string, QuoteOut>();
+  for (const quote of snapshots) byTicker.set(quote.ticker, quote);
+  for (const quote of providerQuotes) byTicker.set(quote.ticker, quote);
+  return symbols.flatMap((symbol) => {
+    const quote = byTicker.get(symbol);
+    return quote ? [quote] : [];
+  });
+}
+
+function orderQuotes(symbols: string[], quotes: QuoteOut[]): QuoteOut[] {
+  const byTicker = new Map(quotes.map((q) => [q.ticker, q]));
+  return symbols.flatMap((symbol) => {
+    const quote = byTicker.get(symbol);
+    return quote ? [quote] : [];
+  });
+}
+
+function quoteDateInNewYork(quote: QuoteOut): string {
+  const raw = quote.asOf ?? quote.fetchedAt ?? quote.cachedAt;
+  const parsed = raw ? new Date(raw) : null;
+  return parsed && Number.isFinite(parsed.getTime()) ? isoDateInNewYork(parsed) : '0000-00-00';
+}
+
+function quoteAgeMs(quote: QuoteOut, now: Date): number {
+  const raw = quote.fetchedAt ?? quote.cachedAt ?? quote.asOf;
+  const parsed = raw ? Date.parse(raw) : NaN;
+  return Number.isFinite(parsed) ? now.getTime() - parsed : Number.POSITIVE_INFINITY;
+}
+
+function isUsMarketDataActive(now = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    hour12: false,
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const weekday = byType.weekday ?? '';
+  const rawHour = Number(byType.hour ?? '0');
+  const hour = rawHour === 24 ? 0 : rawHour;
+  const minute = Number(byType.minute ?? '0');
+  const date = `${byType.year}-${byType.month}-${byType.day}`;
+  const minutes = hour * 60 + minute;
+  return weekday !== 'Sat'
+    && weekday !== 'Sun'
+    && isNyseTradingDay(date)
+    && minutes >= 4 * 60
+    && minutes < 20 * 60;
 }
 
 async function upsertSnapshots(env: Env, quotes: QuoteOut[]): Promise<void> {
@@ -392,7 +572,49 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
   const endDates = parseSymbolDateMap(url.searchParams.get('endDates'));
   const defaultStartDate = normalizeIsoDate(url.searchParams.get('startDate'));
   const defaultEndDate = normalizeIsoDate(url.searchParams.get('endDate'));
+  const calendarSymbol = normalizeSymbol(url.searchParams.get('calendarSymbol') ?? '') || 'SPY';
   const cacheKey = historyCacheKey(provider, symbols, range, startDates, endDates, defaultStartDate, defaultEndDate);
+
+  if (hasSupabase(env)) {
+    const bounds = symbols.map((symbol) => historyBoundsForSymbol(symbol, range, startDates, endDates, defaultStartDate, defaultEndDate));
+    try {
+      const dbSeries = await readDailyPriceSeries(env, bounds);
+      const missingRanges = await readDailyPriceMissingRanges(env, bounds, calendarSymbol);
+      if (missingRanges.length === 0) {
+        await Promise.all(dbSeries.map((item) => updateTrackedSymbolFromSeries(env, item)));
+        return json({
+          series: orderHistorySeries(symbols, dbSeries),
+          cache: 'database',
+          persisted: persist === 'sync' ? true : undefined,
+          progress,
+          hasMore: nextCursor < allSymbols.length,
+          nextCursor: nextCursor < allSymbols.length ? String(nextCursor) : null,
+        });
+      }
+
+      const providerSeries = await fetchMissingHistoryRanges(env, url.searchParams, range, missingRanges);
+      const successful = providerSeries.filter((s) => s.points.length > 0);
+      if (successful.length > 0) {
+        await upsertDailyPriceSeriesBulk(env, successful);
+      }
+
+      const refreshed = await readDailyPriceSeries(env, bounds);
+      const ordered = orderHistorySeries(symbols, refreshed);
+      await Promise.all(ordered.map((item) => updateTrackedSymbolFromSeries(env, item)));
+      await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(ordered), { expirationTtl: HISTORY_TTL });
+      return json({
+        series: ordered,
+        cache: 'database-refresh',
+        persisted: successful.length > 0 || persist === 'sync',
+        progress,
+        hasMore: nextCursor < allSymbols.length,
+        nextCursor: nextCursor < allSymbols.length ? String(nextCursor) : null,
+      });
+    } catch (err) {
+      console.warn('[history] daily_prices read-through failed, falling back to provider:', sanitizeForLog(err));
+    }
+  }
+
   const cached = await env.QUOTE_CACHE.get(cacheKey, 'json') as unknown;
   if (isHistorySeriesArray(cached)) {
     if (persist !== 'sync') return json({ series: cached, cache: 'hit' });
@@ -519,6 +741,122 @@ function isHistoryPoint(value: unknown): value is HistoryPoint {
     )
     && (point.asOfTimestamp === undefined || typeof point.asOfTimestamp === 'string')
   );
+}
+
+function hasSupabase(env: Env): boolean {
+  return !!env.SUPABASE_URL && !!env.SUPABASE_SERVICE_ROLE_KEY;
+}
+
+function historyBoundsForSymbol(
+  symbol: string,
+  range: string,
+  startDates: Map<string, string>,
+  endDates: Map<string, string>,
+  defaultStartDate: string | null,
+  defaultEndDate: string | null,
+): DailyPriceReadItem {
+  const endDate = endDates.get(symbol) ?? defaultEndDate ?? lastCompletedNyseTradingDate();
+  const startDate = startDates.get(symbol) ?? defaultStartDate ?? startDateForRange(range, endDate);
+  return {
+    symbol,
+    start_date: startDate <= endDate ? startDate : endDate,
+    end_date: endDate,
+  };
+}
+
+async function readDailyPriceSeries(env: Env, bounds: DailyPriceReadItem[]): Promise<HistorySeries[]> {
+  if (bounds.length === 0) return [];
+  const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/daily_price_readthrough`, {
+    method: 'POST',
+    headers: supabaseHeaders(env),
+    body: JSON.stringify({ p_items: bounds }),
+  });
+  if (!r.ok) throw new Error(`daily_price_readthrough ${r.status}: ${await r.text()}`);
+  const rows = (await r.json()) as DailyPriceReadRow[];
+  const bySymbol = new Map<string, HistoryPoint[]>();
+  for (const row of rows) {
+    const symbol = normalizeSymbol(row.symbol ?? row.ticker ?? '');
+    const close = numOrNull(row.close);
+    const date = normalizeIsoDate(row.trade_date ?? null);
+    if (!symbol || close === null || !date) continue;
+    const points = bySymbol.get(symbol) ?? [];
+    points.push({
+      date,
+      close,
+      adjustedClose: numOrNull(row.adjusted_close) ?? close,
+      asOfTimestamp: row.as_of_timestamp ?? row.updated_at ?? undefined,
+    });
+    bySymbol.set(symbol, points);
+  }
+  return bounds.map((item) => ({
+    ticker: item.symbol,
+    points: (bySymbol.get(item.symbol) ?? []).sort((a, b) => a.date.localeCompare(b.date)),
+  }));
+}
+
+async function readDailyPriceMissingRanges(
+  env: Env,
+  bounds: DailyPriceReadItem[],
+  calendarSymbol: string,
+): Promise<DailyPriceReadItem[]> {
+  if (bounds.length === 0) return [];
+  const r = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/daily_price_missing_ranges`, {
+    method: 'POST',
+    headers: supabaseHeaders(env),
+    body: JSON.stringify({ p_items: bounds, p_calendar_symbol: calendarSymbol }),
+  });
+  if (!r.ok) throw new Error(`daily_price_missing_ranges ${r.status}: ${await r.text()}`);
+  const rows = (await r.json()) as DailyPriceMissingRange[];
+  return rows.flatMap((row) => {
+    const symbol = normalizeSymbol(row.symbol ?? '');
+    const startDate = normalizeIsoDate(row.start_date ?? null);
+    const endDate = normalizeIsoDate(row.end_date ?? null);
+    return symbol && startDate && endDate ? [{ symbol, start_date: startDate, end_date: endDate }] : [];
+  });
+}
+
+async function fetchMissingHistoryRanges(
+  env: Env,
+  baseParams: URLSearchParams,
+  range: string,
+  missingRanges: DailyPriceReadItem[],
+): Promise<HistorySeries[]> {
+  const merged = mergeMissingRangesBySymbol(missingRanges).slice(0, HISTORY_MAX_PROVIDER_FETCHES_PER_INVOCATION);
+  const series: HistorySeries[] = [];
+  for (const item of merged) {
+    const params = new URLSearchParams(baseParams);
+    params.set('startDate', item.start_date);
+    params.set('startDateIso', item.start_date);
+    params.set('startDateMillis', String(utcMillisForDate(item.start_date)));
+    params.set('endDate', item.end_date);
+    params.set('endDateIso', item.end_date);
+    params.set('endDateMillis', String(utcMillisForDate(addDays(item.end_date, 1))));
+    const result = await fetchHistoryFromProvider(env, item.symbol, range, params).catch((e) => {
+      console.warn(`[history] ${item.symbol} missing range ${item.start_date}..${item.end_date} failed:`, sanitizeForLog(e));
+      return { ticker: item.symbol, points: [] as HistoryPoint[] };
+    });
+    series.push(result);
+  }
+  return series;
+}
+
+function mergeMissingRangesBySymbol(ranges: DailyPriceReadItem[]): DailyPriceReadItem[] {
+  const bySymbol = new Map<string, DailyPriceReadItem>();
+  for (const range of ranges) {
+    const current = bySymbol.get(range.symbol);
+    if (!current) {
+      bySymbol.set(range.symbol, { ...range });
+      continue;
+    }
+    if (range.start_date < current.start_date) current.start_date = range.start_date;
+    if (range.end_date > current.end_date) current.end_date = range.end_date;
+  }
+  return [...bySymbol.values()].sort((a, b) => a.symbol.localeCompare(b.symbol));
+}
+
+function orderHistorySeries(symbols: string[], series: HistorySeries[]): HistorySeries[] {
+  const byTicker = new Map(series.map((item) => [item.ticker, item]));
+  return symbols.map((symbol) => byTicker.get(symbol) ?? { ticker: symbol, points: [] });
 }
 
 async function fetchHistoryFromProvider(env: Env, symbol: string, range: string, params = new URLSearchParams()): Promise<HistorySeries> {
@@ -828,6 +1166,20 @@ function normalizeIsoDate(value: string | null): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
 }
 
+function startDateForRange(range: string, endDate: string): string {
+  const normalized = range.trim().toLowerCase();
+  if (normalized === 'ytd') return `${endDate.slice(0, 4)}-01-01`;
+  if (normalized === 'max' || normalized === 'all') return '1970-01-01';
+  const match = normalized.match(/^(\d+)(d|mo|m|y)$/);
+  if (!match) return addYears(endDate, -10);
+  const amount = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(amount) || amount <= 0) return addYears(endDate, -10);
+  if (unit === 'd') return addDays(endDate, -amount);
+  if (unit === 'mo' || unit === 'm') return addMonths(endDate, -amount);
+  return addYears(endDate, -amount);
+}
+
 function utcMillisForDate(iso: string): number {
   const [year, month, day] = iso.split('-').map(Number);
   return Date.UTC(year, month - 1, day);
@@ -839,6 +1191,22 @@ function utcSecondsForDate(iso: string): number {
 
 function addDays(iso: string, days: number): string {
   return new Date(utcMillisForDate(iso) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+function addMonths(iso: string, months: number): string {
+  const [year, month, day] = iso.split('-').map(Number);
+  const d = new Date(Date.UTC(year, month - 1 + months, day));
+  return d.toISOString().slice(0, 10);
+}
+
+function addYears(iso: string, years: number): string {
+  const [year, month, day] = iso.split('-').map(Number);
+  const d = new Date(Date.UTC(year + years, month - 1, day));
+  return d.toISOString().slice(0, 10);
+}
+
+function encodePostgrestInValue(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
 }
 
 function errorMessage(error: unknown): string {

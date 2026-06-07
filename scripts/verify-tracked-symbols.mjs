@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 
 const migration = readFileSync(new URL('../supabase/migrations/0031_tracked_symbols_registry.sql', import.meta.url), 'utf8');
 const universeMigration = readFileSync(new URL('../supabase/migrations/0034_price_universe_required_coverage.sql', import.meta.url), 'utf8');
+const readthroughMigration = readFileSync(new URL('../supabase/migrations/0038_daily_price_readthrough.sql', import.meta.url), 'utf8');
 const health = readFileSync(new URL('../src/app/data-health.tsx', import.meta.url), 'utf8');
-const dashboard = readFileSync(new URL('../src/app/dashboard.tsx', import.meta.url), 'utf8');
+const dashboard = readFileSync(new URL('../src/app/dashboard/model.ts', import.meta.url), 'utf8');
 const tracked = readFileSync(new URL('../src/lib/trackedSymbols.ts', import.meta.url), 'utf8');
 const symbols = readFileSync(new URL('../src/lib/symbols.ts', import.meta.url), 'utf8');
 const worker = readFileSync(new URL('../workers/quote/src/index.ts', import.meta.url), 'utf8');
@@ -53,10 +54,24 @@ assert.match(worker, /nextCursor: nextCursor < allSymbols\.length \? String\(nex
 assert.match(worker, /fetchHistoryFromProvider\(env, s, range, historyParamsForSymbol/, 'worker applies per-symbol start/end date bounds');
 assert.match(worker, /period1/, 'Yahoo history uses period1/period2 when startDate is provided');
 assert.match(worker, /active_monitor_universe/, 'cron sync uses active monitor universe before falling back');
+assert.match(worker, /daily_price_readthrough/, 'history endpoint reads persisted daily_prices before provider history');
+assert.match(worker, /daily_price_missing_ranges/, 'history endpoint computes missing ranges before provider history');
+assert.match(worker, /fetchMissingHistoryRanges/, 'history endpoint fetches bounded missing ranges');
+assert.match(worker, /readQuoteSnapshots/, 'quote endpoint reads quote_snapshots before provider quotes');
+assert.match(worker, /snapshotsCoverClosedMarket/, 'quote endpoint can serve closed-market snapshots without provider calls');
+
+assert.match(readthroughMigration, /create or replace function public\.daily_price_readthrough/, 'daily_price_readthrough RPC exists');
+assert.match(readthroughMigration, /grant execute on function public\.daily_price_readthrough\(jsonb\) to service_role/, 'daily_price_readthrough is service-role only');
+assert.match(readthroughMigration, /create or replace function public\.daily_price_missing_ranges/, 'daily_price_missing_ranges RPC exists');
+assert.match(readthroughMigration, /grant execute on function public\.daily_price_missing_ranges\(jsonb, text\) to service_role/, 'daily_price_missing_ranges is service-role only');
+assert.match(readthroughMigration, /p_calendar_symbol text default 'SPY'/, 'missing range RPC accepts a calendar symbol');
 
 assert.match(quote, /cursor\?: string \| number \| null/, 'frontend history client accepts cursor');
+assert.match(quote, /calendarSymbol\?: string \| null/, 'frontend history client accepts calendar symbol');
 assert.match(tracked, /localStorage\.setItem\(backfillCursorKey/, 'frontend persists backfill cursor across failures');
+assert.match(tracked, /calendarSymbol: options\.calendarSymbol/, 'backfill passes calendar symbol to history endpoint');
 assert.match(tracked, /fetchHistoryPage\(symbols, options\.range \?\? '1y'/, 'frontend loops paged history endpoint');
+assert.match(health, /calendarSymbol: selectedBenchmark/, 'data health backfill uses selected benchmark as calendar symbol');
 assert.match(health, /const requiredStart = row\.required_start/, 'health page displays required_start from RPC');
 assert.match(health, /const priceMinDate = row\.price_min_date/, 'health page displays price_min_date from RPC');
 assert.match(health, /const priceMaxDate = row\.price_max_date/, 'health page displays price_max_date from RPC');
