@@ -74,7 +74,7 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border lg:grid-cols-1">
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-1">
           <HeroKpi
             label="今日盈亏 · Today"
             value={signedUsd(aggregates.dayPL)}
@@ -202,7 +202,7 @@ function HeroKpi({ label, value, sub, tone }: { label: string; value: string; su
   return (
     <div className="bg-surface px-5 py-4">
       <div className="kicker">{label}</div>
-      <div className={cn('font-serif-fig mt-1.5 text-3xl font-semibold leading-none', tone)}>{value}</div>
+      <div className={cn('font-serif-fig mt-1.5 whitespace-nowrap text-[1.7rem] font-semibold leading-none sm:text-3xl', tone)}>{value}</div>
       <div className={cn('font-num mt-1 text-[11px]', tone)}>{sub}</div>
     </div>
   );

@@ -88,6 +88,9 @@ export interface HistoryPoint {
 export interface HistorySeries {
   ticker: string;
   points: HistoryPoint[];
+  source?: QuoteSource;
+  fallback?: boolean;
+  providerLabel?: string;
 }
 
 export interface MarketDataProvider {
@@ -101,6 +104,7 @@ export interface SchwabEnv {
   SCHWAB_CLIENT_SECRET?: string;
   SCHWAB_REDIRECT_URI?: string;
   SCHWAB_REFRESH_TOKEN?: string;
+  SCHWAB_TOKEN_STORE?: KVNamespace;
   MARKET_DATA_PROVIDER?: string;
 }
 
@@ -121,6 +125,7 @@ const SCHWAB_AUTH_URL = `${SCHWAB_BASE}/v1/oauth/authorize`;
 const SCHWAB_TOKEN_URL = `${SCHWAB_BASE}/v1/oauth/token`;
 const SCHWAB_MARKET_PREFIX = `${SCHWAB_BASE}/marketdata/v1/`;
 const SCHWAB_MIN_REQUEST_INTERVAL_MS = 500; // 120 requests/minute hard cap.
+export const SCHWAB_REFRESH_TOKEN_STORE_KEY = 'schwab:refresh_token';
 
 const BLOCKED_ENDPOINT_PATTERN = /(?:^|\/)(?:trader|accounts?|orders?|positions?|transactions?)(?:\/|$)/i;
 let schwabTokenState: TokenState = { accessToken: null, expiresAt: 0 };
@@ -167,6 +172,7 @@ export async function exchangeSchwabAuthorizationCode(
   });
   const data = await requestSchwabToken(env, body, fetcher);
   rememberAccessToken(data);
+  await rememberRefreshToken(env, data);
   return data;
 }
 
@@ -175,9 +181,9 @@ export async function refreshSchwabAccessToken(
   fetcher: typeof fetch = boundFetch,
 ): Promise<TokenResponse> {
   assertSchwabOAuthConfig(env);
-  const refreshToken = env.SCHWAB_REFRESH_TOKEN?.trim();
+  const refreshToken = await currentSchwabRefreshToken(env);
   if (!refreshToken) {
-    throw new Error('schwab_refresh_token_missing: set SCHWAB_REFRESH_TOKEN or complete OAuth authorization again');
+    throw new Error('schwab_refresh_token_missing: complete OAuth authorization again');
   }
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
@@ -185,7 +191,14 @@ export async function refreshSchwabAccessToken(
   });
   const data = await requestSchwabToken(env, body, fetcher);
   rememberAccessToken(data);
+  await rememberRefreshToken(env, data);
   return data;
+}
+
+export async function currentSchwabRefreshToken(env: SchwabEnv): Promise<string | null> {
+  const stored = await env.SCHWAB_TOKEN_STORE?.get(SCHWAB_REFRESH_TOKEN_STORE_KEY);
+  const token = stored?.trim() || env.SCHWAB_REFRESH_TOKEN?.trim() || '';
+  return token || null;
 }
 
 export function resetSchwabClientForTests() {
@@ -403,6 +416,12 @@ function rememberAccessToken(data: TokenResponse) {
     accessToken: data.access_token,
     expiresAt: Date.now() + Math.max(0, data.expires_in ?? 1800) * 1000,
   };
+}
+
+async function rememberRefreshToken(env: SchwabEnv, data: TokenResponse): Promise<void> {
+  const refreshToken = data.refresh_token?.trim();
+  if (!refreshToken || !env.SCHWAB_TOKEN_STORE) return;
+  await env.SCHWAB_TOKEN_STORE.put(SCHWAB_REFRESH_TOKEN_STORE_KEY, refreshToken);
 }
 
 async function throttleSchwabRequests(sleeper: (ms: number) => Promise<void>) {

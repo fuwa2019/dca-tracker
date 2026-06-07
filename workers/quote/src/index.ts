@@ -26,6 +26,7 @@
 
 import {
   buildSchwabAuthorizeUrl,
+  currentSchwabRefreshToken,
   exchangeSchwabAuthorizationCode,
   marketDataProviderFromEnv,
   normalizeSymbol,
@@ -55,6 +56,7 @@ export interface Env {
   SCHWAB_CLIENT_SECRET?: string;
   SCHWAB_REDIRECT_URI?: string;
   SCHWAB_REFRESH_TOKEN?: string;
+  SCHWAB_TOKEN_STORE?: KVNamespace;
 }
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15';
@@ -141,7 +143,7 @@ async function runDailyPriceSync(env: Env): Promise<void> {
         await updateTrackedSymbolBackfill(env, ticker, 'missing');
         continue;
       }
-      await upsertDailyPrices(env, series.ticker, series.points);
+      await upsertDailyPrices(env, series.ticker, series.points, historySourceForDailyPrices(env, series));
       console.log(`[cron] upserted ${series.points.length} rows for ${ticker}`);
     } catch (err) {
       console.error(`[cron] failed ${ticker}:`, err);
@@ -469,19 +471,27 @@ function handleSchwabAuthorizeUrl(url: URL, env: Env): Response {
 async function handleSchwabCallback(url: URL, env: Env): Promise<Response> {
   const code = url.searchParams.get('code') ?? '';
   const token = await exchangeSchwabAuthorizationCode(env, code);
-  return json({
-    ok: true,
-    message: 'Schwab OAuth complete. Copy the returned refresh token into SCHWAB_REFRESH_TOKEN as a Worker secret, then redeploy/restart. The token is shown only in this server response.',
-    refreshToken: token.refresh_token ?? null,
-    expiresIn: token.expires_in ?? null,
+  const body = [
+    '<!doctype html>',
+    '<meta charset="utf-8">',
+    '<title>Schwab OAuth complete</title>',
+    '<body>',
+    '<h1>Schwab OAuth complete</h1>',
+    '<p>Refresh token has been stored for the quote Worker. You can close this tab.</p>',
+    '</body>',
+  ].join('');
+  return new Response(body, {
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
 }
 
 async function handleSchwabRefresh(env: Env): Promise<Response> {
   const token = await refreshSchwabAccessToken(env);
+  const storedRefreshToken = await currentSchwabRefreshToken(env);
   return json({
     ok: true,
     hasRefreshToken: !!token.refresh_token,
+    refreshTokenStored: !!storedRefreshToken,
     expiresIn: token.expires_in ?? null,
   });
 }
@@ -515,12 +525,27 @@ async function fetchHistoryFromProvider(env: Env, symbol: string, range: string,
   if (marketDataProviderFromEnv(env) === 'schwab') {
     const historyParams = new URLSearchParams(params);
     if (!historyParams.has('range')) historyParams.set('range', range);
-    return new SchwabMarketDataClient(env).getPriceHistory(symbol, historyParams);
+    try {
+      const series = withHistoryProviderMetadata(
+        await new SchwabMarketDataClient(env).getPriceHistory(symbol, historyParams),
+        'schwab',
+        false,
+        'schwab',
+      );
+      if (series.points.length > 0) return series;
+      console.warn(`[history] Schwab returned no points for ${normalizeSymbol(symbol)}, falling back to Yahoo`);
+    } catch (err) {
+      console.warn(
+        `[history] Schwab price history failed for ${normalizeSymbol(symbol)}, falling back to Yahoo:`,
+        sanitizeForLog(err instanceof Error ? err.message : String(err)),
+      );
+    }
+    return fetchYahooHistory(symbol, range, params, true);
   }
   return fetchYahooHistory(symbol, range, params);
 }
 
-async function fetchYahooHistory(symbol: string, range: string, params = new URLSearchParams()): Promise<HistorySeries> {
+async function fetchYahooHistory(symbol: string, range: string, params = new URLSearchParams(), fallback = false): Promise<HistorySeries> {
   const startDate = normalizeIsoDate(params.get('startDate'));
   const endDate = normalizeIsoDate(params.get('endDate'));
   const upstreamParams = new URLSearchParams({
@@ -560,7 +585,21 @@ async function fetchYahooHistory(symbol: string, range: string, params = new URL
       asOfTimestamp,
     });
   }
-  return { ticker: symbol, points };
+  return withHistoryProviderMetadata({ ticker: symbol, points }, 'yahoo', fallback, 'yahoo-v8');
+}
+
+function withHistoryProviderMetadata(
+  series: HistorySeries,
+  source: NonNullable<HistorySeries['source']>,
+  fallback: boolean,
+  providerLabel: string,
+): HistorySeries {
+  return {
+    ...series,
+    source,
+    fallback,
+    providerLabel,
+  };
 }
 
 export function historyCacheKey(
@@ -580,9 +619,17 @@ export function dailyPriceSourceFromEnv(env: Env): ReturnType<typeof marketDataP
   return marketDataProviderFromEnv(env);
 }
 
-export async function upsertDailyPrices(env: Env, ticker: string, points: HistoryPoint[]): Promise<void> {
+export function historySourceForDailyPrices(env: Env, series: Pick<HistorySeries, 'source'>): ReturnType<typeof marketDataProviderFromEnv> {
+  return series.source ?? dailyPriceSourceFromEnv(env);
+}
+
+export async function upsertDailyPrices(
+  env: Env,
+  ticker: string,
+  points: HistoryPoint[],
+  source: ReturnType<typeof marketDataProviderFromEnv> = dailyPriceSourceFromEnv(env),
+): Promise<void> {
   if (points.length === 0) return;
-  const source = dailyPriceSourceFromEnv(env);
   const rows = points.map((p) => ({
     ticker,
     trade_date: p.date,
@@ -598,14 +645,13 @@ export async function upsertDailyPrices(env: Env, ticker: string, points: Histor
 }
 
 async function upsertDailyPriceSeriesBulk(env: Env, series: HistorySeries[]): Promise<void> {
-  const source = dailyPriceSourceFromEnv(env);
   const updatedAt = new Date().toISOString();
   const rows = series.flatMap((item) => item.points.map((p) => ({
     ticker: item.ticker,
     trade_date: p.date,
     close: p.close,
     adjusted_close: p.adjustedClose ?? p.close,
-    source,
+    source: historySourceForDailyPrices(env, item),
     as_of_timestamp: p.asOfTimestamp ?? updatedAt,
     is_provisional: false,
     updated_at: updatedAt,
@@ -735,6 +781,7 @@ function firstPointDate(points: HistoryPoint[]): string | null {
 }
 
 function clampInt(raw: string | null, fallback: number, max: number): number {
+  if (raw === null || raw.trim() === '') return fallback;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(0, Math.min(Math.floor(parsed), max));

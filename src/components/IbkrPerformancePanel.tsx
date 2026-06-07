@@ -88,16 +88,28 @@ export function PerformancePanel({
     ? range
     : (filteredRanges[filteredRanges.length - 1]?.value ?? range);
   const visibleRows = useMemo(() => sliceRowsByRange(performanceRows, safeRange), [performanceRows, safeRange]);
-  const fullChartRows = useMemo<ChartRow[]>(
-    () =>
-      visibleRows.map((row) => ({
+  const fullChartRows = useMemo<ChartRow[]>(() => {
+    if (visibleRows.length === 0) return [];
+    // Re-base cumulative returns to the first visible point so a sub-period
+    // (e.g. YTD) starts the curve at 0% instead of carrying the all-time
+    // cumulative return forward. The period (daily) returns are untouched, and
+    // the summary table above still uses the full-history rows.
+    const base = visibleRows[0];
+    return visibleRows.map((row) => {
+      const portfolioCum = (1 + row.portfolioCumulativeReturn) / (1 + base.portfolioCumulativeReturn) - 1;
+      const spyCum = (1 + row.spyCumulativeReturn) / (1 + base.spyCumulativeReturn) - 1;
+      const excessCum = (1 + portfolioCum) / (1 + spyCum) - 1;
+      return {
         ...row,
-        spyCumulativePct: row.spyCumulativeReturn * 100,
-        portfolioCumulativePct: row.portfolioCumulativeReturn * 100,
-        excessCumulativePct: row.excessCumulativeReturn * 100,
-      })),
-    [visibleRows],
-  );
+        portfolioCumulativeReturn: portfolioCum,
+        spyCumulativeReturn: spyCum,
+        excessCumulativeReturn: excessCum,
+        spyCumulativePct: spyCum * 100,
+        portfolioCumulativePct: portfolioCum * 100,
+        excessCumulativePct: excessCum * 100,
+      };
+    });
+  }, [visibleRows]);
   const chartRows = useMemo(() => downsampleChartRows(fullChartRows, MAX_CHART_POINTS), [fullChartRows]);
   const summary = useMemo(() => buildSummary(performanceRows), [performanceRows]);
   const dateLabel = visibleRows.length > 0

@@ -127,8 +127,8 @@ export function SharePage() {
     : 0;
   const dateRange = last ? `${history[0].date} 至 ${last.date}` : '等待业绩缓存';
   const rawHistory = historyQuery.data && !('error' in historyQuery.data) ? historyQuery.data : null;
-  const tradingCalendar = rawHistory?.trading_calendar ?? rawHistory?.benchmark ?? 'SPY';
   const usesTradingDays = rawHistory?.excluded_non_trading_days ?? rawHistory?.date_basis === 'benchmark_price_dates';
+  const tradingCalendar = usesTradingDays ? benchmark : (rawHistory?.trading_calendar ?? benchmark);
   const generatedAt = rawHistory?.updated_at ?? rawHistory?.generated_at ?? data.generated_at;
   const hasSnapshotPrices = data.has_snapshot_price;
   const pointCount = history.length;

@@ -100,10 +100,9 @@ MARKET_DATA_PROVIDER=schwab
 SCHWAB_CLIENT_ID=your_schwab_app_key
 SCHWAB_CLIENT_SECRET=
 SCHWAB_REDIRECT_URI=
-SCHWAB_REFRESH_TOKEN=
 ```
 
-这些变量都不能加 `VITE_` 前缀，不能放进前端 bundle，不能提交 `.env.local`、token 文件或任何 secret。你的 secret 自己填，方式是：
+这些变量都不能加 `VITE_` 前缀，不能放进前端 bundle，不能提交 `.env.local`、token 文件或任何 secret。`SCHWAB_REFRESH_TOKEN` 由 OAuth callback 写入 `SCHWAB_TOKEN_STORE` KV，旧的 `SCHWAB_REFRESH_TOKEN` Worker secret 只作为兜底兼容。你的 secret 自己填，方式是：
 
 ```bash
 cd workers/quote
@@ -115,10 +114,39 @@ npx wrangler secret put SCHWAB_REDIRECT_URI
 首次 OAuth 授权：
 
 1. 在 Schwab Developer Portal 确认 App 只选择 `Market Data Production`，Callback URL 填入你的 `SCHWAB_REDIRECT_URI`。
-2. 本地启动 quote Worker：`cd workers/quote && npm run dev`。
-3. 访问 `http://localhost:8787/api/schwab/oauth/url`，打开返回的 `authorizationUrl`。
-4. Schwab 回调到 `/api/schwab/oauth/callback` 后会返回新的 `refreshToken`。写入 Worker secret：`npx wrangler secret put SCHWAB_REFRESH_TOKEN`。
-5. 重启本地 Worker 或重新部署。之后 access token 过期前会自动刷新；refresh token 缺失或失效时需要重新授权。
+2. 生产环境推荐使用 `https://dca-quote.891390734.workers.dev/api/schwab/oauth/callback`。
+3. 部署 quote Worker 后访问 `/api/schwab/oauth/url`，打开返回的 `authorizationUrl`。
+4. 登录 Schwab 并授权；回调会自动交换 token，把 refresh token 存入 `SCHWAB_TOKEN_STORE` KV。页面不会显示 token。
+5. 后续 Worker 调用 Schwab Market Data 时会自动 refresh；如果 Schwab 返回新的 `refresh_token`，Worker 会写回 KV。
+
+本地备用脚本：
+
+```bash
+# 拿到 refresh token 后只写回 .env.local
+npm run schwab:oauth
+
+# 同时把 Schwab id/key/redirect/refresh token 写入 Cloudflare Worker secrets
+npm run schwab:oauth -- --wrangler-secrets
+```
+
+脚本会启动本地 callback，打印 Schwab 授权 URL；在浏览器完成授权后，自动交换 token，并把 `SCHWAB_REFRESH_TOKEN` 写入 `.env.local`。如果加了 `--wrangler-secrets`，脚本还会更新 `dca-quote` Worker secrets。之后重新部署 Worker。
+
+Token 续期：
+
+Schwab access token 通常是短期 token，Worker 会在调用 Market Data 时自动刷新。refresh token 的生命周期更严格，常见实现约 7 天会失效；如果 Schwab 在刷新响应中返回新的 `refresh_token`，生产 Worker 会持续写回 `SCHWAB_TOKEN_STORE` KV。本地也可以用脚本检查：
+
+```bash
+# 只检查 Schwab 是否接受当前 refresh token，不写任何 secret
+npm run schwab:refresh
+
+# Schwab 返回新 refresh_token 时，写回 .env.local
+npm run schwab:refresh -- --write-env
+
+# Schwab 返回新 refresh_token 时，同时更新 Cloudflare Worker secret 兜底值
+npm run schwab:refresh -- --write-env --wrangler-secret
+```
+
+如果脚本输出 `refreshTokenReturned: false`，说明 Schwab 只发了新的 access token，没有发新的 refresh token；这种情况下定时脚本无法突破 refresh token 的固定有效期，仍需要在过期前重新走 OAuth。脚本不会把 token 打到日志里。
 
 常见错误：
 

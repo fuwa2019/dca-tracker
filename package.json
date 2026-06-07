@@ -15,6 +15,8 @@
     "test:email-reminder": "node --experimental-strip-types scripts/verify-email-reminder-dates.mjs",
     "test:quote-status": "node scripts/verify-quote-status.mjs",
     "test:schwab": "node scripts/verify-schwab-market-data.mjs",
+    "schwab:oauth": "node scripts/schwab-oauth.mjs",
+    "schwab:refresh": "node scripts/refresh-schwab-token.mjs",
     "test:ui": "node scripts/verify-ui-behavior.mjs",
     "test:symbols": "node scripts/verify-tracked-symbols.mjs",
     "test:stress": "node scripts/generate-30y-fixtures.mjs && node scripts/verify-30y-stress.mjs"

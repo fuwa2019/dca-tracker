@@ -102,9 +102,9 @@ export function QuickActions({ accentClass }: { accentClass?: string }) {
   ];
   return (
     <Card className="p-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-2">
         {actions.map(({ to, label, short, icon: Icon }) => (
-          <Button key={to} asChild variant="ghost" className="h-12 justify-start text-xs sm:text-sm">
+          <Button key={to} asChild variant="ghost" className="h-12 justify-center sm:justify-start text-xs sm:text-sm">
             <Link to={to} className="whitespace-nowrap">
               <Icon className={cn('h-4 w-4 shrink-0 text-muted-foreground', accentClass)} />
               <span className="hidden sm:inline">{label}</span>

@@ -62,13 +62,13 @@ try {
   );
   assert.equal(
     workerMod.historyCacheKey('schwab', ['VOO', 'QQQM'], '5y'),
-    'history:schwab:VOO,QQQM:5y',
-    '/api/history cache key includes Schwab provider',
+    'history:schwab:VOO,QQQM:5y:VOO::|QQQM::',
+    '/api/history cache key includes Schwab provider and date bounds',
   );
   assert.equal(
     workerMod.historyCacheKey('yahoo', ['VOO', 'QQQM'], '5y'),
-    'history:yahoo:VOO,QQQM:5y',
-    '/api/history cache key includes Yahoo provider',
+    'history:yahoo:VOO,QQQM:5y:VOO::|QQQM::',
+    '/api/history cache key includes Yahoo provider and date bounds',
   );
   assert.throws(
     () => mod.assertSchwabMarketDataUrl('https://api.schwabapi.com/trader/v1/accounts'),
@@ -124,6 +124,118 @@ try {
   assert.equal(upsertBodies[0].p_rows[0].source, 'schwab', 'Schwab provider upserts daily_prices.source=schwab');
   assert.equal(upsertBodies[1].p_rows[0].source, 'yahoo', 'Yahoo provider upserts daily_prices.source=yahoo');
   assert.equal(upsertBodies[0].p_rows[0].is_provisional, false, 'historical candles reconcile provisional rows');
+
+  const storedTokens = new Map();
+  const tokenStore = {
+    get: async (key) => storedTokens.get(key) ?? null,
+    put: async (key, value) => storedTokens.set(key, value),
+  };
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).endsWith('/v1/oauth/token')) {
+      assert.ok(String(init.body).includes('grant_type=authorization_code'), 'OAuth callback exchanges authorization code');
+      return jsonResponse({ access_token: 'callback-access', refresh_token: 'callback-refresh-token', expires_in: 1800 });
+    }
+    throw new Error(`unexpected callback fetch ${url}`);
+  };
+  try {
+    mod.resetSchwabClientForTests();
+    const callback = await workerMod.default.fetch(
+      new Request('https://worker.test/api/schwab/oauth/callback?code=auth-code'),
+      { ...env, ALLOWED_ORIGINS: '*', SCHWAB_TOKEN_STORE: tokenStore, QUOTE_CACHE: { get: async () => null, put: async () => {} } },
+      { waitUntil: () => {} },
+    );
+    const html = await callback.text();
+    assert.equal(callback.status, 200, 'OAuth callback succeeds');
+    assert.equal(storedTokens.get('schwab:refresh_token'), 'callback-refresh-token', 'OAuth callback stores refresh token in KV');
+    assert.doesNotMatch(html, /callback-refresh-token/, 'OAuth callback does not expose refresh token in response body');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  storedTokens.set('schwab:refresh_token', 'stored-refresh-token');
+  const refreshBodies = [];
+  globalThis.fetch = async (url, init = {}) => {
+    if (String(url).endsWith('/v1/oauth/token')) {
+      refreshBodies.push(String(init.body));
+      return jsonResponse({ access_token: 'stored-access', refresh_token: 'rotated-refresh-token', expires_in: 1800 });
+    }
+    throw new Error(`unexpected refresh fetch ${url}`);
+  };
+  try {
+    mod.resetSchwabClientForTests();
+    const refreshed = await mod.refreshSchwabAccessToken({ ...env, SCHWAB_TOKEN_STORE: tokenStore });
+    assert.equal(refreshed.access_token, 'stored-access', 'refresh returns access token');
+    assert.ok(refreshBodies[0].includes('refresh_token=stored-refresh-token'), 'refresh reads refresh token from KV first');
+    assert.equal(storedTokens.get('schwab:refresh_token'), 'rotated-refresh-token', 'refresh stores rotated refresh token in KV');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const fallbackUpsertBodies = [];
+  const fallbackCacheWrites = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.endsWith('/v1/oauth/token')) return new Response('expired refresh token', { status: 400 });
+    if (
+      target.includes('query1.finance.yahoo.com/v8/finance/chart/VOO')
+      || target.includes('query1.finance.yahoo.com/v8/finance/chart/SPY')
+    ) {
+      const isSpy = target.includes('/SPY?');
+      return jsonResponse({
+        chart: {
+          result: [{
+            timestamp: [Math.floor(Date.parse('2026-05-29T20:00:00.000Z') / 1000)],
+            indicators: {
+              quote: [{ close: [isSpy ? 600 : 501] }],
+              adjclose: [{ adjclose: [isSpy ? 599.5 : 500.5] }],
+            },
+          }],
+        },
+      });
+    }
+    if (target.includes('/rest/v1/rpc/upsert_daily_prices')) {
+      fallbackUpsertBodies.push(JSON.parse(String(init.body)));
+      return new Response('', { status: 200 });
+    }
+    if (
+      target.includes('/rest/v1/tracked_symbols')
+      || target.includes('/rest/v1/rpc/add_tracked_symbol')
+    ) {
+      return new Response('', { status: 200 });
+    }
+    throw new Error(`unexpected fallback fetch ${target}`);
+  };
+  try {
+    mod.resetSchwabClientForTests();
+    const response = await workerMod.default.fetch(
+      new Request('https://worker.test/api/history?symbols=VOO,SPY&range=1y&persist=sync'),
+      {
+        ...env,
+        ALLOWED_ORIGINS: '*',
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+        QUOTE_CACHE: {
+          get: async () => null,
+          put: async (key, value) => fallbackCacheWrites.push({ key, value }),
+        },
+      },
+      { waitUntil: () => {} },
+    );
+    assert.equal(response.status, 200, 'Schwab history failure still returns a successful history response');
+    const body = await response.json();
+    assert.equal(body.persisted, true, 'fallback history is persisted during sync backfill');
+    assert.equal(body.progress.limit, 10, 'history default limit uses the configured fallback');
+    assert.equal(body.progress.completed, 2, 'history default limit processes both requested tickers');
+    assert.equal(body.hasMore, false, 'history default limit completes two requested tickers');
+    assert.equal(body.series[0].source, 'yahoo', 'fallback history response reports actual Yahoo source');
+    assert.equal(body.series[0].fallback, true, 'fallback history response marks provider fallback');
+    assert.equal(fallbackUpsertBodies[0].p_rows[0].source, 'yahoo', 'fallback history upserts daily_prices.source=yahoo');
+    assert.equal(fallbackUpsertBodies[0].p_rows[1].source, 'yahoo', 'fallback history upserts all fallback rows as Yahoo');
+    assert.equal(fallbackUpsertBodies[0].p_rows[0].is_provisional, false, 'fallback history still reconciles final candles');
+    assert.equal(fallbackCacheWrites.length, 1, 'fallback history response is cached under the Schwab request bucket');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 
   const provisionalRows = workerMod.provisionalDailyPriceRows(
     '2026-05-29',

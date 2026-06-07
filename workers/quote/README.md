@@ -20,29 +20,24 @@ npm run deploy                           # 部署
 
 ### 使用 Schwab Market Data
 
-`SCHWAB_CLIENT_SECRET` 和 `SCHWAB_REFRESH_TOKEN` 必须用 Worker secret，不要写进 git：
+`SCHWAB_CLIENT_ID`、`SCHWAB_CLIENT_SECRET` 和 `SCHWAB_REDIRECT_URI` 必须用 Worker secret，不要写进 git。`SCHWAB_REFRESH_TOKEN` 由 OAuth callback 写入 `SCHWAB_TOKEN_STORE` KV，旧 Worker secret 只作为兜底兼容：
 
 ```bash
 cd workers/quote
 npx wrangler secret put SCHWAB_CLIENT_ID
 npx wrangler secret put SCHWAB_CLIENT_SECRET
 npx wrangler secret put SCHWAB_REDIRECT_URI
-npx wrangler secret put SCHWAB_REFRESH_TOKEN
 ```
 
-把 `workers/quote/wrangler.toml` 里的 `MARKET_DATA_PROVIDER` 改成 `schwab` 后重新部署。你的 App Key 可以填：
-
-```text
-2DF8i6sNjUMOKCWjmCA3g4jMCNywp0o2ndq46s8nFp8nCCWz
-```
+把 `workers/quote/wrangler.toml` 里的 `MARKET_DATA_PROVIDER` 改成 `schwab` 后重新部署。
 
 首次授权：
 
-1. `SCHWAB_REDIRECT_URI` 必须和 Schwab Developer Portal App 中配置的 Callback URL 完全一致，例如 `http://localhost:8787/api/schwab/oauth/callback` 或生产 Worker callback。
-2. 本地运行 `npm run dev`，访问 `/api/schwab/oauth/url`，打开返回的 `authorizationUrl`。
+1. `SCHWAB_REDIRECT_URI` 必须和 Schwab Developer Portal App 中配置的 Callback URL 完全一致，例如生产 Worker callback `https://dca-quote.891390734.workers.dev/api/schwab/oauth/callback`。
+2. 部署 Worker，访问 `/api/schwab/oauth/url`，打开返回的 `authorizationUrl`。
 3. 登录 Schwab 并授权 Market Data。
-4. 回调会用 `authorization_code` 换 token，并返回新的 `refreshToken`。把它写入 `SCHWAB_REFRESH_TOKEN` Worker secret 后重启本地 Worker或重新部署。
-5. 后续 access token 会在过期前自动通过 refresh token 刷新；refresh token 缺失或失效时接口会返回明确错误，需要重新授权。
+4. 回调会用 `authorization_code` 换 token，并把新的 refresh token 写入 `SCHWAB_TOKEN_STORE` KV。页面不会显示 token。
+5. 后续 access token 会在过期前自动通过 refresh token 刷新；如果 Schwab 返回新的 refresh token，Worker 会写回 KV。refresh token 缺失或失效时接口会返回明确错误，需要重新授权。
 
 部署完成后会输出 URL（如 `https://dca-quote.your-account.workers.dev`），把它填到前端 `.env.local`：
 

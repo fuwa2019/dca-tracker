@@ -132,7 +132,14 @@ npm run build:local    # 本地版构建成功
 
 ---
 
-## 7. 维护小贴士
+## 7. 部署后反馈修复（真机截图反馈）
+
+针对线上真机反馈已修复并验证：
+- **总览今日 / 累计盈亏**：移动端改单列堆叠 + 数字 `whitespace-nowrap` + 响应式字号，杜绝负号换行、金额溢出贴边。`src/app/dashboard/VariantA.tsx`
+- **总览快捷操作**：「交易 / 入金 / 健康」改成同一行三列（窄屏居中）。`src/app/dashboard/shared.tsx`
+- **业绩曲线区间归零**：选 YTD / 1M / 3M 等子区间时，曲线累计收益按**区间首点重新归零**（不再把开仓至今的累计带进来，原本会出现「年初就 +464%」）；顶部「本月 / 本季 / 本年 / 开仓至今」汇总表不受影响。`src/components/IbkrPerformancePanel.tsx`（仅展示层 rebase，未改 `src/lib/calc`，`test:finance` fixtures 仍绿）
+
+## 8. 维护小贴士
 - 想刷新模拟数据（比如一年后）：`npm run build:dataset` 重新下载再提交 `src/data/local-dataset.json`。
 - `VITE_LOCAL_MODE` 千万别在云端正式版里设成 1，否则正式站也会变离线 demo。
 - 字体走 Google Fonts CDN（`index.html` 里的 `<link>`）；若要完全离线可改成自托管字体，但当前

@@ -13,6 +13,10 @@ binding = "QUOTE_CACHE"
 id = "2ed3dfa2431d4937be121ffb3883a847"
 preview_id = "52cfea8072f048c1a61b51b7727e4171"
 
+[[kv_namespaces]]
+binding = "SCHWAB_TOKEN_STORE"
+id = "ae98dbeb043e47158847bfcff27176c9"
+
 # CORS allow-list. `*` matches one DNS label (handles Pages preview hashes like
 # https://abc123.dca-tracker.pages.dev). Use https://*.pages.dev sparingly.
 [vars]

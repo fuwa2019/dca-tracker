@@ -57,8 +57,11 @@ export function PerformancePage() {
   const hasCache = !!cacheStatus.data?.exists || history.length > 0;
   const cacheError = cacheStatus.data?.error;
   const generatedAt = cacheStatus.data?.updated_at ?? cacheStatus.data?.generated_at ?? portfolioHistory.data?.generated_at;
-  const tradingCalendar = portfolioHistory.data?.trading_calendar ?? portfolioHistory.data?.benchmark ?? selectedBenchmark;
   const usesTradingDays = portfolioHistory.data?.excluded_non_trading_days ?? portfolioHistory.data?.date_basis === 'benchmark_price_dates';
+  const historyBenchmark = portfolioHistory.data?.benchmark ?? selectedBenchmark;
+  const tradingCalendar = usesTradingDays
+    ? historyBenchmark
+    : (portfolioHistory.data?.trading_calendar ?? historyBenchmark);
   const reportLead = history.length > 0
     ? `从 ${history[0].date} 到 ${last?.date}，组合累计 ${signedPct(portfolioReturn)}，相对 ${selectedBenchmark} ${signedPct(excess)}。`
     : '录入交易并补齐日线价格后，这里会生成一份可分享、可审计的业绩报告。';
