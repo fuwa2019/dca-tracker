@@ -419,6 +419,72 @@ try {
     globalThis.Date = RealDate;
   }
 
+  let overnightProviderCalls = 0;
+  globalThis.Date = class FixedOvernightDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length === 0 ? ['2026-06-09T01:30:00.000Z'] : args));
+    }
+    static now() {
+      return new RealDate('2026-06-09T01:30:00.000Z').getTime();
+    }
+  };
+  globalThis.fetch = async (url, init = {}) => {
+    const target = String(url);
+    if (target.includes('/rest/v1/tracked_symbols')) return new Response('', { status: 200 });
+    if (target.includes('/rest/v1/quote_snapshots') && init.method === 'POST') return new Response('', { status: 200 });
+    if (target.includes('/rest/v1/quote_snapshots')) {
+      return jsonResponse([{
+        ticker: 'VOO',
+        price: 501,
+        prev_close: 500,
+        change: 1,
+        change_pct: 0.002,
+        market_state: 'POST',
+        source: 'yahoo',
+        as_of_timestamp: '2026-06-08T22:15:00.000Z',
+        updated_at: '2026-06-08T22:15:00.000Z',
+      }]);
+    }
+    if (target.includes('query1.finance.yahoo.com/v7/finance/quote')) {
+      overnightProviderCalls += 1;
+      return jsonResponse({
+        quoteResponse: {
+          result: [{
+            symbol: 'VOO',
+            regularMarketPrice: 503,
+            regularMarketPreviousClose: 500,
+            regularMarketChange: 3,
+            regularMarketChangePercent: 0.6,
+            regularMarketTime: Math.floor(Date.parse('2026-06-09T01:30:00.000Z') / 1000),
+            marketState: 'OVERNIGHT',
+          }],
+        },
+      });
+    }
+    throw new Error(`unexpected overnight quote fetch ${target}`);
+  };
+  try {
+    const response = await workerMod.default.fetch(
+      new Request('https://worker.test/api/market/quotes?symbols=VOO'),
+      {
+        MARKET_DATA_PROVIDER: 'yahoo',
+        ALLOWED_ORIGINS: '*',
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+        QUOTE_CACHE: { get: async () => null, put: async () => {} },
+      },
+      { waitUntil: () => {} },
+    );
+    const body = await response.json();
+    assert.equal(response.status, 200, 'overnight quote succeeds');
+    assert.equal(body.cache, 'miss', 'overnight stale quote_snapshot refreshes through provider');
+    assert.equal(body.quotes[0].price, 503, 'overnight refresh returns provider quote');
+    assert.equal(overnightProviderCalls, 1, 'overnight stale quote_snapshot calls provider once');
+  } finally {
+    globalThis.fetch = originalFetch;
+    globalThis.Date = RealDate;
+  }
+
   let activeProviderCalls = 0;
   globalThis.Date = class FixedActiveDate extends RealDate {
     constructor(...args) {

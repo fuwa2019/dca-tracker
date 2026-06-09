@@ -457,11 +457,13 @@ function isUsMarketDataActive(now = new Date()): boolean {
   const minute = Number(byType.minute ?? '0');
   const date = `${byType.year}-${byType.month}-${byType.day}`;
   const minutes = hour * 60 + minute;
-  return weekday !== 'Sat'
-    && weekday !== 'Sun'
-    && isNyseTradingDay(date)
-    && minutes >= 4 * 60
-    && minutes < 20 * 60;
+  const isWeekend = weekday === 'Sat' || weekday === 'Sun';
+  const isHoliday = !isNyseTradingDay(date);
+  const isSundayNight = weekday === 'Sun' && minutes >= 20 * 60;
+  const isOvernightMorning = !isWeekend && !isHoliday && minutes < 4 * 60;
+  const isWeeknight = !isWeekend && !isHoliday && weekday !== 'Fri' && minutes >= 20 * 60;
+  const isExtendedOrRegular = !isWeekend && !isHoliday && minutes >= 4 * 60 && minutes < 20 * 60;
+  return isSundayNight || isOvernightMorning || isWeeknight || isExtendedOrRegular;
 }
 
 async function upsertSnapshots(env: Env, quotes: QuoteOut[]): Promise<void> {
