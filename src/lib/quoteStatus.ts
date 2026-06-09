@@ -19,6 +19,12 @@ function getCachedAt(meta: QuoteStatusMeta) {
   return 'cachedAt' in meta ? meta.cachedAt : undefined;
 }
 
+function parseTime(value?: string) {
+  if (!value) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 function getQuoteSourceLabel(meta: QuoteStatusMeta) {
   const source = meta.source === 'schwab' ? 'Schwab' : 'Yahoo';
   return meta.fallback ? `${source} 备用行情` : source;
@@ -38,9 +44,22 @@ export function getQuoteStatusLabel(meta: QuoteStatusMeta): string {
 
 export function getQuoteTimeLabel(meta: QuoteStatusMeta): string {
   const quoteTime = formatLocalClock(meta.asOf);
-  if (quoteTime) return `行情 ${quoteTime}`;
+  const fetchedAt = meta.fetchedAt ?? getCachedAt(meta);
+  const fetchedTime = formatLocalClock(fetchedAt);
+  if (quoteTime) {
+    const quoteTimestamp = parseTime(meta.asOf);
+    const fetchedTimestamp = parseTime(fetchedAt);
+    if (
+      fetchedTime
+      && quoteTimestamp != null
+      && fetchedTimestamp != null
+      && fetchedTimestamp - quoteTimestamp > 5 * 60_000
+    ) {
+      return `行情 ${quoteTime} · 拉取 ${fetchedTime}`;
+    }
+    return `行情 ${quoteTime}`;
+  }
 
-  const fetchedTime = formatLocalClock(meta.fetchedAt ?? getCachedAt(meta));
   return fetchedTime ? `拉取 ${fetchedTime}` : '时间未知';
 }
 

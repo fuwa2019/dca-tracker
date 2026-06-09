@@ -57,6 +57,14 @@ const asOfTimeLabel = getQuoteTimeLabel({ source: 'schwab', price: 100, fetchedA
 assert.match(asOfTimeLabel, /^行情 /);
 assert.doesNotMatch(asOfTimeLabel, /^拉取 /);
 
+const staleAsOfTimeLabel = getQuoteTimeLabel({
+  source: 'schwab',
+  price: 100,
+  asOf: '2026-06-09T00:00:00.079Z',
+  fetchedAt: '2026-06-09T05:07:32.272Z',
+});
+assert.match(staleAsOfTimeLabel, /^行情 .* · 拉取 /);
+
 const fetchedTimeLabel = getQuoteTimeLabel({ source: 'schwab', price: 100, fetchedAt });
 assert.match(fetchedTimeLabel, /^拉取 /);
 
