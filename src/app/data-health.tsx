@@ -136,12 +136,14 @@ export function DataHealthPage() {
         qc.invalidateQueries({ queryKey: ['price_coverage'] }),
         qc.invalidateQueries({ queryKey: ['performance_cache_status'] }),
         qc.invalidateQueries({ queryKey: ['portfolio_history'] }),
+        qc.invalidateQueries({ queryKey: ['quotes'] }),
       ]);
       await Promise.all([
         qc.refetchQueries({ queryKey: ['tracked_symbol_coverage'] }),
         qc.refetchQueries({ queryKey: ['price_coverage'] }),
         qc.refetchQueries({ queryKey: ['performance_cache_status'] }),
         qc.refetchQueries({ queryKey: ['portfolio_history'] }),
+        qc.refetchQueries({ queryKey: ['quotes'] }),
       ]);
     },
   });

@@ -598,6 +598,7 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
       const successful = providerSeries.filter((s) => s.points.length > 0);
       if (successful.length > 0) {
         await upsertDailyPriceSeriesBulk(env, successful);
+        await upsertHistorySnapshotsWhenClosed(env, providerSeries);
       }
 
       const refreshed = await readDailyPriceSeries(env, bounds);
@@ -623,6 +624,7 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
 
     try {
       await upsertDailyPriceSeriesBulk(env, cached.filter((s) => s.points.length > 0));
+      await upsertHistorySnapshotsWhenClosed(env, cached);
       await Promise.all(cached.map((s) => updateTrackedSymbolFromSeries(env, s)));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -659,6 +661,7 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
     if (persist === 'sync') {
       try {
         await upsertDailyPriceSeriesBulk(env, successful);
+        await upsertHistorySnapshotsWhenClosed(env, successful);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         return json({ error: 'daily_prices_upsert_failed', message: msg }, 500);
@@ -668,6 +671,7 @@ async function handleHistory(url: URL, env: Env, ctx: ExecutionContext): Promise
     if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
       ctx.waitUntil(
         upsertDailyPriceSeriesBulk(env, successful)
+          .then(() => upsertHistorySnapshotsWhenClosed(env, successful))
           .catch((e) => console.warn('[history] daily_prices upsert failed:', e)),
       );
     }
@@ -997,6 +1001,52 @@ async function upsertDailyPriceSeriesBulk(env: Env, series: HistorySeries[]): Pr
     updated_at: updatedAt,
   })));
   await upsertDailyPriceRows(env, rows);
+}
+
+async function upsertHistorySnapshotsWhenClosed(env: Env, series: HistorySeries[], now = new Date()): Promise<void> {
+  if (isUsMarketDataActive(now)) return;
+  const snapshots = series.flatMap((item) => historySeriesToSnapshot(item, env, now));
+  if (snapshots.length === 0) return;
+  await upsertSnapshots(env, snapshots);
+}
+
+function historySeriesToSnapshot(series: HistorySeries, env: Env, now = new Date()): QuoteOut[] {
+  const ordered = [...series.points]
+    .filter((point) => point.close != null)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const latest = ordered.at(-1);
+  if (!latest) return [];
+  const previous = ordered.length > 1 ? ordered[ordered.length - 2] : null;
+  const price = latest.adjustedClose ?? latest.close;
+  const prevClose = previous ? previous.adjustedClose ?? previous.close : null;
+  const change = prevClose != null ? price - prevClose : null;
+  const changePct = ratio(change, prevClose);
+  const fetchedAt = now.toISOString();
+  return [{
+    ticker: normalizeSymbol(series.ticker),
+    price,
+    displayPrice: price,
+    prevClose,
+    change,
+    changePct,
+    regularPrice: price,
+    preMarketPrice: null,
+    preMarketChange: null,
+    preMarketChangePct: null,
+    postMarketPrice: null,
+    postMarketChange: null,
+    postMarketChangePct: null,
+    session: 'closed',
+    sessionLabel: '收盘',
+    isExtended: false,
+    marketState: 'CLOSED',
+    source: historySourceForDailyPrices(env, series),
+    asOf: latest.asOfTimestamp ?? new Date(`${latest.date}T21:00:00.000Z`).toISOString(),
+    fetchedAt,
+    fallback: series.fallback,
+    providerLabel: series.providerLabel,
+    cachedAt: fetchedAt,
+  }];
 }
 
 export function provisionalDailyPriceRows(

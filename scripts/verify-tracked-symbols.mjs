@@ -72,6 +72,7 @@ assert.match(tracked, /localStorage\.setItem\(backfillCursorKey/, 'frontend pers
 assert.match(tracked, /calendarSymbol: options\.calendarSymbol/, 'backfill passes calendar symbol to history endpoint');
 assert.match(tracked, /fetchHistoryPage\(symbols, options\.range \?\? '1y'/, 'frontend loops paged history endpoint');
 assert.match(health, /calendarSymbol: selectedBenchmark/, 'data health backfill uses selected benchmark as calendar symbol');
+assert.match(health, /queryKey: \['quotes'\]/, 'data health backfill refreshes quote queries after writing daily prices');
 assert.match(health, /const requiredStart = row\.required_start/, 'health page displays required_start from RPC');
 assert.match(health, /const priceMinDate = row\.price_min_date/, 'health page displays price_min_date from RPC');
 assert.match(health, /const priceMaxDate = row\.price_max_date/, 'health page displays price_max_date from RPC');

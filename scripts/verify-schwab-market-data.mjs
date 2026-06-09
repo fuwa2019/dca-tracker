@@ -288,7 +288,17 @@ try {
 
   let partialReadCalls = 0;
   const partialUpserts = [];
+  const partialSnapshotUpserts = [];
   const partialProviderUrls = [];
+  const PartialRealDate = globalThis.Date;
+  globalThis.Date = class FixedPartialClosedDate extends PartialRealDate {
+    constructor(...args) {
+      super(...(args.length === 0 ? ['2026-06-07T12:00:00.000Z'] : args));
+    }
+    static now() {
+      return new PartialRealDate('2026-06-07T12:00:00.000Z').getTime();
+    }
+  };
   globalThis.fetch = async (url, init = {}) => {
     const target = String(url);
     if (
@@ -314,6 +324,10 @@ try {
     }
     if (target.includes('/rest/v1/rpc/upsert_daily_prices')) {
       partialUpserts.push(JSON.parse(String(init.body)));
+      return new Response('', { status: 200 });
+    }
+    if (target.includes('/rest/v1/quote_snapshots') && init.method === 'POST') {
+      partialSnapshotUpserts.push(JSON.parse(String(init.body)));
       return new Response('', { status: 200 });
     }
     if (target.includes('query1.finance.yahoo.com/v8/finance/chart/VOO')) {
@@ -355,8 +369,14 @@ try {
     assert.match(partialProviderUrls[0], /period1=/, 'bounded provider request includes start bound');
     assert.match(partialProviderUrls[0], /period2=/, 'bounded provider request includes end bound');
     assert.equal(partialUpserts[0].p_rows.length, 2, 'only missing provider rows are upserted');
+    assert.equal(partialSnapshotUpserts.length, 1, 'closed-market history refresh updates quote_snapshots');
+    assert.equal(partialSnapshotUpserts[0][0].ticker, 'VOO', 'history snapshot keeps the symbol');
+    assert.equal(partialSnapshotUpserts[0][0].price, 501.5, 'history snapshot uses latest adjusted close');
+    assert.equal(partialSnapshotUpserts[0][0].prev_close, 500.5, 'history snapshot carries previous close');
+    assert.equal(partialSnapshotUpserts[0][0].source, 'yahoo', 'history snapshot preserves provider source');
   } finally {
     globalThis.fetch = originalFetch;
+    globalThis.Date = PartialRealDate;
   }
 
   assert.equal(
