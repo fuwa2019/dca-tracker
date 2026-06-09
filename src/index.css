@@ -22,6 +22,7 @@
     --loss: 8 76% 48%;
     --warn: 32 90% 44%;
     --info: 348 78% 56%;
+    --night: 222 68% 46%;
     --benchmark: 222 12% 48%;
     --chart-grid: 36 18% 88%;
     --chart-axis: 232 9% 42%;
@@ -71,6 +72,7 @@
     --loss: 6 90% 68%;
     --warn: 40 94% 64%;
     --info: 348 88% 70%;
+    --night: 218 80% 68%;
     --benchmark: 222 10% 60%;
     --chart-grid: 240 8% 19%;
     --chart-axis: 38 10% 66%;
@@ -261,6 +263,10 @@
   .bg-brand-soft {
     background-color: hsl(var(--brand) / 0.12);
     color: hsl(var(--brand));
+  }
+  .bg-night-soft {
+    background-color: hsl(var(--night) / 0.14);
+    color: hsl(var(--night));
   }
   .bg-benchmark-soft {
     background-color: hsl(var(--benchmark) / 0.12);

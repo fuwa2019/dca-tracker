@@ -22,6 +22,9 @@ export default {
           '-apple-system',
           'BlinkMacSystemFont',
           'system-ui',
+          // Web Chinese face so every device (Win/Android included) renders
+          // the same typeface instead of falling back to system 宋体/雅黑.
+          '"Noto Sans SC"',
           '"PingFang SC"',
           '"Helvetica Neue"',
           'sans-serif',
@@ -30,6 +33,7 @@ export default {
           '"Hanken Grotesk"',
           '-apple-system',
           'BlinkMacSystemFont',
+          '"Noto Sans SC"',
           '"PingFang SC"',
           'sans-serif',
         ],
@@ -89,6 +93,7 @@ export default {
         gain: 'hsl(var(--gain))',
         loss: 'hsl(var(--loss))',
         warn: 'hsl(var(--warn))',
+        night: 'hsl(var(--night))',
         benchmark: 'hsl(var(--benchmark))',
         // Per-variant editorial accents (theme-aware).
         'accent-rose': 'hsl(var(--accent-rose))',

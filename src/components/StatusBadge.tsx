@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-export type StatusTone = 'ok' | 'warn' | 'bad' | 'info' | 'neutral';
+export type StatusTone = 'ok' | 'warn' | 'bad' | 'info' | 'night' | 'neutral';
 
 const tones: Record<StatusTone, string> = {
   ok: 'bg-gain-soft',
   warn: 'bg-warn-soft',
   bad: 'bg-loss-soft',
   info: 'bg-brand-soft',
+  night: 'bg-night-soft',
   neutral: 'bg-surface-elevated text-muted-foreground',
 };
 

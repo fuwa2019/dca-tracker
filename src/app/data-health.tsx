@@ -396,6 +396,7 @@ function HealthTile({
     warn: 'text-warn',
     bad: 'text-loss',
     info: 'text-brand',
+    night: 'text-night',
     neutral: 'text-foreground',
   };
   const iconBg: Record<StatusTone, string> = {
@@ -403,6 +404,7 @@ function HealthTile({
     warn: 'bg-warn-soft',
     bad: 'bg-loss-soft',
     info: 'bg-brand-soft',
+    night: 'bg-night-soft',
     neutral: 'bg-surface-elevated text-muted-foreground',
   };
   return (

@@ -20,11 +20,13 @@ function formatEtClock(now: Date) {
   }).format(now);
 }
 
+// TradingView-aligned session colors: closed=gray, pre/after=amber-orange,
+// regular=green, overnight=deep blue.
 const sessionTone: Record<UsMarketSessionKey, StatusTone> = {
-  pre_market: 'info',
+  pre_market: 'warn',
   regular: 'ok',
   after_hours: 'warn',
-  overnight: 'info',
+  overnight: 'night',
   closed: 'neutral',
 };
 
