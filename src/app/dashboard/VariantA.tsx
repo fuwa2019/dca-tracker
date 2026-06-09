@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowUpRight, Plus, Briefcase, Wifi } from 'lucide-react';
+import { ArrowUpRight, Plus, Briefcase, Info, Wifi } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -116,12 +117,16 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
           value={xirr !== null ? signedPct(xirr) : '—'}
           tone={xirr === null ? '' : xirr >= 0 ? 'text-gain' : 'text-loss'}
           sub={xirr !== null ? '唯一年化主指标' : '至少需 2 笔不同日期入金'}
+          infoTitle="XIRR 年化收益"
+          infoBody="按你的实际入金时间、金额和当前账户净值计算的资金加权年化收益。越早投入的资金权重越高，适合回答“我的钱实际赚了多少年化”。"
         />
         <EditorialMetric
-          en="Cumulative" zh="组合累计表现"
+          en="Cumulative · TWR" zh="组合累计表现"
           value={signedPct(portfolioCumulative)}
           tone={portfolioCumulative >= 0 ? 'text-gain' : 'text-loss'}
           sub={last ? `${history[0].date} 至 ${last.date}` : '录入后显示'}
+          infoTitle="TWR 累计收益"
+          infoBody="时间加权收益会尽量剥离追加入金和取出的影响，按每日收益连续链接，适合看交易和持仓本身的表现，也用于和基准曲线比较。组合和基准都使用复权日线作为总回报 proxy，能近似纳入分红再投资影响，但不是券商精确口径。"
         />
         <EditorialMetric
           en={`Excess vs ${selectedBenchmark}`} zh="超额收益"
@@ -208,13 +213,52 @@ function HeroKpi({ label, value, sub, tone }: { label: string; value: string; su
   );
 }
 
-function EditorialMetric({ en, zh, value, tone, sub }: { en: string; zh: string; value: string; tone: string; sub: string }) {
+function EditorialMetric({
+  en,
+  zh,
+  value,
+  tone,
+  sub,
+  infoTitle,
+  infoBody,
+}: {
+  en: string;
+  zh: string;
+  value: string;
+  tone: string;
+  sub: string;
+  infoTitle?: string;
+  infoBody?: string;
+}) {
+  const [infoOpen, setInfoOpen] = useState(false);
   return (
     <div className="px-1 py-5 sm:px-5">
-      <div className="kicker">{en}</div>
+      <div className="flex items-center gap-1.5">
+        <div className="kicker">{en}</div>
+        {infoTitle && infoBody && (
+          <button
+            type="button"
+            aria-label={`查看${infoTitle}说明`}
+            aria-expanded={infoOpen}
+            onClick={() => setInfoOpen((v) => !v)}
+            className={cn(
+              'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground',
+              infoOpen && 'border-brand/40 text-brand',
+            )}
+          >
+            <Info className="h-3 w-3" />
+          </button>
+        )}
+      </div>
       <div className="mt-0.5 text-[13px] font-medium text-muted-foreground">{zh}</div>
       <div className={cn('font-serif-fig mt-2 text-4xl font-semibold leading-none', tone)}>{value}</div>
       <div className="font-num mt-1.5 text-[11px] text-muted-foreground">{sub}</div>
+      {infoOpen && infoTitle && infoBody && (
+        <div className="mt-3 rounded-md border border-border bg-surface-elevated p-3 text-xs leading-5 text-muted-foreground">
+          <div className="mb-1 font-medium text-foreground">{infoTitle}</div>
+          {infoBody}
+        </div>
+      )}
     </div>
   );
 }
