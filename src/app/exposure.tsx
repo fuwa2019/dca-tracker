@@ -62,6 +62,7 @@ export function ExposurePage() {
   );
 
   // 只显示实际持有(命中)的 ETF 的成分表日期。
+  const heldEtfCount = usedSources.filter((v) => v !== 'direct').length;
   const asOfText = usedSources
     .filter((v) => v !== 'direct' && asOf[v])
     .map((v) => `${v} ${asOf[v]}`)
@@ -91,9 +92,9 @@ export function ExposurePage() {
     >
       <motion.header
         variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.5, ease } } }}
-        className="flex items-end justify-between gap-4 pb-4"
+        className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 pb-4"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Kicker index="01" en="Look-through Exposure" zh="穿透敞口" />
           {priceStale && (
             <StatusBadge tone="warn" dot>
@@ -103,7 +104,10 @@ export function ExposurePage() {
         </div>
         <div className="text-right">
           <div className="kicker">成分表更新</div>
-          <div className="font-num text-[11px] text-muted-foreground">{asOfText || '—'}</div>
+          <div className="font-num text-[11px] text-muted-foreground">
+            <span className="sm:hidden">{heldEtfCount > 0 ? `${heldEtfCount} 个 ETF 来源` : '—'}</span>
+            <span className="hidden sm:inline">{asOfText || '—'}</span>
+          </div>
         </div>
       </motion.header>
 
@@ -198,21 +202,31 @@ function StockRow({ stock, index, maxWeight }: { stock: LookThroughStock; index:
           <span className="h-1.5 w-1.5 rounded-full bg-brand" title="AI 铲子线成分" aria-label="AI 铲子线成分" />
         )}
       </div>
-      <div
-        className="flex h-3 overflow-hidden rounded-full bg-surface-elevated"
-        style={{ width: `${Math.max(6, barScale * 100)}%`, minWidth: 24 }}
-      >
-        {stock.sources.map((src) => (
-          <div
-            key={src.via}
-            className="h-full"
-            style={{
-              width: `${(src.value / stock.value) * 100}%`,
-              background: sourceColor(src.via),
-            }}
-            title={`${sourceLabel(src.via)} ${fmtPct(src.value / Math.max(stock.value, 1e-9), 0)}`}
-          />
-        ))}
+      <div className="min-w-0">
+        <div
+          className="flex h-3 overflow-hidden rounded-full bg-surface-elevated"
+          style={{ width: `${Math.max(6, barScale * 100)}%`, minWidth: 24 }}
+        >
+          {stock.sources.map((src) => (
+            <div
+              key={src.via}
+              className="h-full"
+              style={{
+                width: `${(src.value / stock.value) * 100}%`,
+                background: sourceColor(src.via),
+              }}
+              title={`${sourceLabel(src.via)} ${fmtPct(src.value / Math.max(stock.value, 1e-9), 0)}`}
+            />
+          ))}
+        </div>
+        {/* 触摸端没有 hover title,手机上把来源拆分用紧凑文字显示 */}
+        <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground sm:hidden">
+          {stock.sources.map((src) => (
+            <span key={src.via} className="font-num">
+              {sourceLabel(src.via)} {fmtPct(src.value / Math.max(stock.value, 1e-9), 0)}
+            </span>
+          ))}
+        </div>
       </div>
       <div className="text-right font-num text-sm font-semibold tabular-nums">{fmtPct(stock.weightNav, 1)}</div>
     </motion.div>

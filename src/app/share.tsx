@@ -190,7 +190,7 @@ export function SharePage() {
             </div>
           </div>
 
-          <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:min-w-[300px]">
+          <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:min-w-[300px] sm:grid-cols-3">
             <ScopeMeta label="基准" value={benchmark} icon={LineChart} />
             <ScopeMeta label="交易日点位" value={String(pointCount)} icon={Activity} />
             <ScopeMeta label="公开持仓" value={String(positionCount)} icon={LockKeyhole} />

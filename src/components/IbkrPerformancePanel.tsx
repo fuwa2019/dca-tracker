@@ -135,11 +135,11 @@ export function PerformancePanel({
                 aria-expanded={infoOpen}
                 onClick={() => setInfoOpen((v) => !v)}
                 className={cn(
-                  'inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground',
+                  'inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground',
                   infoOpen && 'border-brand/40 text-brand',
                 )}
               >
-                <Info className="h-3.5 w-3.5" />
+                <Info className="h-4 w-4" />
               </button>
               {!hideBenchmarkToggle && (
                 <BenchmarkToggle
@@ -607,16 +607,16 @@ function PerformanceDetailTable({
   return (
     <div className="border-t border-border">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] text-[13px]">
+        <table className="w-full text-[13px] sm:min-w-[520px]">
           <thead>
             <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
               <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">日期</th>
               {showBenchmark && (
-                <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">{benchmarkLabel} 累计 %</th>
+                <th className="hidden px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap sm:table-cell">{benchmarkLabel} 累计 %</th>
               )}
               <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">组合 累计 %</th>
               {showBenchmark && (
-                <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">超额 %</th>
+                <th className="hidden px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap sm:table-cell">超额 %</th>
               )}
             </tr>
           </thead>
@@ -625,7 +625,7 @@ function PerformanceDetailTable({
               <tr key={row.date} className="border-b border-border last:border-0 hover:bg-surface-elevated/40">
                 <td className="px-4 py-2 text-left tnum">{row.date}</td>
                 {showBenchmark && (
-                  <td className={cn('px-4 py-2 text-right tnum', changeColor(row.spyCumulativeReturn))}>
+                  <td className={cn('hidden px-4 py-2 text-right tnum sm:table-cell', changeColor(row.spyCumulativeReturn))}>
                     {formatSignedPct(row.spyCumulativeReturn)}
                   </td>
                 )}
@@ -633,7 +633,7 @@ function PerformanceDetailTable({
                   {formatSignedPct(row.portfolioCumulativeReturn)}
                 </td>
                 {showBenchmark && (
-                  <td className={cn('px-4 py-2 text-right tnum', changeColor(row.excessCumulativeReturn))}>
+                  <td className={cn('hidden px-4 py-2 text-right tnum sm:table-cell', changeColor(row.excessCumulativeReturn))}>
                     {formatSignedPct(row.excessCumulativeReturn)}
                   </td>
                 )}
@@ -664,7 +664,7 @@ function Pager({
       <span className="tnum">{pageCount}</span>
       <button
         type="button"
-        className="ml-2 inline-flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface disabled:opacity-40"
+        className="ml-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface disabled:opacity-40 sm:h-6 sm:w-6"
         disabled={page === 0}
         onClick={() => onPageChange(Math.max(0, page - 1))}
         aria-label="上一页"
@@ -673,7 +673,7 @@ function Pager({
       </button>
       <button
         type="button"
-        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-border bg-surface disabled:opacity-40"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface disabled:opacity-40 sm:h-6 sm:w-6"
         disabled={page >= pageCount - 1}
         onClick={() => onPageChange(Math.min(pageCount - 1, page + 1))}
         aria-label="下一页"

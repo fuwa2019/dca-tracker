@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { HoldingsList } from '@/components/HoldingsList';
 import { TargetProgressRing } from '@/components/TargetProgressRing';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
-import { usd, signedUsd, signedPct, pct as fmtPct, changeColor } from '@/lib/format';
+import { usd, usd0, signedUsd, signedPct, pct as fmtPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { unrealizedPL } from '@/lib/calc/position';
 import { computeLookThrough, type EtfHoldingsData, type MonitorLineResult } from '@/lib/calc/lookThrough';
@@ -91,8 +91,8 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
             净值 · Net Asset Value
             {cacheDirty && <StatusBadge tone="warn" dot>缓存待刷新</StatusBadge>}
           </div>
-          <div className="font-serif-fig mt-2 text-[clamp(3rem,8vw,6rem)] font-semibold leading-[0.92] text-foreground">
-            <AnimatedNumber value={aggregates.nav} format={(v) => usd.format(v)} duration={1.1} />
+          <div className="font-serif-fig mt-2 break-all text-[clamp(2.75rem,8vw,6rem)] font-semibold leading-[0.92] text-foreground">
+            <AnimatedNumber value={aggregates.nav} format={(v) => usd0.format(v)} duration={1.1} />
           </div>
           <div className="font-num mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-[13px] text-muted-foreground">
             <span>持仓 <span className="text-foreground">{usd.format(aggregates.stockMv)}</span></span>
@@ -325,11 +325,11 @@ function EditorialMetric({
               aria-expanded={infoOpen}
               onClick={() => setInfoOpen((v) => !v)}
               className={cn(
-                'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground',
+                'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground sm:h-5 sm:w-5',
                 infoOpen && 'border-brand/40 text-brand',
               )}
             >
-              <Info className="h-3 w-3" />
+              <Info className="h-4 w-4 sm:h-3 sm:w-3" />
             </button>
             {infoOpen && (
               <div className="absolute left-0 top-7 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-md border border-border bg-surface-elevated p-3 text-xs leading-5 text-muted-foreground shadow-lg">

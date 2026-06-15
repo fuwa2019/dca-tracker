@@ -67,11 +67,11 @@ export function ExposureGauge({ line, denomNote }: { line: MonitorLineResult; de
             aria-expanded={infoOpen}
             onClick={() => setInfoOpen((v) => !v)}
             className={cn(
-              'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground',
+              'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground sm:h-5 sm:w-5',
               infoOpen && 'border-brand/40 text-brand',
             )}
           >
-            <Info className="h-3 w-3" />
+            <Info className="h-4 w-4 sm:h-3 sm:w-3" />
           </button>
         </div>
         <div className="mt-0.5 text-[13px] font-medium text-muted-foreground">{config.label}</div>
