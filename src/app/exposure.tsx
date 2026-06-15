@@ -43,7 +43,7 @@ function sourceLabel(via: string): string {
 }
 
 export function ExposurePage() {
-  const { lookThrough, asOf, isEmpty, dashboard } = useExposure();
+  const { lookThrough, asOf, isEmpty, model } = useExposure();
 
   const topStocks = useMemo(() => lookThrough.stocks.slice(0, 14), [lookThrough.stocks]);
   const maxWeight = topStocks[0]?.weightNav ?? 0.0001;
@@ -68,7 +68,7 @@ export function ExposurePage() {
     .map((v) => `${v} ${asOf[v]}`)
     .join(' · ');
 
-  const priceStale = dashboard.quotesNone || dashboard.quotesPartial || dashboard.quotesError;
+  const priceStale = model.quotesNone || model.quotesPartial || model.quotesError;
 
   if (isEmpty) {
     return (

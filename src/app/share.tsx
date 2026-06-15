@@ -154,7 +154,7 @@ export function SharePage() {
 
   return (
     <div className="min-h-full bg-background text-foreground">
-      <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+      <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/95 lg:bg-background/80 lg:backdrop-blur lg:supports-[backdrop-filter]:bg-background/75">
         <div className="container flex max-w-[1200px] items-center gap-3 px-4 py-3 sm:px-6">
           <Logo />
           <div className="min-w-0 flex-1">

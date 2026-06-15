@@ -60,7 +60,7 @@ const RANGE_OPTIONS: ReadonlyArray<{ value: RangeKey; label: string }> = [
   { value: '6M', label: '6M' },
   { value: 'YTD', label: 'YTD' },
   { value: '1Y', label: '1Y' },
-  { value: 'ALL', label: '开仓至今' },
+  { value: 'ALL', label: 'All' },
 ];
 
 export function IbkrPerformancePanel(props: Props) {

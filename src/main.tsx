@@ -10,7 +10,8 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       staleTime: 30 * 1000,
-      refetchOnWindowFocus: true,
+      // 全局默认不在切回标签页时重拉(行情查询自身仍开启,保证现价新鲜)。
+      refetchOnWindowFocus: false,
     },
   },
 });

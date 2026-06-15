@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { unrealizedPL, type Position } from '@/lib/calc/position';
@@ -52,7 +53,10 @@ function buildRows({ positions, quoteByTicker, totalMarketValue, basis }: Props)
 }
 
 export function HoldingsList(props: Props) {
-  const rows = buildRows(props);
+  const rows = useMemo(
+    () => buildRows(props),
+    [props.positions, props.quoteByTicker, props.totalMarketValue, props.basis],
+  );
   if (rows.length === 0) return null;
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -80,7 +84,6 @@ function HoldingsTable({ rows }: { rows: Row[] }) {
         {rows.map((r, i) => (
           <motion.tr
             key={r.ticker}
-            layout
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.02 }}
@@ -126,7 +129,6 @@ function HoldingsCards({ rows, basis: _basis }: { rows: Row[]; basis: 'avg' | 'f
       {rows.map((r, i) => (
         <motion.div
           key={r.ticker}
-          layout
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: i * 0.02 }}

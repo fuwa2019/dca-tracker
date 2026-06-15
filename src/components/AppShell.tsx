@@ -150,7 +150,7 @@ class RouteErrorBoundary extends Component<
 
 function TopBar({ title }: { title: string }) {
   return (
-    <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+    <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/95 lg:bg-background/90 lg:backdrop-blur lg:supports-[backdrop-filter]:bg-background/75">
       <div className="flex flex-col gap-y-1 px-3 py-2 lg:flex-row lg:items-center lg:gap-x-3 lg:px-6 lg:py-2.5">
         {/* Row 1 (mobile): Logo + title + ThemeToggle; Row 1 (desktop): title only */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -237,7 +237,7 @@ function DesktopNav() {
 
 function MobileNav() {
   return (
-    <nav className="safe-bottom sticky bottom-0 z-20 border-t border-border bg-background/95 backdrop-blur lg:hidden">
+    <nav className="safe-bottom sticky bottom-0 z-20 border-t border-border bg-background lg:hidden">
       <div className="flex px-1">
         {MOBILE_NAV.map(({ to, label, icon: Icon }) => (
           <NavLink

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useDashboardModel, type DashboardModel } from '@/app/dashboard/model';
+import { usePositionsModel, type PositionsModel } from '@/hooks/usePositionsModel';
 import { unrealizedPL } from '@/lib/calc/position';
 import {
   computeLookThrough,
@@ -13,7 +13,7 @@ import etfHoldings from '@/data/etf-holdings.json';
 const HOLDINGS = etfHoldings as unknown as EtfHoldingsData;
 
 export interface ExposureModel {
-  dashboard: DashboardModel;
+  model: PositionsModel;
   lookThrough: LookThroughResult;
   /** 成分股权重数据的「截至」日期表,用于页面提示。 */
   asOf: Record<string, string>;
@@ -23,12 +23,12 @@ export interface ExposureModel {
 }
 
 /**
- * 穿透敞口模型。复用 dashboard 的数据来源(持仓 + 行情 + 现金),
+ * 穿透敞口模型。只依赖轻量持仓模型(持仓 + 行情 + 现金),
  * 在前端按 etf-holdings.json 把每个 ETF 拆成底层股票后加总。
  */
 export function useExposure(): ExposureModel {
-  const dashboard = useDashboardModel();
-  const { positions, quoteByTicker, aggregates, costBasisMode } = dashboard;
+  const model = usePositionsModel();
+  const { positions, quoteByTicker, cash, costBasisMode } = model;
 
   const holdings: HoldingInput[] = useMemo(
     () =>
@@ -44,20 +44,20 @@ export function useExposure(): ExposureModel {
     () =>
       computeLookThrough({
         holdings,
-        uninvestedCash: aggregates.cash,
+        uninvestedCash: cash,
         data: HOLDINGS,
         lines: MONITOR_LINES,
       }),
-    [holdings, aggregates.cash],
+    [holdings, cash],
   );
 
   const asOf = (HOLDINGS._meta?.asOf ?? {}) as Record<string, string>;
 
   return {
-    dashboard,
+    model,
     lookThrough,
     asOf,
-    loading: dashboard.quotesLoading,
-    isEmpty: dashboard.isEmpty || positions.length === 0,
+    loading: model.quotesLoading,
+    isEmpty: model.isEmpty,
   };
 }
