@@ -47,6 +47,10 @@ assert.match(universeMigration, /dp\.trade_date between u\.required_start and u\
 assert.match(universeMigration, /ps\.price_min_date/, 'health output exposes database price_min_date separately');
 assert.match(universeMigration, /ps\.price_max_date/, 'health output exposes database price_max_date separately');
 
+const emptyWindowMigration = readFileSync(new URL('../supabase/migrations/0039_coverage_empty_required_window.sql', import.meta.url), 'utf8');
+assert.match(emptyWindowMigration, /coalesce\(c\.required_days, 0\) > 0/, 'coverage only reports missing when the required window has benchmark trading days');
+assert.match(health, /requiredStart && requiredEnd && requiredStart > requiredEnd/, 'health treats an empty required window (same-day open) as ok, not 缺价格');
+
 assert.match(worker, /const HISTORY_MAX_PROVIDER_FETCHES_PER_INVOCATION = 10/, 'worker has hard history provider fetch limit');
 assert.match(worker, /allSymbols\.slice\(cursor, cursor \+ limit\)/, 'history endpoint processes one cursor page per invocation');
 assert.match(worker, /hasMore: nextCursor < allSymbols\.length/, 'history endpoint returns hasMore progress');

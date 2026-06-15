@@ -70,7 +70,7 @@ export interface SymbolSearchResult {
   type?: string | null;
 }
 
-const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
+export const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
 const API_LIMIT_CONFIG = apiLimitConfigFromEnv(import.meta.env);
 const quoteInflight = new Map<string, Promise<Quote[]>>();
 

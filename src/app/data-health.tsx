@@ -5,6 +5,7 @@ import {
   Beaker,
   ChevronDown,
   Database,
+  KeyRound,
   RefreshCw,
   ShieldCheck,
   TrendingUp,
@@ -20,6 +21,8 @@ import {
   usePerformanceCacheStatus,
   useRefreshPerformanceCache,
 } from '@/hooks/usePerformanceCache';
+import { useSchwabAuthStatus, useSchwabReauthorize } from '@/hooks/useSchwabAuth';
+import type { SchwabAuthStatus } from '@/lib/schwab';
 import { supabase } from '@/lib/supabase';
 import { backfillTrackedTargets, type BackfillRunProgress } from '@/lib/trackedSymbols';
 import { isoDateInNewYork } from '@/lib/nyse-calendar';
@@ -73,6 +76,8 @@ export function DataHealthPage() {
   const cacheStatus = usePerformanceCacheStatus(selectedBenchmark);
   const refreshCache = useRefreshPerformanceCache(selectedBenchmark);
   const [backfillProgress, setBackfillProgress] = useState<BackfillRunProgress | null>(null);
+  const schwabAuth = useSchwabAuthStatus();
+  const reauthorize = useSchwabReauthorize();
 
   const priceRows = useQuery<TrackedSymbolCoverageRow[]>({
     queryKey: ['tracked_symbol_coverage', selectedBenchmark],
@@ -274,6 +279,53 @@ export function DataHealthPage() {
 
       <Card>
         <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="font-serif text-lg">行情授权（Schwab）</CardTitle>
+              <CardDescription className="text-xs">
+                Schwab refresh token 有效期 7 天，过期后行情自动降级到 Yahoo 备用源。失效时点「重新授权」跳转 Schwab 登录，回调会写回新 token。
+              </CardDescription>
+            </div>
+            <Button
+              size="sm"
+              variant={schwabAuth.data?.state === 'invalid_grant' ? 'default' : 'outline'}
+              onClick={() => reauthorize.mutate()}
+              disabled={reauthorize.isPending || schwabAuth.data?.state === 'unconfigured'}
+            >
+              <KeyRound className="h-3.5 w-3.5" />
+              {reauthorize.isPending ? '跳转中…' : '重新授权'}
+            </Button>
+          </div>
+          {reauthorize.isError && (
+            <p className="text-xs text-loss break-words">
+              {(reauthorize.error as Error)?.message ?? '获取授权链接失败'}
+            </p>
+          )}
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <StatusLine
+            label="Token 状态"
+            value={schwabAuthValue(schwabAuth.isLoading, schwabAuth.data)}
+            tone={schwabAuthTone(schwabAuth.isLoading, schwabAuth.data)}
+          />
+          <StatusLine
+            label="Access token 剩余"
+            value={
+              schwabAuth.data?.state === 'ok' && schwabAuth.data.expiresIn != null
+                ? `${schwabAuth.data.expiresIn}s`
+                : '—'
+            }
+          />
+          <StatusLine
+            label="详情"
+            value={schwabAuth.data?.message ?? '无'}
+            tone={schwabAuth.data?.message ? 'warn' : 'ok'}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
           <CardTitle className="font-serif text-lg">价格覆盖</CardTitle>
           <CardDescription className="text-xs">
             历史业绩曲线优先用 adjusted close（总回报口径）；缺失时回退 close。
@@ -423,6 +475,37 @@ function HealthTile({
   );
 }
 
+function schwabAuthValue(loading: boolean, status?: SchwabAuthStatus): string {
+  if (loading) return '检测中…';
+  switch (status?.state) {
+    case 'ok':
+      return 'Schwab 行情正常';
+    case 'invalid_grant':
+      return 'Token 已失效 · 已降级 Yahoo';
+    case 'unconfigured':
+      return '行情源未配置';
+    case 'error':
+      return '状态未知';
+    default:
+      return '—';
+  }
+}
+
+function schwabAuthTone(loading: boolean, status?: SchwabAuthStatus): 'ok' | 'warn' | 'bad' | undefined {
+  if (loading || !status) return undefined;
+  switch (status.state) {
+    case 'ok':
+      return 'ok';
+    case 'invalid_grant':
+      return 'bad';
+    case 'error':
+    case 'unconfigured':
+      return 'warn';
+    default:
+      return undefined;
+  }
+}
+
 function StatusLine({
   label,
   value,
@@ -527,6 +610,11 @@ function buildCoverage(rows: TrackedSymbolCoverageRow[]): Coverage[] {
     if (row.backfill_status === 'failed' || row.backfill_status === 'unsupported') {
       status = 'bad';
       note = row.backfill_status === 'failed' ? '补齐失败' : '暂不支持';
+    } else if (requiredStart && requiredEnd && requiredStart > requiredEnd) {
+      // 当天新开仓:首笔交易日晚于基准最新收盘价日,必需窗口为空,
+      // 还没有需要覆盖的交易日,零行不是缺价格(今晚收盘价同步后自愈)。
+      status = 'ok';
+      note = '新开仓·待收盘价';
     } else if (points === 0) {
       status = row.backfill_status === 'pending' ? 'warn' : 'bad';
       note = row.backfill_status === 'pending' ? '等待补齐' : '缺价格';
