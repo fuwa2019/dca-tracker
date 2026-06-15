@@ -5,6 +5,7 @@ import { PerformancePage } from '@/app/performance';
 import { TransactionsPage } from '@/app/transactions';
 import { TransactionsAllPage } from '@/app/transactions-all';
 import { CashflowsPage } from '@/app/cashflows';
+import { ExposurePage } from '@/app/exposure';
 import { SettingsPage } from '@/app/settings';
 import { SharePage } from '@/app/share';
 import { DataHealthPage } from '@/app/data-health';
@@ -26,6 +27,7 @@ export default function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="/performance" element={<PerformancePage />} />
+        <Route path="/exposure" element={<ExposurePage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/transactions/all" element={<TransactionsAllPage />} />
         <Route path="/cashflows" element={<CashflowsPage />} />

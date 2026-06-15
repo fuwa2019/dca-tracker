@@ -272,25 +272,4 @@
     background-color: hsl(var(--benchmark) / 0.12);
     color: hsl(var(--benchmark));
   }
-  .share-report-bg {
-    background:
-      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--surface-elevated)) 52%, hsl(var(--background)) 100%);
-  }
-  .share-hero-surface {
-    background:
-      linear-gradient(135deg, hsl(var(--surface)) 0%, hsl(var(--brand) / 0.08) 48%, hsl(var(--benchmark) / 0.1) 100%);
-    box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.04);
-  }
-  .share-scope-surface {
-    background:
-      linear-gradient(160deg, hsl(var(--surface-elevated)) 0%, hsl(var(--warn) / 0.08) 100%);
-  }
-  .share-kpi-strip {
-    background:
-      linear-gradient(90deg, hsl(var(--brand) / 0.08), hsl(var(--surface)) 42%, hsl(var(--benchmark) / 0.08));
-  }
-  .share-weight-fill {
-    background:
-      linear-gradient(90deg, hsl(var(--brand)), hsl(var(--benchmark)));
-  }
 }

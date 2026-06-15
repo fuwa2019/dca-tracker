@@ -5,6 +5,7 @@ import {
   Activity,
   ArrowLeftRight,
   BarChart3,
+  Layers,
   LayoutDashboard,
   ListOrdered,
   Settings,
@@ -41,6 +42,7 @@ interface NavItem {
 const NAV: ReadonlyArray<NavItem> = [
   { to: '/', label: '总览', icon: LayoutDashboard, group: 'overview' },
   { to: '/performance', label: '业绩', icon: BarChart3, group: 'overview' },
+  { to: '/exposure', label: '穿透敞口', icon: Layers, group: 'overview' },
   { to: '/transactions', label: '交易', icon: ListOrdered, group: 'tracking' },
   { to: '/cashflows', label: '资金', icon: ArrowLeftRight, group: 'tracking' },
   { to: '/health', label: '数据健康', icon: Activity, group: 'ops' },
@@ -56,8 +58,8 @@ const GROUP_LABELS: Record<NavItem['group'], string> = {
 const MOBILE_NAV: ReadonlyArray<NavItem> = [
   { to: '/', label: '总览', icon: LayoutDashboard, group: 'overview' },
   { to: '/performance', label: '业绩', icon: BarChart3, group: 'overview' },
+  { to: '/exposure', label: '敞口', icon: Layers, group: 'overview' },
   { to: '/transactions', label: '交易', icon: ListOrdered, group: 'tracking' },
-  { to: '/health', label: '健康', icon: Activity, group: 'ops' },
   { to: '/settings', label: '设置', icon: Settings, group: 'ops' },
 ];
 

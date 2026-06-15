@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowUpRight, Plus, Briefcase, Info, Wifi } from 'lucide-react';
 import { Card } from '@/components/ui/card';
@@ -9,12 +9,23 @@ import { EmptyState } from '@/components/EmptyState';
 import { HoldingsList } from '@/components/HoldingsList';
 import { TargetProgressRing } from '@/components/TargetProgressRing';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
-import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
+import { usd, signedUsd, signedPct, pct as fmtPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { unrealizedPL } from '@/lib/calc/position';
+import { computeLookThrough, type EtfHoldingsData, type MonitorLineResult } from '@/lib/calc/lookThrough';
+import { MONITOR_LINES } from '@/lib/calc/exposureConfig';
+import etfHoldings from '@/data/etf-holdings.json';
 import type { DashboardModel } from './model';
 import { EmptyDashboard, EquitySpark, Kicker, QuickActions } from './shared';
 
 const ease = [0.16, 1, 0.3, 1] as const;
+const HOLDINGS = etfHoldings as unknown as EtfHoldingsData;
+// 风险色避开盈亏绿/红:ok=蓝(night)、warn=琥珀、over=红。
+const STATUS_VAR: Record<MonitorLineResult['status'], string> = {
+  ok: 'var(--night)',
+  warn: 'var(--warn)',
+  over: 'var(--loss)',
+};
 
 export function DashboardVariantA({ model }: { model: DashboardModel }) {
   const {
@@ -34,6 +45,21 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
 
   const range = last ? `${history[0].date} — ${last.date}` : '—';
 
+  const lookThrough = useMemo(
+    () =>
+      computeLookThrough({
+        holdings: positions.map((p) => {
+          const q = quoteByTicker.get(p.ticker);
+          const { marketValue } = unrealizedPL(p, q?.price ?? null, costBasisMode);
+          return { ticker: p.ticker, value: marketValue };
+        }),
+        uninvestedCash: aggregates.cash,
+        data: HOLDINGS,
+        lines: MONITOR_LINES,
+      }),
+    [positions, quoteByTicker, costBasisMode, aggregates.cash],
+  );
+
   return (
     <motion.div
       initial="hidden"
@@ -48,7 +74,7 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       >
         <Kicker index="01" en="Portfolio Report" zh="组合总览" />
         <div className="text-right">
-          <div className="kicker">As of</div>
+          <div className="kicker">Period</div>
           <div className="font-num text-xs text-muted-foreground">{range}</div>
         </div>
       </motion.header>
@@ -85,7 +111,7 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
           <HeroKpi
             label="累计盈亏 · Total P/L"
             value={signedUsd(aggregates.totalPL)}
-            sub={Number.isFinite(totalReturnPct) ? signedPct(totalReturnPct) : '—'}
+            sub={Number.isFinite(totalReturnPct) ? `简单总回报 ${signedPct(totalReturnPct)}` : '—'}
             tone={changeColor(aggregates.totalPL)}
           />
         </div>
@@ -121,7 +147,7 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
           infoBody="按你的实际入金时间、金额和当前账户净值计算的资金加权年化收益。越早投入的资金权重越高，适合回答“我的钱实际赚了多少年化”。"
         />
         <EditorialMetric
-          en="Cumulative" zh="组合累计表现"
+          en="Cumulative · TWR" zh="时间加权累计"
           value={signedPct(portfolioCumulative)}
           tone={portfolioCumulative >= 0 ? 'text-gain' : 'text-loss'}
           sub={last ? `${history[0].date} 至 ${last.date}` : '录入后显示'}
@@ -196,10 +222,66 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
         )}
       </motion.section>
 
-      <div className="pt-6">
+      {/* Look-through monitoring lines */}
+      <motion.section
+        variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
+        className="pt-8"
+      >
+        <div className="mb-3 flex items-end justify-between">
+          <Kicker index="05" en="Look-through" zh="穿透敞口监控" />
+          <Button asChild variant="ghost" size="sm" className="shrink-0 text-brand">
+            <Link to="/exposure">展开穿透 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
+          </Button>
+        </div>
+        <Card className="grid grid-cols-1 gap-px overflow-hidden bg-border p-0 sm:grid-cols-2">
+          {lookThrough.lines.map((line) => (
+            <MonitorMini key={line.config.id} line={line} />
+          ))}
+        </Card>
+      </motion.section>
+
+      <div className="pt-8">
         <QuickActions accentClass="text-brand" />
       </div>
     </motion.div>
+  );
+}
+
+function MonitorMini({ line }: { line: MonitorLineResult }) {
+  const colorVar = STATUS_VAR[line.status];
+  const scaleMax = Math.max(line.config.ceiling * 1.6, line.pct * 1.08, 0.0001);
+  const valuePct = Math.min(100, (line.pct / scaleMax) * 100);
+  const ceilPct = Math.min(100, (line.config.ceiling / scaleMax) * 100);
+  return (
+    <div className="bg-surface px-5 py-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="kicker">{line.config.labelEn}</div>
+        <div className="font-serif-fig text-2xl font-semibold leading-none" style={{ color: `hsl(${colorVar})` }}>
+          {fmtPct(line.pct, 1)}
+        </div>
+      </div>
+      <div className="mt-1 text-[13px] font-medium text-muted-foreground">
+        {line.config.label} · {line.config.basis === 'equity' ? '占股票' : '占净值'}
+      </div>
+      <div className="relative mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-elevated">
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: `hsl(${colorVar})` }}
+          initial={{ width: 0 }}
+          animate={{ width: `${valuePct}%` }}
+          transition={{ duration: 0.9, ease }}
+        />
+        <span
+          aria-hidden
+          className="absolute top-1/2 h-3 w-[2px] -translate-y-1/2 bg-foreground"
+          style={{ left: `${ceilPct}%` }}
+        />
+      </div>
+      <div className="font-num mt-1.5 flex justify-between text-[10px] text-muted-foreground">
+        <span>当前</span>
+        <span>上限 {fmtPct(line.config.ceiling, 0)}</span>
+      </div>
+    </div>
   );
 }
 

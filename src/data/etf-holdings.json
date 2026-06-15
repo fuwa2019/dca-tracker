@@ -1,0 +1,102 @@
+{
+  "_meta": {
+    "purpose": "手动维护的 ETF 成分股权重,供穿透权重(look-through)计算。每季度核对一次即可。",
+    "howToUpdate": "去 stockanalysis.com/etf/<ticker>/holdings 抄前若干大成分股的 % Weight,填成小数(如 18.6% -> 0.186)。未列出的长尾会自动归入「未穿透长尾」,不必填全。",
+    "weightUnit": "fraction (0.186 = 18.6%)",
+    "cashLike": ["SGOV", "BIL", "SHV"],
+    "asOf": {
+      "VOO": "2026-04-30",
+      "VGT": "2026-03-31",
+      "SMH": "2026-06-11",
+      "QQQM": "2026-03-31",
+      "QQQ": "2026-03-31"
+    },
+    "estimatedTickers": {
+      "VOO": ["ORCL"],
+      "VGT": ["ORCL"],
+      "note": "标记的成分股是按市值估算的近似权重,数据源未直接给出,核对时优先更新。"
+    }
+  },
+  "etfs": {
+    "VOO": [
+      { "ticker": "NVDA", "weight": 0.0784 },
+      { "ticker": "AAPL", "weight": 0.0644 },
+      { "ticker": "MSFT", "weight": 0.0489 },
+      { "ticker": "AMZN", "weight": 0.0419 },
+      { "ticker": "GOOGL", "weight": 0.0362 },
+      { "ticker": "AVGO", "weight": 0.0320 },
+      { "ticker": "GOOG", "weight": 0.0289 },
+      { "ticker": "META", "weight": 0.0216 },
+      { "ticker": "TSLA", "weight": 0.0174 },
+      { "ticker": "BRK.B", "weight": 0.0140 },
+      { "ticker": "JPM", "weight": 0.0127 },
+      { "ticker": "LLY", "weight": 0.0120 },
+      { "ticker": "XOM", "weight": 0.0104 },
+      { "ticker": "MU", "weight": 0.0094 },
+      { "ticker": "WMT", "weight": 0.0093 },
+      { "ticker": "AMD", "weight": 0.0093 },
+      { "ticker": "JNJ", "weight": 0.0090 },
+      { "ticker": "V", "weight": 0.0088 },
+      { "ticker": "COST", "weight": 0.0073 },
+      { "ticker": "INTC", "weight": 0.0072 },
+      { "ticker": "ORCL", "weight": 0.0065 }
+    ],
+    "VGT": [
+      { "ticker": "NVDA", "weight": 0.186 },
+      { "ticker": "AAPL", "weight": 0.159 },
+      { "ticker": "MSFT", "weight": 0.102 },
+      { "ticker": "AVGO", "weight": 0.044 },
+      { "ticker": "ORCL", "weight": 0.026 },
+      { "ticker": "MU", "weight": 0.020 },
+      { "ticker": "AMD", "weight": 0.018 },
+      { "ticker": "PLTR", "weight": 0.017 },
+      { "ticker": "CSCO", "weight": 0.017 },
+      { "ticker": "AMAT", "weight": 0.015 },
+      { "ticker": "LRCX", "weight": 0.015 }
+    ],
+    "SMH": [
+      { "ticker": "NVDA", "weight": 0.1518 },
+      { "ticker": "TSM", "weight": 0.0962 },
+      { "ticker": "MU", "weight": 0.0750 },
+      { "ticker": "INTC", "weight": 0.0707 },
+      { "ticker": "AMD", "weight": 0.0700 },
+      { "ticker": "AVGO", "weight": 0.0630 },
+      { "ticker": "LRCX", "weight": 0.0466 },
+      { "ticker": "KLAC", "weight": 0.0462 },
+      { "ticker": "TXN", "weight": 0.0450 },
+      { "ticker": "AMAT", "weight": 0.0449 },
+      { "ticker": "ASML", "weight": 0.0440 },
+      { "ticker": "QCOM", "weight": 0.0408 },
+      { "ticker": "MRVL", "weight": 0.0404 },
+      { "ticker": "ADI", "weight": 0.0390 },
+      { "ticker": "CDNS", "weight": 0.0227 },
+      { "ticker": "SNPS", "weight": 0.0195 }
+    ],
+    "QQQM": [
+      { "ticker": "NVDA", "weight": 0.094 },
+      { "ticker": "AAPL", "weight": 0.080 },
+      { "ticker": "MSFT", "weight": 0.078 },
+      { "ticker": "AMZN", "weight": 0.055 },
+      { "ticker": "AVGO", "weight": 0.050 },
+      { "ticker": "META", "weight": 0.036 },
+      { "ticker": "GOOGL", "weight": 0.025 },
+      { "ticker": "GOOG", "weight": 0.024 },
+      { "ticker": "TSLA", "weight": 0.024 },
+      { "ticker": "NFLX", "weight": 0.019 },
+      { "ticker": "AMD", "weight": 0.013 }
+    ],
+    "QQQ": [
+      { "ticker": "NVDA", "weight": 0.094 },
+      { "ticker": "AAPL", "weight": 0.080 },
+      { "ticker": "MSFT", "weight": 0.078 },
+      { "ticker": "AMZN", "weight": 0.055 },
+      { "ticker": "AVGO", "weight": 0.050 },
+      { "ticker": "META", "weight": 0.036 },
+      { "ticker": "GOOGL", "weight": 0.025 },
+      { "ticker": "GOOG", "weight": 0.024 },
+      { "ticker": "TSLA", "weight": 0.024 },
+      { "ticker": "NFLX", "weight": 0.019 },
+      { "ticker": "AMD", "weight": 0.013 }
+    ]
+  }
+}

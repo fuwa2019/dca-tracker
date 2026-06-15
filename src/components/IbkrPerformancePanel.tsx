@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Info } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { EmptyState } from '@/components/EmptyState';
@@ -81,6 +81,7 @@ export function PerformancePanel({
 }: Props) {
   const [page, setPage] = useState(0);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
 
   const performanceRows = useMemo(() => buildPerformanceRows(history), [history]);
   const filteredRanges = RANGE_OPTIONS.filter((r) => availableRanges.includes(r.value));
@@ -241,13 +242,29 @@ export function PerformancePanel({
             </div>
             <SummaryTable dateLabel={dateLabel} summary={summary} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
             <PerformanceChart rows={chartRows} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
-            <PerformanceDetailTable
-              tableRows={visibleRows}
-              showBenchmark={showBenchmark}
-              benchmarkLabel={benchmarkLabel}
-              page={page}
-              onPageChange={setPage}
-            />
+            <div className="border-t border-border">
+              <button
+                type="button"
+                aria-expanded={showDetail}
+                onClick={() => setShowDetail((v) => !v)}
+                className="flex w-full items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-surface-elevated/40"
+              >
+                <span className="font-medium">每日明细</span>
+                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  {showDetail ? '收起' : `展开 ${visibleRows.length} 个交易日`}
+                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', showDetail && 'rotate-180')} />
+                </span>
+              </button>
+            </div>
+            {showDetail && (
+              <PerformanceDetailTable
+                tableRows={visibleRows}
+                showBenchmark={showBenchmark}
+                benchmarkLabel={benchmarkLabel}
+                page={page}
+                onPageChange={setPage}
+              />
+            )}
           </>
         )}
       </Card>
@@ -307,7 +324,7 @@ function SummaryTable({
   showBenchmark: boolean;
   benchmarkLabel: string;
 }) {
-  const headers = ['本月', '本季', '本年', '开仓至今'];
+  const headers = ['本月', '本季', '本年'];
   return (
     <div className="border-b border-border">
       <div className="flex items-baseline justify-between px-4 pt-4">
@@ -329,11 +346,11 @@ function SummaryTable({
             </thead>
             <tbody>
               {showBenchmark && (
-                <SummaryRow name={`${benchmarkLabel} 基准`} swatch={BENCHMARK_STROKE} values={summary.spy} muted />
+                <SummaryRow name={`${benchmarkLabel} 基准`} swatch={BENCHMARK_STROKE} values={summary.spy.slice(0, 3)} muted />
               )}
-              <SummaryRow name="组合 NAV" swatch={PORTFOLIO_STROKE} values={summary.portfolio} bold />
+              <SummaryRow name="组合 NAV" swatch={PORTFOLIO_STROKE} values={summary.portfolio.slice(0, 3)} bold />
               {showBenchmark && (
-                <SummaryRow name={`超额 vs ${benchmarkLabel}`} values={summary.excess} dashed />
+                <SummaryRow name={`超额 vs ${benchmarkLabel}`} values={summary.excess.slice(0, 3)} dashed judge />
               )}
             </tbody>
           </table>
@@ -350,6 +367,7 @@ function SummaryRow({
   bold = false,
   muted = false,
   dashed = false,
+  judge = false,
 }: {
   name: string;
   values: number[];
@@ -357,6 +375,8 @@ function SummaryRow({
   bold?: boolean;
   muted?: boolean;
   dashed?: boolean;
+  /** 仅"超额"这种判断性指标用涨跌色;序列本身靠左侧色块识别,数字保持中性。 */
+  judge?: boolean;
 }) {
   return (
     <tr>
@@ -386,7 +406,7 @@ function SummaryRow({
           className={cn(
             'px-2 py-2 text-right tnum',
             bold && 'font-semibold',
-            changeColor(value),
+            judge ? changeColor(value) : muted ? 'text-muted-foreground' : 'text-foreground',
           )}
         >
           {formatSignedPct(value)}

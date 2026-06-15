@@ -4,28 +4,30 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   Activity,
-  BarChart3,
   CalendarDays,
   Clock,
   EyeOff,
-  FileText,
   LineChart,
   LockKeyhole,
   ShieldCheck,
-  TrendingUp,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { PerformancePanel } from '@/components/IbkrPerformancePanel';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { EmptyState } from '@/components/EmptyState';
+import { ExposureGauge } from '@/components/ExposureGauge';
 import { supabase } from '@/lib/supabase';
 import { pct, signedPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { availableRanges, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
+import { computeLookThrough, type EtfHoldingsData } from '@/lib/calc/lookThrough';
+import { MONITOR_LINES, SHOVEL_TICKERS } from '@/lib/calc/exposureConfig';
+import etfHoldings from '@/data/etf-holdings.json';
 import type { PerformanceHistory, SharedPortfolio, SharedHistory } from '@/lib/database.types';
 
-type SoftTone = 'brand' | 'benchmark' | 'gain' | 'warn';
+const HOLDINGS = etfHoldings as unknown as EtfHoldingsData;
+const SHOVEL_SET = new Set(SHOVEL_TICKERS.map((t) => t.toUpperCase()));
 
 export function SharePage() {
   const { token } = useParams<{ token: string }>();
@@ -110,6 +112,21 @@ export function SharePage() {
   const ranges = useMemo(() => availableRanges(history), [history]);
   const effectiveRange = ranges.includes(range) ? range : (ranges[ranges.length - 1] ?? 'ALL');
 
+  // 脱敏穿透:仅用公开的持仓权重(%)推算,不涉及任何金额。
+  const sharePositions = useMemo(() => {
+    const d = portfolio.data;
+    if (!d || 'error' in d) return [] as Array<{ ticker: string; value: number }>;
+    return d.positions
+      .filter((p) => Number.isFinite(p.weight_pct) && p.weight_pct > 0)
+      .map((p) => ({ ticker: p.ticker, value: p.weight_pct }));
+  }, [portfolio.data]);
+  const lookThrough = useMemo(
+    () => computeLookThrough({ holdings: sharePositions, data: HOLDINGS, lines: MONITOR_LINES }),
+    [sharePositions],
+  );
+  const lookThroughTop = useMemo(() => lookThrough.stocks.slice(0, 10), [lookThrough.stocks]);
+  const lookThroughMax = lookThroughTop[0]?.weightNav ?? 0.0001;
+
   if (!shareToken) return <Centered>分享链接无效或已过期</Centered>;
   if (portfolio.isLoading) return <Centered>加载中...</Centered>;
   if (portfolio.error) return <Centered>加载失败，请稍后再试</Centered>;
@@ -136,8 +153,8 @@ export function SharePage() {
   const hasProvisionalClose = !!last?.provisional;
 
   return (
-    <div className="share-report-bg min-h-full text-foreground">
-      <header className="safe-top sticky top-0 z-20 border-b border-border/80 bg-background/80 shadow-sm shadow-brand/5 backdrop-blur">
+    <div className="min-h-full bg-background text-foreground">
+      <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/75">
         <div className="container flex max-w-[1200px] items-center gap-3 px-4 py-3 sm:px-6">
           <Logo />
           <div className="min-w-0 flex-1">
@@ -149,47 +166,39 @@ export function SharePage() {
             </div>
             <div className="truncate text-[11px] text-muted-foreground">仅显示比例、日期和权重，金额已隐藏</div>
           </div>
-          <div className="hidden items-center gap-1.5 rounded-md border border-gain/20 bg-gain-soft px-2 py-1 text-[11px] sm:flex">
-            <ShieldCheck className="h-3.5 w-3.5 text-gain" />
-            Public report
+          <div className="hidden items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-muted-foreground sm:flex">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            公开报告
           </div>
           <ThemeToggle />
         </div>
       </header>
 
       <main className="container max-w-[1200px] space-y-5 px-4 py-5 sm:px-6 sm:py-7">
-        <section className="share-hero-surface overflow-hidden rounded-lg border border-border">
-          <div className="grid gap-0 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
-            <div className="px-5 py-5 sm:px-6 sm:py-6">
-              <div className="inline-flex items-center gap-2 rounded-md border border-brand/20 bg-brand-soft px-2 py-1 text-[11px] font-medium">
-                <FileText className="h-3.5 w-3.5" />
-                Public Performance Report
-              </div>
-              <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">只读业绩报告</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                这份公开报告只展示时间加权收益率、基准对照、日期和持仓权重。金额、入金、汇兑损耗和交易明细不会通过分享 API 暴露。
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2 text-[11px]">
-                <ReportChip icon={ShieldCheck} label="隐私安全视图" tone="gain" />
-                <ReportChip icon={CalendarDays} label={usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'} tone="benchmark" />
-                <ReportChip icon={Clock} label={`更新 ${formatDateTime(generatedAt)}`} tone="warn" numeric />
-                {hasProvisionalClose && <ReportChip icon={Clock} label="收盘价待核对" tone="warn" />}
-              </div>
+        <section className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <div className="max-w-2xl">
+            <div className="kicker">Public Performance Report</div>
+            <h1 className="mt-0.5 font-serif text-2xl font-semibold tracking-tight sm:text-3xl">只读业绩报告</h1>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              展示组合的时间加权收益率、基准对照、日期区间与持仓权重(含底层穿透),帮助你对外分享业绩表现。
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+              <MetaChip icon={ShieldCheck} label="隐私安全视图" />
+              <MetaChip icon={CalendarDays} label={usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'} />
+              <MetaChip icon={Clock} label={`更新 ${formatDateTime(generatedAt)}`} numeric />
+              {hasProvisionalClose && <MetaChip icon={Clock} label="收盘价待核对" />}
             </div>
+          </div>
 
-            <div className="share-scope-surface border-t border-border px-5 py-5 sm:px-6 lg:border-l lg:border-t-0">
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Report Scope</div>
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                <ReportMeta label="基准" value={benchmark} icon={LineChart} tone="benchmark" />
-                <ReportMeta label="交易日点位" value={String(pointCount)} icon={Activity} tone="brand" />
-                <ReportMeta label="公开持仓" value={String(positionCount)} icon={LockKeyhole} tone="warn" />
-              </div>
-            </div>
+          <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:min-w-[300px]">
+            <ScopeMeta label="基准" value={benchmark} icon={LineChart} />
+            <ScopeMeta label="交易日点位" value={String(pointCount)} icon={Activity} />
+            <ScopeMeta label="公开持仓" value={String(positionCount)} icon={LockKeyhole} />
           </div>
         </section>
 
         {!hasSnapshotPrices && (
-          <Card className="flex items-start gap-3 rounded-lg border-warn/30 bg-warn/5 p-3 text-sm">
+          <Card className="flex items-start gap-3 border-warn/30 bg-warn/5 p-3 text-sm">
             <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
             <div className="min-w-0 flex-1">
               <div className="font-medium text-foreground">行情快照未更新</div>
@@ -200,27 +209,21 @@ export function SharePage() {
           </Card>
         )}
 
-        <Card className="share-kpi-strip overflow-hidden rounded-lg p-0">
-          <div className="grid gap-0 md:grid-cols-3">
+        <Card className="overflow-hidden p-0">
+          <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-3 md:divide-x md:divide-y-0">
             <SummaryCell
-              icon={TrendingUp}
-              tone="brand"
               label="组合累计表现"
               value={last ? signedPct(portfolioReturn) : '-'}
               valueClass={cn(last ? changeColor(portfolioReturn) : 'text-muted-foreground', 'text-3xl')}
               sub={dateRange}
             />
             <SummaryCell
-              icon={BarChart3}
-              tone="benchmark"
               label={`${benchmark} · 同期`}
               value={last ? signedPct(spyReturn) : '-'}
               valueClass={last ? changeColor(spyReturn) : 'text-muted-foreground'}
               sub="基准对照"
             />
             <SummaryCell
-              icon={Activity}
-              tone="warn"
               label={`超额 vs ${benchmark}`}
               value={last ? signedPct(excess) : '-'}
               valueClass={last ? changeColor(excess) : 'text-muted-foreground'}
@@ -250,9 +253,9 @@ export function SharePage() {
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-surface-elevated/40 px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-semibold">持仓权重</div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">{positionCount} 只 · 不显示具体股数与金额</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">你实际买入的 ETF / 标的 · {positionCount} 只 · 不显示股数与金额</div>
             </div>
-            <div className="inline-flex items-center gap-1.5 rounded-md border border-benchmark/20 bg-benchmark-soft px-2 py-1 text-[11px]">
+            <div className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-muted-foreground">
               <LockKeyhole className="h-3.5 w-3.5" />
               权重和百分比
             </div>
@@ -282,7 +285,7 @@ export function SharePage() {
                           initial={{ width: 0 }}
                           animate={{ width: `${clampPercent(p.weight_pct * 100)}%` }}
                           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 * i }}
-                          className="share-weight-fill h-full rounded-full"
+                          className="h-full rounded-full bg-brand"
                         />
                       </div>
                       <div className="w-12 text-right text-xs text-muted-foreground tnum">
@@ -305,9 +308,63 @@ export function SharePage() {
           )}
         </Card>
 
-        <footer className="share-scope-surface flex flex-col gap-2 rounded-lg border border-border px-3 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        {lookThroughTop.length > 0 && (
+          <Card className="overflow-hidden rounded-lg p-0">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-surface-elevated/40 px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold">穿透敞口</div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  把 ETF 拆成底层股票后的真实单票权重 · 仅百分比
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-muted-foreground">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                穿透仅用权重
+              </div>
+            </div>
+
+            <div className="grid gap-px bg-border sm:grid-cols-2">
+              {lookThrough.lines.map((line) => (
+                <div key={line.config.id} className="bg-card px-4 py-5">
+                  <ExposureGauge line={line} denomNote="占公开持仓" />
+                </div>
+              ))}
+            </div>
+
+            <div className="divide-y divide-border border-t border-border">
+              {lookThroughTop.map((s, i) => (
+                <div
+                  key={s.ticker}
+                  className="grid grid-cols-[64px_minmax(0,1fr)_52px] items-center gap-3 px-4 py-2.5"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold">{s.ticker}</span>
+                    {SHOVEL_SET.has(s.ticker) && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-label="AI 铲子线成分" />
+                    )}
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-surface-elevated">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.max(4, (s.weightNav / lookThroughMax) * 100)}%` }}
+                      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.04 * i }}
+                      className="h-full rounded-full bg-brand"
+                    />
+                  </div>
+                  <div className="text-right text-xs font-semibold tnum">{pct(s.weightNav, 1)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-border px-4 py-2.5 text-[10px] leading-4 text-muted-foreground">
+              穿透基于公开持仓权重与一份手动维护的 ETF 成分股表,只取每只 ETF 的前若干大成分,其余归入「未穿透长尾」;占比以公开持仓为分母。
+            </div>
+          </Card>
+        )}
+
+        <footer className="flex flex-col gap-2 rounded-lg border border-border bg-card px-3 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span className="inline-flex items-center gap-2">
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-gain" />
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
             <span>金额、入金、汇兑损耗、交易明细均不通过分享 API 暴露。</span>
           </span>
           <span className="tnum sm:text-right">
@@ -320,49 +377,37 @@ export function SharePage() {
 }
 
 function SummaryCell({
-  icon: Icon,
-  tone,
   label,
   value,
   valueClass,
   sub,
 }: {
-  icon: LucideIcon;
-  tone: SoftTone;
   label: string;
   value: string;
   valueClass: string;
   sub: string;
 }) {
   return (
-    <div className="border-t border-border px-5 py-5 first:border-t-0 md:border-l md:border-t-0 md:first:border-l-0">
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
-        <span className={cn('inline-flex h-6 w-6 items-center justify-center rounded-md border', softToneClass(tone))}>
-          <Icon className="h-3.5 w-3.5" />
-        </span>
-        {label}
-      </div>
+    <div className="px-5 py-5">
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={cn('mt-2 text-2xl font-semibold tnum', valueClass)}>{value}</div>
       <div className="mt-1 text-[11px] text-muted-foreground tnum">{sub}</div>
     </div>
   );
 }
 
-function ReportChip({
+function MetaChip({
   icon: Icon,
   label,
-  tone,
   numeric = false,
 }: {
   icon: LucideIcon;
   label: string;
-  tone: SoftTone;
   numeric?: boolean;
 }) {
   return (
     <span className={cn(
-      'inline-flex items-center gap-1.5 rounded-md border px-2 py-1',
-      softToneClass(tone),
+      'inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground',
       numeric && 'tnum',
     )}>
       <Icon className="h-3.5 w-3.5" />
@@ -371,41 +416,24 @@ function ReportChip({
   );
 }
 
-function ReportMeta({
+function ScopeMeta({
   label,
   value,
   icon: Icon,
-  tone,
 }: {
   label: string;
   value: string;
   icon: LucideIcon;
-  tone: SoftTone;
 }) {
   return (
     <div className="min-w-0 rounded-md border border-border bg-surface px-3 py-2">
       <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-        <span className={cn('inline-flex h-5 w-5 items-center justify-center rounded border', softToneClass(tone))}>
-          <Icon className="h-3 w-3" />
-        </span>
+        <Icon className="h-3 w-3 shrink-0" />
         <span className="truncate">{label}</span>
       </div>
       <div className="mt-1 truncate text-sm font-semibold tnum">{value}</div>
     </div>
   );
-}
-
-function softToneClass(tone: SoftTone) {
-  switch (tone) {
-    case 'brand':
-      return 'border-brand/20 bg-brand-soft';
-    case 'benchmark':
-      return 'border-benchmark/20 bg-benchmark-soft';
-    case 'gain':
-      return 'border-gain/20 bg-gain-soft';
-    case 'warn':
-      return 'border-warn/20 bg-warn-soft';
-  }
 }
 
 function Logo() {
@@ -418,8 +446,8 @@ function Logo() {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="share-report-bg flex min-h-screen p-4 text-foreground">
-      <div className="share-hero-surface m-auto w-full max-w-sm rounded-lg border border-border px-5 py-6 text-center">
+    <div className="flex min-h-screen bg-background p-4 text-foreground">
+      <div className="m-auto w-full max-w-sm rounded-lg border border-border bg-card px-5 py-6 text-center">
         <div className="flex justify-center">
           <Logo />
         </div>
