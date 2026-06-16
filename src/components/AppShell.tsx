@@ -228,8 +228,8 @@ function DesktopNav() {
         ))}
       </nav>
       <div className="mt-auto border-t border-border px-4 py-3">
-        <div className="kicker">DCA Tracker · v3.0</div>
-        <div className="mt-0.5 text-[10px] text-muted-foreground">高级主题与公开报告</div>
+        <div className="kicker">DCA Tracker · v3.1</div>
+        <div className="mt-0.5 text-[10px] text-muted-foreground">穿透敞口 · Schwab 行情 · 公开报告</div>
       </div>
     </aside>
   );

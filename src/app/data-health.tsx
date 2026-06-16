@@ -309,7 +309,7 @@ export function DataHealthPage() {
             tone={schwabAuthTone(schwabAuth.isLoading, schwabAuth.data)}
           />
           <StatusLine
-            label="Access token 剩余"
+            label="Access token 有效期"
             value={
               schwabAuth.data?.state === 'ok' && schwabAuth.data.expiresIn != null
                 ? `${schwabAuth.data.expiresIn}s`
