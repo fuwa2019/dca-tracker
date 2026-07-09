@@ -38,10 +38,40 @@ const HOLDINGS = etfHoldings as unknown as EtfHoldingsData;
 
 const SECTOR_BY_TICKER: Record<string, string> = {
   NVDA: 'AI 芯片',
-  SMH: '半导体 ETF',
+  AMD: 'AI 芯片',
+  AVGO: 'AI 芯片',
+  TSM: '半导体',
+  MU: '半导体',
+  INTC: '半导体',
+  ASML: '半导体',
+  LRCX: '半导体',
+  KLAC: '半导体',
+  TXN: '半导体',
+  AMAT: '半导体',
+  QCOM: '半导体',
+  MRVL: '半导体',
+  ADI: '半导体',
+  CDNS: '半导体软件',
+  SNPS: '半导体软件',
   AAPL: '大型科技',
   MSFT: '大型科技',
-  QQQ: '纳指 ETF',
+  GOOGL: '大型科技',
+  GOOG: '大型科技',
+  META: '大型科技',
+  ORCL: '企业软件',
+  CSCO: '企业软件',
+  PLTR: '企业软件',
+  AMZN: '消费与互联网',
+  TSLA: '消费与互联网',
+  NFLX: '消费与互联网',
+  'BRK.B': '金融',
+  JPM: '金融',
+  V: '金融',
+  LLY: '医疗',
+  JNJ: '医疗',
+  XOM: '能源',
+  WMT: '消费防御',
+  COST: '消费防御',
   SGOV: '现金 / 国债',
 };
 
@@ -78,22 +108,6 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       losers: rows.filter((r) => (r.changePct ?? 0) < 0).sort((a, b) => (a.changePct ?? 0) - (b.changePct ?? 0)).slice(0, 3),
     };
   }, [positions, quoteByTicker]);
-  const distribution = useMemo(() => {
-    const etfs = new Set(Object.keys(HOLDINGS.etfs));
-    const cashLike = new Set((HOLDINGS._meta?.cashLike ?? []).map((t) => t.toUpperCase()));
-    const bySector = new Map<string, number>();
-    for (const p of positions) {
-      const q = quoteByTicker.get(p.ticker);
-      const { marketValue } = unrealizedPL(p, q?.price ?? null, costBasisMode);
-      const fallback = cashLike.has(p.ticker) ? '现金 / 国债' : etfs.has(p.ticker) ? 'ETF / Fund' : '股票';
-      const label = SECTOR_BY_TICKER[p.ticker] ?? fallback;
-      bySector.set(label, (bySector.get(label) ?? 0) + marketValue);
-    }
-    return [...bySector.entries()]
-      .map(([label, value], index) => ({ label, value, color: DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length] }))
-      .filter((r) => r.value > 0)
-      .sort((a, b) => b.value - a.value);
-  }, [positions, quoteByTicker, costBasisMode]);
   const lookThrough = useMemo(
     () =>
       computeLookThrough({
@@ -107,6 +121,26 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
         lines: [],
       }),
     [positions, quoteByTicker, costBasisMode, aggregates.cash],
+  );
+  const distribution = useMemo(() => {
+    const bySector = new Map<string, number>();
+    const add = (label: string, value: number) => {
+      if (value <= 0) return;
+      bySector.set(label, (bySector.get(label) ?? 0) + value);
+    };
+    for (const stock of lookThrough.stocks) {
+      add(SECTOR_BY_TICKER[stock.ticker] ?? '其他股票', stock.value);
+    }
+    add('现金 / 国债', lookThrough.cashValue);
+    add('未穿透长尾', lookThrough.unclassifiedValue);
+    return [...bySector.entries()]
+      .map(([label, value], index) => ({ label, value, color: DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length] }))
+      .filter((r) => r.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [lookThrough.stocks, lookThrough.cashValue, lookThrough.unclassifiedValue]);
+  const distributionTotal = useMemo(
+    () => distribution.reduce((sum, row) => sum + row.value, 0),
+    [distribution],
   );
   const lookThroughTop = useMemo(() => lookThrough.stocks.slice(0, 6), [lookThrough.stocks]);
 
@@ -305,7 +339,7 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       >
         <DailyMovers title="每日赢家" icon={TrendingUp} rows={movers.winners} />
         <DailyMovers title="每日输家" icon={TrendingDown} rows={movers.losers} />
-        <DistributionPanel rows={distribution} total={aggregates.stockMv} assetCount={positions.length} />
+        <DistributionPanel rows={distribution} total={distributionTotal} assetCount={positions.length} />
       </motion.section>
 
       {/* Holdings */}
