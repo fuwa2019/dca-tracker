@@ -378,6 +378,10 @@ export interface Database {
           first_trade_date: string | null;
         }>;
       };
+      hide_closed_tracked_symbol: {
+        Args: { p_symbol: string; p_benchmark?: string | null };
+        Returns: boolean;
+      };
       active_monitor_universe: {
         Args: { p_benchmark?: string | null };
         Returns: Array<{

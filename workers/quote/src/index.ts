@@ -16,9 +16,9 @@
  *   -> { series: [{ ticker, points: [{date, close, adjustedClose}] }] }
  *      and upserts daily_prices
  *
- * CRON `15 22 * * *`, `15 12 * * *` (UTC) — backfills closes, writes a
- * quote-based provisional close when the historical candle lags, then retries
- * so provisional rows reconcile to final history data.
+ * CRON `10 4 * * *`, `10 5 * * *`, `15 12 * * *`, `15 22 * * *` (UTC) —
+ * backfills closes, writes quote-based provisional prices when historical
+ * candles lag, then retries so provisional rows reconcile to final history data.
  *
  * Source: Yahoo by default, or Schwab Market Data when MARKET_DATA_PROVIDER=schwab.
  * Browser can't call upstream providers directly; this Worker is the only proxy.
@@ -293,7 +293,7 @@ async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<R
     // Fire-and-forget snapshot to Supabase so anonymous /share/[token] pages
     // can compute return_pct without needing direct Yahoo access.
     if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY && providerQuotes.length > 0) {
-      ctx.waitUntil(upsertSnapshots(env, providerQuotes).catch((e) => console.warn('snapshot upsert failed:', e)));
+      ctx.waitUntil(syncQuoteSideEffects(env, providerQuotes).catch((e) => console.warn('[quote] side-effect sync failed:', e)));
     }
   }
 
@@ -494,6 +494,17 @@ async function upsertSnapshots(env: Env, quotes: QuoteOut[]): Promise<void> {
   if (!r.ok) {
     throw new Error(`supabase upsert ${r.status}: ${await r.text()}`);
   }
+}
+
+async function syncQuoteSideEffects(env: Env, quotes: QuoteOut[]): Promise<void> {
+  await upsertSnapshots(env, quotes);
+  const rows = await upsertProvisionalDailyPrices(env, provisionalTradingDateForQuotes(), quotes);
+  if (rows > 0) await refreshDuePerformanceCaches(env);
+}
+
+function provisionalTradingDateForQuotes(now = new Date()): string {
+  const today = isoDateInNewYork(now);
+  return isNyseTradingDay(today) ? today : lastCompletedNyseTradingDate(now);
 }
 
 async function handleChart(url: URL, env: Env): Promise<Response> {
@@ -1060,7 +1071,7 @@ export function provisionalDailyPriceRows(
       ticker: q.ticker,
       trade_date: tradingDate,
       close: q.price,
-      adjusted_close: null,
+      adjusted_close: q.price,
       source: `${q.source}-quote-provisional`,
       as_of_timestamp: q.asOf,
       is_provisional: true,
@@ -1069,14 +1080,15 @@ export function provisionalDailyPriceRows(
   });
 }
 
-export async function upsertProvisionalDailyPrices(env: Env, tradingDate: string, quotes: QuoteOut[]): Promise<void> {
+export async function upsertProvisionalDailyPrices(env: Env, tradingDate: string, quotes: QuoteOut[]): Promise<number> {
   const rows = provisionalDailyPriceRows(tradingDate, quotes);
   if (rows.length === 0) {
     console.warn(`[cron] no close-eligible provisional quotes for ${tradingDate}`);
-    return;
+    return 0;
   }
   await upsertDailyPriceRows(env, rows);
   console.log(`[cron] upserted ${rows.length} provisional close rows for ${tradingDate}`);
+  return rows.length;
 }
 
 async function upsertDailyPriceRows(env: Env, rows: Array<Record<string, unknown>>): Promise<void> {

@@ -88,8 +88,7 @@ export function isQuoteEligibleForProvisionalClose(asOf: string | undefined, tra
   if (!Number.isFinite(timestamp.getTime())) return false;
   const parts = newYorkParts(timestamp);
   const quoteDate = `${parts.year}-${parts.month}-${parts.day}`;
-  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  return quoteDate === tradingDate && minutes >= 16 * 60;
+  return quoteDate === tradingDate;
 }
 
 function newYorkParts(d: Date): Record<'year' | 'month' | 'day' | 'hour' | 'minute', string> {

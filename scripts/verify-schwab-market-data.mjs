@@ -452,6 +452,8 @@ try {
     const target = String(url);
     if (target.includes('/rest/v1/tracked_symbols')) return new Response('', { status: 200 });
     if (target.includes('/rest/v1/quote_snapshots') && init.method === 'POST') return new Response('', { status: 200 });
+    if (target.includes('/rest/v1/rpc/upsert_daily_prices')) return new Response('', { status: 200 });
+    if (target.includes('/rest/v1/rpc/refresh_due_performance_caches')) return jsonResponse({ ok: true });
     if (target.includes('/rest/v1/quote_snapshots')) {
       return jsonResponse([{
         ticker: 'VOO',
@@ -518,6 +520,8 @@ try {
     const target = String(url);
     if (target.includes('/rest/v1/tracked_symbols')) return new Response('', { status: 200 });
     if (target.includes('/rest/v1/quote_snapshots') && init.method === 'POST') return new Response('', { status: 200 });
+    if (target.includes('/rest/v1/rpc/upsert_daily_prices')) return new Response('', { status: 200 });
+    if (target.includes('/rest/v1/rpc/refresh_due_performance_caches')) return jsonResponse({ ok: true });
     if (target.includes('/rest/v1/quote_snapshots')) {
       return jsonResponse([{
         ticker: 'VOO',
@@ -585,13 +589,22 @@ try {
       ticker: 'SPY',
       trade_date: '2026-05-29',
       close: 755.76,
-      adjusted_close: null,
+      adjusted_close: 755.76,
       source: 'schwab-quote-provisional',
       as_of_timestamp: '2026-05-29T20:00:00.000Z',
       is_provisional: true,
       updated_at: '2026-05-30T02:54:21.600Z',
+    }, {
+      ticker: 'VOO',
+      trade_date: '2026-05-29',
+      close: 695.07,
+      adjusted_close: 695.07,
+      source: 'schwab-quote-provisional',
+      as_of_timestamp: '2026-05-29T19:59:59.000Z',
+      is_provisional: true,
+      updated_at: '2026-05-30T02:54:21.600Z',
     }],
-    'only close-eligible New York quotes become provisional daily prices',
+    'same-day New York quotes become provisional daily prices',
   );
 
   const calls = [];

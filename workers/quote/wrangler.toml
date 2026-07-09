@@ -2,10 +2,11 @@ name = "dca-quote"
 main = "src/index.ts"
 compatibility_date = "2025-12-01"
 
-# Daily price sync — fires UTC 22:15 after close and UTC 12:15 as a
-# next-morning retry. Daily retries reconcile Friday provisional rows on Saturday.
+# Daily price sync — fires near New York midnight in both daylight/standard
+# time, then retries UTC 12:15 and after close UTC 22:15. Retries reconcile
+# provisional rows once the provider's final daily candles are available.
 [triggers]
-crons = ["15 22 * * *", "15 12 * * *"]
+crons = ["10 4 * * *", "10 5 * * *", "15 12 * * *", "15 22 * * *"]
 
 # Cache responses across requests (1 min for /api/quote, 1 hour for /api/chart, 1 hour for /api/history).
 [[kv_namespaces]]

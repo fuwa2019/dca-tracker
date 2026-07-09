@@ -90,7 +90,7 @@ export function useDashboardModel(): DashboardModel {
   });
 
   const portfolioHistory = usePortfolioHistory(selectedBenchmark);
-  const history: HistoryPoint[] = useMemo(() => {
+  const rawHistory: HistoryPoint[] = useMemo(() => {
     const rows = portfolioHistory.data?.series ?? [];
     return rows.map((p) => ({
       date: p.date,
@@ -136,6 +136,11 @@ export function useDashboardModel(): DashboardModel {
       realizedPL,
     };
   }, [positions, quoteByTicker, totalInvested, cash, costBasisMode]);
+
+  const history = useMemo(
+    () => hydrateDisplayNav(rawHistory, aggregates.nav),
+    [rawHistory, aggregates.nav],
+  );
 
   const prevNav = aggregates.nav - aggregates.dayPL;
   const dayChangePct = prevNav > 0 ? aggregates.dayPL / prevNav : 0;
@@ -192,4 +197,23 @@ export function useDashboardModel(): DashboardModel {
     excessVsBenchmark,
     isEmpty,
   };
+}
+
+function hydrateDisplayNav(history: HistoryPoint[], currentNav: number): HistoryPoint[] {
+  if (history.length === 0 || !(currentNav > 0)) return history;
+  if (history.some((point) => point.navUser > 0)) return history;
+  const last = history[history.length - 1];
+  const lastGrowth = 1 + last.returnPctUser;
+  const baseNav = Number.isFinite(lastGrowth) && lastGrowth > 0
+    ? currentNav / lastGrowth
+    : currentNav;
+  return history.map((point) => {
+    const growth = 1 + point.returnPctUser;
+    const navUser = Number.isFinite(growth) && growth > 0 ? baseNav * growth : 0;
+    return {
+      ...point,
+      navUser,
+      pnlUser: navUser - point.invested,
+    };
+  });
 }

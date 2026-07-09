@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 const migration = readFileSync(new URL('../supabase/migrations/0031_tracked_symbols_registry.sql', import.meta.url), 'utf8');
 const universeMigration = readFileSync(new URL('../supabase/migrations/0034_price_universe_required_coverage.sql', import.meta.url), 'utf8');
 const readthroughMigration = readFileSync(new URL('../supabase/migrations/0038_daily_price_readthrough.sql', import.meta.url), 'utf8');
+const repairMigration = readFileSync(new URL('../supabase/migrations/0040_repair_adjusted_backfill_and_closed_hiding.sql', import.meta.url), 'utf8');
 const health = readFileSync(new URL('../src/app/data-health.tsx', import.meta.url), 'utf8');
 const dashboard = readFileSync(new URL('../src/app/dashboard/model.ts', import.meta.url), 'utf8');
 const tracked = readFileSync(new URL('../src/lib/trackedSymbols.ts', import.meta.url), 'utf8');
@@ -69,6 +70,12 @@ assert.match(readthroughMigration, /grant execute on function public\.daily_pric
 assert.match(readthroughMigration, /create or replace function public\.daily_price_missing_ranges/, 'daily_price_missing_ranges RPC exists');
 assert.match(readthroughMigration, /grant execute on function public\.daily_price_missing_ranges\(jsonb, text\) to service_role/, 'daily_price_missing_ranges is service-role only');
 assert.match(readthroughMigration, /p_calendar_symbol text default 'SPY'/, 'missing range RPC accepts a calendar symbol');
+assert.match(repairMigration, /create or replace function public\.hide_closed_tracked_symbol/, 'closed transaction-derived symbols can be hidden through an RPC');
+assert.match(repairMigration, /coalesce\(ts\.enabled, true\)/, 'closed symbols respect tracked_symbols.enabled when deriving price universe');
+assert.match(repairMigration, /ranked\.current_position = 'closed'[\s\S]*coalesce\(ranked\.required_end, calendar_end\.required_end\)/, 'closed symbols only require prices through the closing trade date');
+assert.match(repairMigration, /coalesce\(dp\.adjusted_close, 0\) <= 0/, 'missing adjusted_close rows are refetched');
+assert.match(repairMigration, /coalesce\(dp\.is_provisional, false\)/, 'provisional daily price rows are refetched until final candles replace them');
+assert.match(health, /supabase\.rpc\('hide_closed_tracked_symbol'/, 'health page hides closed symbols through the RPC instead of deleting the registry row');
 
 assert.match(quote, /cursor\?: string \| number \| null/, 'frontend history client accepts cursor');
 assert.match(quote, /calendarSymbol\?: string \| null/, 'frontend history client accepts calendar symbol');

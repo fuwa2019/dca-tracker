@@ -169,7 +169,10 @@ export function DataHealthPage() {
         setDeletedLocalClosedSymbols((items) => items.includes(ticker) ? items : [...items, ticker]);
         return;
       }
-      const { error } = await supabase.from('tracked_symbols').delete().eq('symbol', ticker);
+      const { error } = await supabase.rpc('hide_closed_tracked_symbol', {
+        p_symbol: ticker,
+        p_benchmark: selectedBenchmark,
+      });
       if (error) throw error;
     },
     onSuccess: async () => {
