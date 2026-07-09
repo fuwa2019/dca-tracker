@@ -2,11 +2,11 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, YAxis, Tooltip } from 'recharts';
-import { ArrowLeftRight, Plus, Activity, Briefcase, TrendingUp } from 'lucide-react';
+import { Plus, Activity, Briefcase, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { HistoryPoint } from '@/lib/calc/history';
-import { signedPct, changeColor } from '@/lib/format';
+import { signedPct, changeColor, usd } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 const SPARK_POINTS = 220;
@@ -34,13 +34,26 @@ export function EquitySpark({
   colorVar = 'var(--brand)',
   height = 220,
   gradientId = 'spark-fill',
+  mode = 'return',
 }: {
   history: HistoryPoint[];
   colorVar?: string;
   height?: number;
   gradientId?: string;
+  mode?: 'return' | 'value';
 }) {
-  const rows = useSparkRows(history);
+  const rows = useMemo(() => {
+    const source = mode === 'return'
+      ? history.map((p) => ({ date: p.date, value: p.returnPctUser * 100 }))
+      : history.map((p) => ({ date: p.date, value: p.navUser }));
+    if (source.length === 0) return [] as { date: string; value: number }[];
+    const step = Math.max(1, Math.floor(source.length / SPARK_POINTS));
+    const out: { date: string; value: number }[] = [];
+    for (let i = 0; i < source.length; i += step) out.push(source[i]);
+    const last = source[source.length - 1];
+    if (out[out.length - 1]?.date !== last.date) out.push(last);
+    return out;
+  }, [history, mode]);
   if (rows.length < 2) {
     return (
       <div
@@ -70,7 +83,7 @@ export function EquitySpark({
                 <div className="font-num rounded-lg border border-border bg-popover px-2.5 py-1.5 text-[11px] shadow">
                   <div className="text-muted-foreground">{payload[0].payload.date}</div>
                   <div className={cn('font-semibold', changeColor(payload[0].payload.value))}>
-                    {signedPct(payload[0].payload.value / 100)}
+                    {mode === 'return' ? signedPct(payload[0].payload.value / 100) : usd.format(payload[0].payload.value)}
                   </div>
                 </div>
               ) : null
@@ -97,12 +110,11 @@ export { Kicker } from '@/components/Kicker';
 export function QuickActions({ accentClass }: { accentClass?: string }) {
   const actions = [
     { to: '/transactions', label: '添加交易', short: '交易', icon: Plus },
-    { to: '/cashflows', label: '记一笔入金', short: '入金', icon: ArrowLeftRight },
     { to: '/health', label: '数据健康', short: '健康', icon: Activity },
   ];
   return (
     <Card className="p-3">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {actions.map(({ to, label, short, icon: Icon }) => (
           <Button key={to} asChild variant="ghost" className="h-12 justify-center sm:justify-start text-xs sm:text-sm">
             <Link to={to} className="whitespace-nowrap">
@@ -131,15 +143,10 @@ export function EmptyDashboard() {
       <div className="text-center space-y-1">
         <h2 className="text-lg font-semibold">还没有任何数据</h2>
         <p className="max-w-md text-sm text-muted-foreground">
-          先录入一笔入金（CNY → USD），再录一笔买入交易，业绩曲线和持仓就会自动出现。
+          先录入一笔买入交易，业绩曲线和持仓就会自动出现。
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button asChild size="sm">
-          <Link to="/cashflows">
-            <ArrowLeftRight className="h-3.5 w-3.5" /> 添加入金
-          </Link>
-        </Button>
         <Button asChild size="sm" variant="outline">
           <Link to="/transactions">
             <Plus className="h-3.5 w-3.5" /> 添加交易

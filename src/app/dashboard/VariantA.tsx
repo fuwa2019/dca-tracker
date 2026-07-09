@@ -1,31 +1,51 @@
 import { Link } from 'react-router-dom';
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowUpRight, Plus, Briefcase, Info, Wifi } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Briefcase,
+  Database,
+  Info,
+  LineChart,
+  Plus,
+  TrendingDown,
+  TrendingUp,
+  Wifi,
+  type LucideIcon,
+} from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { HoldingsList } from '@/components/HoldingsList';
 import { TargetProgressRing } from '@/components/TargetProgressRing';
 import { AnimatedNumber } from '@/components/AnimatedNumber';
+import { TxnForm } from '@/components/TxnForm';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { usd, usd0, signedUsd, signedPct, pct as fmtPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { unrealizedPL } from '@/lib/calc/position';
-import { computeLookThrough, type EtfHoldingsData, type MonitorLineResult } from '@/lib/calc/lookThrough';
-import { MONITOR_LINES } from '@/lib/calc/exposureConfig';
+import { computeLookThrough, type EtfHoldingsData, type LookThroughStock } from '@/lib/calc/lookThrough';
+import { LOCAL_MODE } from '@/lib/localMode';
+import { availableRanges, sliceByRange, type RangeKey } from '@/lib/calc/history';
 import etfHoldings from '@/data/etf-holdings.json';
 import type { DashboardModel } from './model';
-import { EmptyDashboard, EquitySpark, Kicker, QuickActions } from './shared';
+import { EmptyDashboard, EquitySpark, Kicker } from './shared';
 
 const ease = [0.16, 1, 0.3, 1] as const;
 const HOLDINGS = etfHoldings as unknown as EtfHoldingsData;
-// 风险色避开盈亏绿/红:ok=蓝(night)、warn=琥珀、over=红。
-const STATUS_VAR: Record<MonitorLineResult['status'], string> = {
-  ok: 'var(--night)',
-  warn: 'var(--warn)',
-  over: 'var(--loss)',
+
+const SECTOR_BY_TICKER: Record<string, string> = {
+  NVDA: 'AI 芯片',
+  SMH: '半导体 ETF',
+  AAPL: '大型科技',
+  MSFT: '大型科技',
+  QQQ: '纳指 ETF',
+  SGOV: '现金 / 国债',
 };
+
+const DISTRIBUTION_COLORS = ['#3b82f6', '#ef476f', '#22c55e', '#f97316', '#06b6d4', '#8b5cf6'];
 
 export function DashboardVariantA({ model }: { model: DashboardModel }) {
   const {
@@ -34,17 +54,46 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
     target, annualRet, monthlyDca, monthsToTarget, xirr, portfolioCumulative,
     excessVsBenchmark, isEmpty,
   } = model;
+  const [chartMode, setChartMode] = useState<'value' | 'return'>('value');
+  const [chartRange, setChartRange] = useState<RangeKey>('ALL');
 
-  if (isEmpty) {
-    return (
-      <div className="container max-w-[1180px] px-4 py-6 sm:px-6">
-        <EmptyDashboard />
-      </div>
-    );
-  }
-
-  const range = last ? `${history[0].date} — ${last.date}` : '—';
-
+  const dateRange = last ? `${history[0].date} — ${last.date}` : '—';
+  const ranges = useMemo(() => availableRanges(history), [history]);
+  const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');
+  const chartHistory = useMemo(() => sliceByRange(history, effectiveRange), [history, effectiveRange]);
+  const chartModeHint = chartMode === 'value'
+    ? '账户美元规模：买入会抬高曲线，适合看资金滚大。'
+    : '组合表现：剔除买入影响，适合和 SPY 比较。';
+  const movers = useMemo(() => {
+    const rows = positions
+      .map((p) => {
+        const q = quoteByTicker.get(p.ticker);
+        const changePct = q?.changePct ?? null;
+        const changeUsd = q?.change != null ? p.shares * q.change : null;
+        return { ticker: p.ticker, changePct, changeUsd };
+      })
+      .filter((r) => r.changePct !== null && Number.isFinite(r.changePct));
+    return {
+      winners: rows.filter((r) => (r.changePct ?? 0) > 0).sort((a, b) => (b.changePct ?? 0) - (a.changePct ?? 0)).slice(0, 3),
+      losers: rows.filter((r) => (r.changePct ?? 0) < 0).sort((a, b) => (a.changePct ?? 0) - (b.changePct ?? 0)).slice(0, 3),
+    };
+  }, [positions, quoteByTicker]);
+  const distribution = useMemo(() => {
+    const etfs = new Set(Object.keys(HOLDINGS.etfs));
+    const cashLike = new Set((HOLDINGS._meta?.cashLike ?? []).map((t) => t.toUpperCase()));
+    const bySector = new Map<string, number>();
+    for (const p of positions) {
+      const q = quoteByTicker.get(p.ticker);
+      const { marketValue } = unrealizedPL(p, q?.price ?? null, costBasisMode);
+      const fallback = cashLike.has(p.ticker) ? '现金 / 国债' : etfs.has(p.ticker) ? 'ETF / Fund' : '股票';
+      const label = SECTOR_BY_TICKER[p.ticker] ?? fallback;
+      bySector.set(label, (bySector.get(label) ?? 0) + marketValue);
+    }
+    return [...bySector.entries()]
+      .map(([label, value], index) => ({ label, value, color: DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length] }))
+      .filter((r) => r.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [positions, quoteByTicker, costBasisMode]);
   const lookThrough = useMemo(
     () =>
       computeLookThrough({
@@ -55,10 +104,19 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
         }),
         uninvestedCash: aggregates.cash,
         data: HOLDINGS,
-        lines: MONITOR_LINES,
+        lines: [],
       }),
     [positions, quoteByTicker, costBasisMode, aggregates.cash],
   );
+  const lookThroughTop = useMemo(() => lookThrough.stocks.slice(0, 6), [lookThrough.stocks]);
+
+  if (isEmpty) {
+    return (
+      <div className="container max-w-[1180px] px-4 py-6 sm:px-6">
+        <EmptyDashboard />
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -73,35 +131,45 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
         className="flex items-end justify-between gap-4 pb-4"
       >
         <Kicker index="01" en="Portfolio Report" zh="组合总览" />
-        <div className="text-right">
+        <div className="flex flex-col items-end gap-2 text-right">
           <div className="kicker">Period</div>
-          <div className="font-num text-xs text-muted-foreground">{range}</div>
+          <div className="font-num text-xs text-muted-foreground">{dateRange}</div>
+          <DashboardActionBar cacheDirty={cacheDirty} quotesStale={quotesNone || quotesPartial || quotesError} />
         </div>
       </motion.header>
+
+      {LOCAL_MODE && (
+        <motion.div
+          variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease } } }}
+          className="mb-5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-xs text-muted-foreground"
+        >
+          <span className="font-medium text-brand">本地 Debug 版</span>
+          <span className="ml-2">免邮箱登录，使用内置 10 年 QQQ 派生 demo 数据；交易只写入浏览器内存，不连接 Supabase。</span>
+        </motion.div>
+      )}
 
       <div className="rule-top" />
 
       {/* Hero: oversized serif NAV + KPI column */}
       <motion.section
         variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
-        className="grid gap-x-10 gap-y-8 py-8 lg:grid-cols-[1.7fr_1fr]"
+        className="grid gap-x-10 gap-y-6 py-6 lg:grid-cols-[1.45fr_1fr]"
       >
         <div>
           <div className="flex items-center gap-2 kicker">
-            净值 · Net Asset Value
+            持仓市值 · Portfolio Value
             {cacheDirty && <StatusBadge tone="warn" dot>缓存待刷新</StatusBadge>}
           </div>
           <div className="font-serif-fig mt-2 break-all text-[clamp(2.75rem,8vw,6rem)] font-semibold leading-[0.92] text-foreground">
-            <AnimatedNumber value={aggregates.nav} format={(v) => usd0.format(v)} duration={1.1} />
+            <AnimatedNumber value={aggregates.stockMv} format={(v) => usd0.format(v)} duration={1.1} />
           </div>
           <div className="font-num mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-[13px] text-muted-foreground">
-            <span>持仓 <span className="text-foreground">{usd.format(aggregates.stockMv)}</span></span>
-            <span>现金 <span className="text-foreground">{usd.format(aggregates.cash)}</span></span>
+            <span>资产 <span className="text-foreground">{positions.length} 个</span></span>
             <span>基准 <span className="text-foreground">{selectedBenchmark}</span></span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-1">
+        <div className="grid grid-cols-1 gap-px self-start overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2">
           <HeroKpi
             label="今日盈亏 · Today"
             value={signedUsd(aggregates.dayPL)}
@@ -109,7 +177,19 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
             tone={changeColor(aggregates.dayPL)}
           />
           <HeroKpi
-            label="累计盈亏 · Total P/L"
+            label="未实现盈亏 · Unrealized"
+            value={signedUsd(aggregates.unrealizedPL)}
+            sub={Number.isFinite(aggregates.unrealizedPL / Math.max(aggregates.costBasis, 1e-9)) ? signedPct(aggregates.unrealizedPL / Math.max(aggregates.costBasis, 1e-9)) : '—'}
+            tone={changeColor(aggregates.unrealizedPL)}
+          />
+          <HeroKpi
+            label="已实现盈亏 · Realized"
+            value={signedUsd(aggregates.realizedPL)}
+            sub="已卖出部分"
+            tone={changeColor(aggregates.realizedPL)}
+          />
+          <HeroKpi
+            label="总收益 · Total P/L"
             value={signedUsd(aggregates.totalPL)}
             sub={Number.isFinite(totalReturnPct) ? `简单总回报 ${signedPct(totalReturnPct)}` : '—'}
             tone={changeColor(aggregates.totalPL)}
@@ -170,11 +250,35 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
         <div className="lg:col-span-2">
           <div className="mb-3 flex items-end justify-between">
             <Kicker index="02" en="Performance" zh="业绩曲线" />
-            <Button asChild variant="ghost" size="sm" className="shrink-0 text-brand">
-              <Link to="/performance">查看完整 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
-            </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <SegmentedControl
+                value={chartMode}
+                onChange={(v) => setChartMode(v as 'value' | 'return')}
+                options={[
+                  { value: 'value', label: '价值' },
+                  { value: 'return', label: '表现' },
+                ]}
+                size="sm"
+                name="dashboard-chart-mode"
+                ariaLabel="选择首页曲线模式"
+              />
+              {ranges.length > 1 && (
+                <SegmentedControl
+                  value={effectiveRange}
+                  onChange={(v) => setChartRange(v as RangeKey)}
+                  options={ranges.map((r) => ({ value: r, label: r === 'ALL' ? 'All' : r }))}
+                  size="sm"
+                  name="dashboard-chart-range"
+                  ariaLabel="选择首页曲线时间段"
+                />
+              )}
+              <Button asChild variant="ghost" size="sm" className="shrink-0 text-brand">
+                <Link to="/performance">查看完整业绩 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
+              </Button>
+            </div>
           </div>
-          <EquitySpark history={history} colorVar="var(--brand)" height={260} gradientId="va-spark" />
+          <EquitySpark history={chartHistory} colorVar="var(--brand)" height={260} gradientId="va-spark" mode={chartMode} />
+          <div className="font-num mt-1 text-[11px] text-muted-foreground">{chartModeHint}</div>
         </div>
         <div>
           <div className="mb-3">
@@ -193,6 +297,15 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
             </div>
           </Card>
         </div>
+      </motion.section>
+
+      <motion.section
+        variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
+        className="grid gap-6 pb-8 lg:grid-cols-3"
+      >
+        <DailyMovers title="每日赢家" icon={TrendingUp} rows={movers.winners} />
+        <DailyMovers title="每日输家" icon={TrendingDown} rows={movers.losers} />
+        <DistributionPanel rows={distribution} total={aggregates.stockMv} assetCount={positions.length} />
       </motion.section>
 
       {/* Holdings */}
@@ -222,66 +335,226 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
         )}
       </motion.section>
 
-      {/* Look-through monitoring lines */}
       <motion.section
         variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
         className="pt-8"
       >
         <div className="mb-3 flex items-end justify-between">
-          <Kicker index="05" en="Look-through" zh="穿透敞口监控" />
+          <Kicker index="05" en="Look-through" zh="穿透敞口" />
           <Button asChild variant="ghost" size="sm" className="shrink-0 text-brand">
             <Link to="/exposure">展开穿透 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
           </Button>
         </div>
-        <Card className="grid grid-cols-1 gap-px overflow-hidden bg-border p-0 sm:grid-cols-2">
-          {lookThrough.lines.map((line) => (
-            <MonitorMini key={line.config.id} line={line} />
-          ))}
-        </Card>
+        <LookThroughPanel rows={lookThroughTop} totalNav={lookThrough.totalNav} unclassifiedValue={lookThrough.unclassifiedValue} />
       </motion.section>
 
-      <div className="pt-8">
-        <QuickActions accentClass="text-brand" />
-      </div>
     </motion.div>
   );
 }
 
-function MonitorMini({ line }: { line: MonitorLineResult }) {
-  const colorVar = STATUS_VAR[line.status];
-  const scaleMax = Math.max(line.config.ceiling * 1.6, line.pct * 1.08, 0.0001);
-  const valuePct = Math.min(100, (line.pct / scaleMax) * 100);
-  const ceilPct = Math.min(100, (line.config.ceiling / scaleMax) * 100);
+function DashboardActionBar({ cacheDirty, quotesStale }: { cacheDirty: boolean; quotesStale: boolean }) {
+  const [tradeOpen, setTradeOpen] = useState(false);
+  const [tradeSide, setTradeSide] = useState<'buy' | 'sell'>('buy');
   return (
-    <div className="bg-surface px-5 py-4">
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="kicker">{line.config.labelEn}</div>
-        <div className="font-serif-fig text-2xl font-semibold leading-none" style={{ color: `hsl(${colorVar})` }}>
-          {fmtPct(line.pct, 1)}
+    <div className="flex flex-wrap justify-end gap-2">
+      <Dialog open={tradeOpen} onOpenChange={setTradeOpen}>
+        <DialogTrigger asChild>
+          <Button
+            size="sm"
+            onClick={() => setTradeSide('buy')}
+            className="shadow-none"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            添加交易
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{tradeSide === 'sell' ? '新增卖出' : '新增买入'}</DialogTitle>
+            <DialogDescription>
+              {LOCAL_MODE ? '本地 Debug 模式只写入浏览器内存。' : '录入买入或卖出后会刷新持仓和业绩缓存。'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant={tradeSide === 'buy' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setTradeSide('buy')}
+            >
+              买入
+            </Button>
+            <Button
+              type="button"
+              variant={tradeSide === 'sell' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setTradeSide('sell')}
+            >
+              卖出
+            </Button>
+          </div>
+          <TxnForm defaultSide={tradeSide} defaultTicker="QQQ" onDone={() => setTradeOpen(false)} />
+        </DialogContent>
+      </Dialog>
+
+      <Button asChild variant={cacheDirty || quotesStale ? 'default' : 'outline'} size="sm">
+        <Link to="/health">
+          <Database className="h-3.5 w-3.5" />
+          {cacheDirty ? '刷新缓存' : quotesStale ? '补齐价格' : '数据维护'}
+        </Link>
+      </Button>
+    </div>
+  );
+}
+
+function DailyMovers({
+  title,
+  icon: Icon,
+  rows,
+}: {
+  title: string;
+  icon: LucideIcon;
+  rows: Array<{ ticker: string; changePct: number | null; changeUsd: number | null }>;
+}) {
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Icon className="h-4 w-4 text-brand" />
+          {title}
+        </div>
+        <div className="text-[10px] text-muted-foreground">今日报价</div>
+      </div>
+      {rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-xs text-muted-foreground">
+          等待本地或实时行情
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {rows.map((row) => (
+            <div key={`${title}-${row.ticker}`} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+              <div className="font-semibold">{row.ticker}</div>
+              <div className="text-right">
+                <div className={cn('font-num text-sm font-semibold', changeColor(row.changePct))}>
+                  {row.changePct !== null ? signedPct(row.changePct) : '—'}
+                </div>
+                <div className={cn('font-num text-[10px]', changeColor(row.changeUsd))}>
+                  {row.changeUsd !== null ? signedUsd(row.changeUsd) : '—'}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function DistributionPanel({
+  rows,
+  total,
+  assetCount,
+}: {
+  rows: Array<{ label: string; value: number; color: string }>;
+  total: number;
+  assetCount: number;
+}) {
+  let cursor = 0;
+  const stops = rows.map((row) => {
+    const pct = total > 0 ? row.value / total : 0;
+    const start = cursor;
+    cursor += pct * 100;
+    return `${row.color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+  });
+  const donutBackground = stops.length > 0 ? `conic-gradient(${stops.join(', ')})` : 'conic-gradient(#e5e7eb 0% 100%)';
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <LineChart className="h-4 w-4 text-brand" />
+          组合分布
+        </div>
+        <div className="text-[10px] text-muted-foreground">板块</div>
+      </div>
+      <div className="grid items-center gap-4 sm:grid-cols-[132px_1fr]">
+        <div
+          className="relative mx-auto h-32 w-32 rounded-full"
+          style={{ background: donutBackground }}
+          aria-label="组合分布环形图"
+        >
+          <div className="absolute inset-[27px] flex flex-col items-center justify-center rounded-full bg-surface">
+            <div className="font-serif-fig text-2xl font-semibold">{assetCount}</div>
+            <div className="text-[10px] text-muted-foreground">总资产</div>
+          </div>
+        </div>
+        <div className="space-y-2">
+        {rows.map((row) => {
+          const weight = total > 0 ? row.value / total : 0;
+          return (
+            <div key={row.label} className="min-w-0">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
+                  <span className="truncate">{row.label}</span>
+                </span>
+                <span className="font-num font-medium">{fmtPct(weight, 1)}</span>
+              </div>
+              <div className="font-num ml-3.5 mt-0.5 text-[10px] text-muted-foreground">{usd.format(row.value)}</div>
+            </div>
+          );
+        })}
         </div>
       </div>
-      <div className="mt-1 text-[13px] font-medium text-muted-foreground">
-        {line.config.label} · {line.config.basis === 'equity' ? '占股票' : '占净值'}
+    </Card>
+  );
+}
+
+function LookThroughPanel({
+  rows,
+  totalNav,
+  unclassifiedValue,
+}: {
+  rows: LookThroughStock[];
+  totalNav: number;
+  unclassifiedValue: number;
+}) {
+  return (
+    <Card className="p-4">
+      {rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+          暂无可穿透的持仓
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {rows.map((row) => (
+            <div key={row.ticker} className="rounded-lg border border-border bg-surface-elevated px-3 py-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <div>
+                  <div className="kicker">{row.sources[0]?.via === 'direct' ? 'DIRECT' : `VIA ${row.sources[0]?.via}`}</div>
+                  <div className="mt-1 text-sm font-semibold">{row.ticker}</div>
+                </div>
+                <div className="font-serif-fig text-2xl font-semibold text-brand">{fmtPct(row.weightNav, 1)}</div>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface">
+                <div
+                  className="h-full rounded-full bg-brand"
+                  style={{ width: `${Math.min(100, Math.max(2, row.weightNav * 100))}%` }}
+                />
+              </div>
+              <div className="font-num mt-1.5 flex justify-between text-[10px] text-muted-foreground">
+                <span>{usd.format(row.value)}</span>
+                <span>占净值</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="font-num mt-3 flex flex-wrap justify-between gap-2 text-[10px] text-muted-foreground">
+        <span>总净值 {usd.format(totalNav)}</span>
+        {unclassifiedValue > 0 && <span>未穿透长尾 {usd.format(unclassifiedValue)}</span>}
       </div>
-      <div className="relative mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-elevated">
-        <motion.div
-          className="h-full rounded-full"
-          style={{ background: `hsl(${colorVar})` }}
-          initial={{ width: 0 }}
-          animate={{ width: `${valuePct}%` }}
-          transition={{ duration: 0.9, ease }}
-        />
-        <span
-          aria-hidden
-          className="absolute top-1/2 h-3 w-[2px] -translate-y-1/2 bg-foreground"
-          style={{ left: `${ceilPct}%` }}
-        />
-      </div>
-      <div className="font-num mt-1.5 flex justify-between text-[10px] text-muted-foreground">
-        <span>当前</span>
-        <span>上限 {fmtPct(line.config.ceiling, 0)}</span>
-      </div>
-    </div>
+    </Card>
   );
 }
 

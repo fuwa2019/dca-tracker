@@ -13,6 +13,7 @@ import { useCashflows, useExchangeLoss } from '@/hooks/usePortfolio';
 import { supabase } from '@/lib/supabase';
 import { cny, usd, signedUsd, signedPct, changeColor, shortDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { LOCAL_MODE } from '@/lib/localMode';
 import type { Database } from '@/lib/database.types';
 
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
@@ -27,10 +28,15 @@ export function CashflowsPage() {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
+      if (LOCAL_MODE) {
+        qc.setQueryData<CashRow[]>(['cashflows'], (items = []) => items.filter((row) => row.id !== id));
+        return;
+      }
       const { error } = await supabase.from('cashflows').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
+      if (LOCAL_MODE) return;
       qc.invalidateQueries({ queryKey: ['cashflows'] });
       qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       qc.invalidateQueries({ queryKey: ['performance_cache_status'] });

@@ -8,6 +8,7 @@ import {
   KeyRound,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   TrendingUp,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Kicker } from '@/components/Kicker';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
-import { useCashflows, useSettings, useTransactions } from '@/hooks/usePortfolio';
+import { useSettings, useTransactions } from '@/hooks/usePortfolio';
 import { useDemoDcaData } from '@/hooks/useDemoDcaData';
 import {
   usePerformanceCacheStatus,
@@ -28,6 +29,8 @@ import { backfillTrackedTargets, type BackfillRunProgress } from '@/lib/trackedS
 import { isoDateInNewYork } from '@/lib/nyse-calendar';
 import { getSelectedBenchmark } from '@/lib/settings';
 import { cn } from '@/lib/utils';
+import { LOCAL_MODE } from '@/lib/localMode';
+import { LOCAL_BENCHMARK, localPortfolioHistory, localPriceMap, localShareLinks } from '@/lib/localData';
 import type { Database as Db } from '@/lib/database.types';
 
 type ShareRow = Db['public']['Tables']['share_links']['Row'];
@@ -65,9 +68,9 @@ type Coverage = {
 export function DataHealthPage() {
   const qc = useQueryClient();
   const { data: txns = [], isLoading: txnsLoading } = useTransactions();
-  const { data: cashflows = [], isLoading: cashLoading } = useCashflows();
   const { data: settings } = useSettings();
   const selectedBenchmark = useMemo(() => getSelectedBenchmark(settings), [settings]);
+  const [deletedLocalClosedSymbols, setDeletedLocalClosedSymbols] = useState<string[]>([]);
 
   const earliestDate = useMemo(() => {
     const tradeDates = txns.map((t) => t.trade_date);
@@ -82,16 +85,19 @@ export function DataHealthPage() {
   const priceRows = useQuery<TrackedSymbolCoverageRow[]>({
     queryKey: ['tracked_symbol_coverage', selectedBenchmark],
     queryFn: async () => {
+      if (LOCAL_MODE) return [];
       const { data, error } = await supabase.rpc('tracked_symbol_coverage', { p_benchmark: selectedBenchmark });
       if (error) throw error;
       return ((data as TrackedSymbolCoverageRpcRow[]) ?? []).map(normalizeCoverageRow);
     },
+    enabled: !LOCAL_MODE,
     staleTime: 5 * 60_000,
   });
 
   const shareLinks = useQuery<ShareRow[]>({
     queryKey: ['share_links'],
     queryFn: async () => {
+      if (LOCAL_MODE) return localShareLinks;
       const { data, error } = await supabase
         .from('share_links')
         .select('*')
@@ -102,7 +108,10 @@ export function DataHealthPage() {
     staleTime: 60_000,
   });
 
-  const coverage = useMemo(() => buildCoverage(priceRows.data ?? []), [priceRows.data]);
+  const coverage = useMemo(
+    () => LOCAL_MODE ? buildLocalCoverage(deletedLocalClosedSymbols) : buildCoverage(priceRows.data ?? []),
+    [deletedLocalClosedSymbols, priceRows.data],
+  );
   const symbols = useMemo(() => coverage.map((row) => row.ticker), [coverage]);
   const backfillTargets = useMemo(
     () => coverage
@@ -126,6 +135,7 @@ export function DataHealthPage() {
 
   const backfillPrices = useMutation({
     mutationFn: async () => {
+      if (LOCAL_MODE) return coverage.reduce((sum, row) => sum + row.points, 0);
       if (backfillTargets.length === 0) return 0;
       setBackfillProgress(null);
       const series = await backfillTrackedTargets(backfillTargets, {
@@ -153,12 +163,29 @@ export function DataHealthPage() {
     },
   });
 
+  const deleteClosedSymbol = useMutation({
+    mutationFn: async (ticker: string) => {
+      if (LOCAL_MODE) {
+        setDeletedLocalClosedSymbols((items) => items.includes(ticker) ? items : [...items, ticker]);
+        return;
+      }
+      const { error } = await supabase.from('tracked_symbols').delete().eq('symbol', ticker);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['tracked_symbol_coverage'] });
+      await qc.invalidateQueries({ queryKey: ['price_coverage'] });
+    },
+  });
+
   return (
     <div className="container max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-5">
       <header>
         <Kicker en="Data Health" zh="数据健康" />
         <p className="mt-1.5 text-xs text-muted-foreground">
-          检查价格覆盖、业绩缓存、分享安全和计算输入状态。
+          {LOCAL_MODE
+            ? '本地 Debug 模式使用内置 10 年 QQQ 数据，不连接 Supabase / Quote Worker。'
+            : '检查价格覆盖、业绩缓存、分享安全和计算输入状态。'}
         </p>
       </header>
 
@@ -168,7 +195,7 @@ export function DataHealthPage() {
           label="输入数据"
           value={hasEvents ? '可计算' : '缺数据'}
           tone={hasEvents ? 'ok' : 'bad'}
-          detail={`${txns.length} 笔交易 · ${cashflows.length} 笔资金流`}
+          detail={`${txns.length} 笔交易`}
         />
         <HealthTile
           icon={Database}
@@ -199,7 +226,9 @@ export function DataHealthPage() {
             <div>
               <CardTitle className="font-serif text-lg">运维操作</CardTitle>
               <CardDescription className="text-xs">
-                按顺序：先补价格，再刷缓存。业绩曲线使用当前基准的实际价格日，处理完成后回到「业绩」页确认曲线。
+                {LOCAL_MODE
+                  ? '本地模式下价格和缓存来自内置样本；操作按钮只演示状态，不写外部服务。'
+                  : '按顺序：先补价格，再刷缓存。业绩曲线使用当前基准的实际价格日，处理完成后回到「业绩」页确认曲线。'}
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -207,7 +236,7 @@ export function DataHealthPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => backfillPrices.mutate()}
-                disabled={backfillPrices.isPending || backfillTargets.length === 0}
+                disabled={backfillPrices.isPending || (!LOCAL_MODE && backfillTargets.length === 0)}
               >
                 <RefreshCw className={cn('h-3.5 w-3.5', backfillPrices.isPending && 'animate-spin')} />
                 补齐日线价格
@@ -224,7 +253,7 @@ export function DataHealthPage() {
           </div>
           {backfillPrices.isSuccess && (
             <p className="text-xs text-gain">
-              日线价格已写入 {backfillPrices.data ?? 0} 个数据点。
+              {LOCAL_MODE ? '本地日线样本已确认完整。' : `日线价格已写入 ${backfillPrices.data ?? 0} 个数据点。`}
             </p>
           )}
           {backfillPrices.isPending && backfillProgress && (
@@ -277,52 +306,56 @@ export function DataHealthPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="font-serif text-lg">行情授权（Schwab）</CardTitle>
-              <CardDescription className="text-xs">
-                Schwab refresh token 有效期 7 天，过期后行情自动降级到 Yahoo 备用源。失效时点「重新授权」跳转 Schwab 登录，回调会写回新 token。
-              </CardDescription>
+      {LOCAL_MODE ? (
+        <LocalQuoteSourceCard />
+      ) : (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="font-serif text-lg">行情授权（Schwab）</CardTitle>
+                <CardDescription className="text-xs">
+                  Schwab refresh token 有效期 7 天，过期后行情自动降级到 Yahoo 备用源。失效时点「重新授权」跳转 Schwab 登录，回调会写回新 token。
+                </CardDescription>
+              </div>
+              <Button
+                size="sm"
+                variant={schwabAuth.data?.state === 'invalid_grant' ? 'default' : 'outline'}
+                onClick={() => reauthorize.mutate()}
+                disabled={reauthorize.isPending || schwabAuth.data?.state === 'unconfigured'}
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                {reauthorize.isPending ? '跳转中…' : '重新授权'}
+              </Button>
             </div>
-            <Button
-              size="sm"
-              variant={schwabAuth.data?.state === 'invalid_grant' ? 'default' : 'outline'}
-              onClick={() => reauthorize.mutate()}
-              disabled={reauthorize.isPending || schwabAuth.data?.state === 'unconfigured'}
-            >
-              <KeyRound className="h-3.5 w-3.5" />
-              {reauthorize.isPending ? '跳转中…' : '重新授权'}
-            </Button>
-          </div>
-          {reauthorize.isError && (
-            <p className="text-xs text-loss break-words">
-              {(reauthorize.error as Error)?.message ?? '获取授权链接失败'}
-            </p>
-          )}
-        </CardHeader>
-        <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <StatusLine
-            label="Token 状态"
-            value={schwabAuthValue(schwabAuth.isLoading, schwabAuth.data)}
-            tone={schwabAuthTone(schwabAuth.isLoading, schwabAuth.data)}
-          />
-          <StatusLine
-            label="Access token 有效期"
-            value={
-              schwabAuth.data?.state === 'ok' && schwabAuth.data.expiresIn != null
-                ? `${schwabAuth.data.expiresIn}s`
-                : '—'
-            }
-          />
-          <StatusLine
-            label="详情"
-            value={schwabAuth.data?.message ?? '无'}
-            tone={schwabAuth.data?.message ? 'warn' : 'ok'}
-          />
-        </CardContent>
-      </Card>
+            {reauthorize.isError && (
+              <p className="text-xs text-loss break-words">
+                {(reauthorize.error as Error)?.message ?? '获取授权链接失败'}
+              </p>
+            )}
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            <StatusLine
+              label="Token 状态"
+              value={schwabAuthValue(schwabAuth.isLoading, schwabAuth.data)}
+              tone={schwabAuthTone(schwabAuth.isLoading, schwabAuth.data)}
+            />
+            <StatusLine
+              label="Access token 有效期"
+              value={
+                schwabAuth.data?.state === 'ok' && schwabAuth.data.expiresIn != null
+                  ? `${schwabAuth.data.expiresIn}s`
+                  : '—'
+              }
+            />
+            <StatusLine
+              label="详情"
+              value={schwabAuth.data?.message ?? '无'}
+              tone={schwabAuth.data?.message ? 'warn' : 'ok'}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-3">
@@ -345,12 +378,13 @@ export function DataHealthPage() {
                   <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">Coverage</th>
                   <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">复权覆盖</th>
                   <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">状态</th>
+                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {coverage.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-6 text-center text-xs text-muted-foreground">
+                    <td colSpan={10} className="px-4 py-6 text-center text-xs text-muted-foreground">
                       还没有监控代码 — 录入交易后会自动开始监控。
                     </td>
                   </tr>
@@ -375,6 +409,23 @@ export function DataHealthPage() {
                           <p className="mt-1 max-w-[260px] break-words text-[11px] text-loss">{c.backfillError}</p>
                         )}
                       </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {c.currentPosition === 'closed' ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-loss"
+                            disabled={deleteClosedSymbol.isPending}
+                            onClick={() => deleteClosedSymbol.mutate(c.ticker)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            删除
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -388,7 +439,7 @@ export function DataHealthPage() {
         <CardHeader className="pb-3">
           <CardTitle className="font-serif text-lg">分享链接审计</CardTitle>
           <CardDescription className="text-xs">
-            分享页只读公开收益率曲线和持仓比例，不返回金额、现金流或交易明细。
+            分享页只读公开收益率曲线和持仓比例，不返回金额或交易明细。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -421,12 +472,31 @@ export function DataHealthPage() {
         </CardContent>
       </Card>
 
-      <DemoDataPanel />
+      {!LOCAL_MODE && <DemoDataPanel />}
 
-      {(txnsLoading || cashLoading || priceRows.isLoading || cacheStatus.isLoading) && (
+      {(txnsLoading || priceRows.isLoading || cacheStatus.isLoading) && (
         <p className="text-xs text-muted-foreground">正在读取数据健康状态…</p>
       )}
     </div>
+  );
+}
+
+function LocalQuoteSourceCard() {
+  const latest = localPortfolioHistory.series.at(-1)?.date ?? '暂无';
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="font-serif text-lg">本地行情源</CardTitle>
+        <CardDescription className="text-xs">
+          本地 Debug 版使用内置 10 年 QQQ 样本和派生股票价格，不需要登录、授权或连接 Quote Worker。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <StatusLine label="行情源状态" value="本地样本可用" tone="ok" />
+        <StatusLine label="授权逻辑" value="不需要 token" tone="ok" />
+        <StatusLine label="最新样本日期" value={latest} />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -473,6 +543,66 @@ function HealthTile({
       </div>
     </Card>
   );
+}
+
+function buildLocalCoverage(deletedClosedSymbols: string[]): Coverage[] {
+  const activeSymbols = ['SPY', 'QQQ', 'NVDA', 'AAPL', 'MSFT', 'SMH', 'SGOV'];
+  const rows = activeSymbols.map((ticker) => localCoverageRow(ticker, ticker === LOCAL_BENCHMARK ? 'benchmark' : 'active'));
+  if (!deletedClosedSymbols.includes('VOO')) {
+    rows.push({
+      ...localCoverageRow('VOO', 'closed'),
+      name: 'Vanguard S&P 500 ETF',
+      assetType: 'ETF',
+      requiredEnd: '2025-12-31',
+      priceMaxDate: '2025-12-31',
+      lastDate: '2025-12-31',
+      note: '可删除',
+    });
+  }
+  return rows;
+}
+
+function localCoverageRow(ticker: string, currentPosition: Coverage['currentPosition']): Coverage {
+  const points = localPriceMap.get(ticker) ?? localPriceMap.get(LOCAL_BENCHMARK) ?? new Map<string, number>();
+  const dates = [...points.keys()].sort();
+  const first = dates[0] ?? null;
+  const last = dates.at(-1) ?? null;
+  return {
+    ticker,
+    name: localSymbolName(ticker),
+    assetType: ticker === 'SGOV' ? 'Cash / Treasury' : ticker === 'NVDA' || ticker === 'AAPL' || ticker === 'MSFT' ? 'Stock' : 'ETF',
+    points: dates.length,
+    adjustedPoints: dates.length,
+    missingDays: 0,
+    requiredStart: first,
+    requiredEnd: last,
+    priceMinDate: first,
+    priceMaxDate: last,
+    coveragePct: 100,
+    firstDate: first,
+    lastDate: last,
+    currentPosition,
+    lastBackfillAt: localPortfolioHistory.generated_at,
+    backfillStatus: 'ok',
+    backfillError: null,
+    firstTradeDate: first,
+    status: 'ok',
+    note: '完整',
+  };
+}
+
+function localSymbolName(ticker: string) {
+  const names: Record<string, string> = {
+    QQQ: 'Invesco QQQ Trust',
+    SPY: 'SPDR S&P 500 ETF',
+    NVDA: 'NVIDIA',
+    AAPL: 'Apple',
+    MSFT: 'Microsoft',
+    SMH: 'VanEck Semiconductor ETF',
+    SGOV: 'iShares 0-3 Month Treasury Bond ETF',
+    VOO: 'Vanguard S&P 500 ETF',
+  };
+  return names[ticker] ?? ticker;
 }
 
 function schwabAuthValue(loading: boolean, status?: SchwabAuthStatus): string {

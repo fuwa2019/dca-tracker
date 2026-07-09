@@ -14,6 +14,7 @@ import { formatDefaultNumber, shouldAutoFillField } from '@/lib/formAutoFill';
 import { cn } from '@/lib/utils';
 import { addTrackedSymbol } from '@/lib/trackedSymbols';
 import { normalizeSymbol } from '@/lib/symbols';
+import { LOCAL_MODE, LOCAL_USER } from '@/lib/localMode';
 import type { Database } from '@/lib/database.types';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
@@ -21,21 +22,25 @@ type TxnRow = Database['public']['Tables']['transactions']['Row'];
 interface Props {
   initial?: TxnRow;
   onDone?: () => void;
+  defaultSide?: 'buy' | 'sell';
+  defaultTicker?: string;
+  defaultKind?: 'dca' | 'lumpsum';
 }
 
-export function TxnForm({ initial, onDone }: Props) {
+export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 'VOO', defaultKind = 'dca' }: Props) {
   const { user } = useAuth();
   const qc = useQueryClient();
   const isEdit = !!initial;
 
   const { data: allTxns = [] } = useTransactions();
   const [tradeDate, setTradeDate] = useState(initial?.trade_date ?? todayLocalIso());
-  const [ticker, setTicker] = useState(initial?.ticker ?? 'VOO');
-  const [side, setSide] = useState<'buy' | 'sell'>(initial?.side ?? 'buy');
+  const [ticker, setTicker] = useState(initial?.ticker ?? defaultTicker);
+  const [tickerTouched, setTickerTouched] = useState(false);
+  const [side, setSide] = useState<'buy' | 'sell'>(initial?.side ?? defaultSide);
   const [price, setPrice] = useState(initial ? String(initial.price) : '');
   const [priceTouched, setPriceTouched] = useState(false);
   const [shares, setShares] = useState(initial ? String(initial.shares) : '');
-  const [kind, setKind] = useState<'dca' | 'lumpsum'>(initial?.kind ?? 'dca');
+  const [kind, setKind] = useState<'dca' | 'lumpsum'>(initial?.kind ?? defaultKind);
   const [note, setNote] = useState(initial?.note ?? '');
 
   useEffect(() => {
@@ -47,9 +52,22 @@ export function TxnForm({ initial, onDone }: Props) {
       setShares(String(initial.shares));
       setKind(initial.kind);
       setNote(initial.note ?? '');
+      setTickerTouched(false);
       setPriceTouched(false);
     }
   }, [initial]);
+
+  useEffect(() => {
+    if (initial || tickerTouched) return;
+    const next = normalizeSymbol(defaultTicker);
+    if (!next || next === ticker) return;
+    if (!priceTouched) setPrice('');
+    setTicker(next);
+  }, [defaultTicker, initial, priceTouched, ticker, tickerTouched]);
+
+  useEffect(() => {
+    if (!initial) setSide(defaultSide);
+  }, [defaultSide, initial]);
 
   const normalizedTicker = normalizeSymbol(ticker);
   const { data: tickerQuotes = [], isFetching: quoteFetching, isError: quoteError } = useQuotes([normalizedTicker]);
@@ -86,6 +104,27 @@ export function TxnForm({ initial, onDone }: Props) {
         kind,
         note: note || null,
       };
+      if (LOCAL_MODE) {
+        const now = new Date().toISOString();
+        if (isEdit && initial) {
+          qc.setQueryData<TxnRow[]>(['transactions'], (rows = []) =>
+            rows.map((row) => row.id === initial.id ? { ...row, ...payload, updated_at: now } : row),
+          );
+        } else {
+          const row: TxnRow = {
+            id: `local-txn-${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Date.now()}`,
+            user_id: user?.id ?? LOCAL_USER.id,
+            batch_id: null,
+            ...payload,
+            created_at: now,
+            updated_at: now,
+          };
+          qc.setQueryData<TxnRow[]>(['transactions'], (rows = []) =>
+            [row, ...rows].sort((a, b) => b.trade_date.localeCompare(a.trade_date) || b.created_at.localeCompare(a.created_at)),
+          );
+        }
+        return;
+      }
       if (isEdit && initial) {
         const { error } = await supabase.from('transactions').update(payload).eq('id', initial.id);
         if (error) throw error;
@@ -101,6 +140,10 @@ export function TxnForm({ initial, onDone }: Props) {
       });
     },
     onSuccess: () => {
+      if (LOCAL_MODE) {
+        onDone?.();
+        return;
+      }
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
@@ -132,6 +175,7 @@ export function TxnForm({ initial, onDone }: Props) {
             onChange={(e) => {
               const next = e.target.value.toUpperCase();
               if (next !== ticker && !priceTouched) setPrice('');
+              setTickerTouched(true);
               setTicker(next);
             }}
             required

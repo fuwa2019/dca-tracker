@@ -1,20 +1,17 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Layers, ArrowUpRight, Plus, Gauge, Info, ShieldQuestion, Wifi } from 'lucide-react';
+import { Layers, ArrowUpRight, Plus, Info, ShieldQuestion, Wifi } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Kicker } from '@/components/Kicker';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
-import { ExposureGauge } from '@/components/ExposureGauge';
 import { useExposure } from '@/hooks/useExposure';
-import { SHOVEL_TICKERS } from '@/lib/calc/exposureConfig';
 import type { LookThroughStock } from '@/lib/calc/lookThrough';
-import { pct as fmtPct } from '@/lib/format';
+import { pct as fmtPct, usd } from '@/lib/format';
 
 const ease = [0.16, 1, 0.3, 1] as const;
-const SHOVEL_SET = new Set(SHOVEL_TICKERS.map((t) => t.toUpperCase()));
 
 /**
  * 来源分段配色:刻意只用蓝/靛/紫/青系(避开盈亏的绿/红),
@@ -46,7 +43,7 @@ export function ExposurePage() {
   const { lookThrough, asOf, isEmpty, model } = useExposure();
 
   const topStocks = useMemo(() => lookThrough.stocks.slice(0, 14), [lookThrough.stocks]);
-  const maxWeight = topStocks[0]?.weightNav ?? 0.0001;
+  const topStock = topStocks[0];
 
   const usedSources = useMemo(() => {
     const set = new Set<string>();
@@ -76,7 +73,7 @@ export function ExposurePage() {
         <EmptyState
           icon={Layers}
           title="还没有可穿透的持仓"
-          description="先录入买入交易,这里会把每个 ETF 拆成底层股票,显示 NVDA 等单票的真实敞口与两条监控线。"
+          description="先录入买入交易,这里会把每个 ETF 拆成底层股票,显示 NVDA 等单票的真实敞口。"
           action={<Button asChild size="sm"><Link to="/transactions"><Plus className="h-3.5 w-3.5" /> 添加交易</Link></Button>}
         />
       </div>
@@ -113,31 +110,43 @@ export function ExposurePage() {
 
       <div className="rule-top" />
 
-      {/* 两条监控线 */}
       <motion.section
         variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
-        className="py-6"
+        className="grid gap-3 py-5 sm:grid-cols-2 lg:grid-cols-4"
       >
-        <div className="mb-3 flex items-center gap-2">
-          <Gauge className="h-4 w-4 text-brand" />
-          <Kicker index="02" en="Monitoring lines" zh="两条监控线" />
-        </div>
-        <div className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2">
-          {lookThrough.lines.map((line) => (
-            <div key={line.config.id} className="bg-surface px-4 py-5">
-              <ExposureGauge line={line} />
-            </div>
-          ))}
-        </div>
+        <ExposureSummaryCard
+          label="最大单票"
+          value={topStock ? `${topStock.ticker} ${fmtPct(topStock.weightNav, 1)}` : '—'}
+          sub={topStock ? `${usd.format(topStock.value)} · 占净值` : '无底层股票'}
+        />
+        <ExposureSummaryCard
+          label="已穿透到个股"
+          value={fmtPct(decomposedValue / nav, 1)}
+          sub="ETF 成分 + 直接持股"
+        />
+        <ExposureSummaryCard
+          label="未穿透长尾"
+          value={fmtPct(lookThrough.unclassifiedValue / nav, 1)}
+          sub="未列出的 ETF 小成分"
+        />
+        <ExposureSummaryCard
+          label="现金 / 国债"
+          value={fmtPct(lookThrough.cashValue / nav, 1)}
+          sub="SGOV / BOXX 等不拆股"
+        />
+        <p className="sm:col-span-2 lg:col-span-4 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
+          <Info className="mt-0.5 h-3 w-3 shrink-0" />
+          ETF 会按成分表拆到底层股票；现金替代和短债类 ETF 归入现金 / 国债；未覆盖的尾部成分单独列为未穿透长尾。
+        </p>
       </motion.section>
 
       {/* 穿透权重 */}
       <motion.section
         variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
-        className="rule-top py-6"
+        className="py-6"
       >
         <div className="mb-3 flex items-end justify-between">
-          <Kicker index="03" en="True per-stock weights" zh="穿透后单票权重" />
+          <Kicker index="02" en="True per-stock weights" zh="穿透后单票权重" />
           <Button asChild variant="ghost" size="sm" className="shrink-0 text-brand">
             <Link to="/">回总览 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
           </Button>
@@ -151,10 +160,6 @@ export function ExposurePage() {
               {sourceLabel(via)}
             </span>
           ))}
-          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="h-2.5 w-2.5 rounded-sm ring-1 ring-inset ring-brand" />
-            AI 铲子线成分
-          </span>
         </div>
 
         <Card className="overflow-hidden p-0">
@@ -165,7 +170,7 @@ export function ExposurePage() {
           </div>
           <div className="divide-y divide-border">
             {topStocks.map((s, i) => (
-              <StockRow key={s.ticker} stock={s} index={i} maxWeight={maxWeight} />
+              <StockRow key={s.ticker} stock={s} index={i} />
             ))}
           </div>
         </Card>
@@ -186,9 +191,8 @@ export function ExposurePage() {
   );
 }
 
-function StockRow({ stock, index, maxWeight }: { stock: LookThroughStock; index: number; maxWeight: number }) {
-  const isShovel = SHOVEL_SET.has(stock.ticker);
-  const barScale = stock.weightNav / Math.max(maxWeight, 1e-9);
+function StockRow({ stock, index }: { stock: LookThroughStock; index: number }) {
+  const barWidthPct = Math.min(100, Math.max(2, stock.weightNav * 100));
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
@@ -198,14 +202,11 @@ function StockRow({ stock, index, maxWeight }: { stock: LookThroughStock; index:
     >
       <div className="flex items-center gap-1.5">
         <span className="font-semibold">{stock.ticker}</span>
-        {isShovel && (
-          <span className="h-1.5 w-1.5 rounded-full bg-brand" title="AI 铲子线成分" aria-label="AI 铲子线成分" />
-        )}
       </div>
       <div className="min-w-0">
         <div
           className="flex h-3 overflow-hidden rounded-full bg-surface-elevated"
-          style={{ width: `${Math.max(6, barScale * 100)}%`, minWidth: 24 }}
+          style={{ width: `${barWidthPct}%`, minWidth: 18 }}
         >
           {stock.sources.map((src) => (
             <div
@@ -230,6 +231,16 @@ function StockRow({ stock, index, maxWeight }: { stock: LookThroughStock; index:
       </div>
       <div className="text-right font-num text-sm font-semibold tabular-nums">{fmtPct(stock.weightNav, 1)}</div>
     </motion.div>
+  );
+}
+
+function ExposureSummaryCard({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface px-4 py-3">
+      <div className="kicker">{label}</div>
+      <div className="font-serif-fig mt-1 text-2xl font-semibold">{value}</div>
+      <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>
+    </div>
   );
 }
 

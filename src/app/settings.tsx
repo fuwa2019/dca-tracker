@@ -19,6 +19,8 @@ import { DEFAULT_BENCHMARKS, DEFAULT_WATCHLIST, getBenchmarks, getSelectedBenchm
 import { backfillTrackedSymbols, registerTrackedSymbols } from '@/lib/trackedSymbols';
 import { normalizeSymbol } from '@/lib/symbols';
 import { cn } from '@/lib/utils';
+import { LOCAL_MODE } from '@/lib/localMode';
+import { localShareLinks } from '@/lib/localData';
 import type { Database } from '@/lib/database.types';
 
 type ShareRow = Database['public']['Tables']['share_links']['Row'];
@@ -84,6 +86,10 @@ export function SettingsPage() {
         benchmarks,
         selected_benchmark: selectedBenchmark,
       };
+      if (LOCAL_MODE) {
+        qc.setQueryData(['settings'], { ...payload, updated_at: new Date().toISOString() });
+        return;
+      }
       const { error } = await supabase.from('settings').upsert(payload);
       if (!error) {
         const symbols = await registerTrackedSymbols([...watchlist, ...benchmarks], 'settings');
@@ -98,6 +104,11 @@ export function SettingsPage() {
       await backfillTrackedSymbols(symbols, { limit: 10 });
     },
     onSuccess: async () => {
+      if (LOCAL_MODE) {
+        setSavedFlash(true);
+        setTimeout(() => setSavedFlash(false), 1500);
+        return;
+      }
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['settings'] }),
         qc.invalidateQueries({ queryKey: ['tracked_symbol_coverage'] }),
@@ -112,6 +123,7 @@ export function SettingsPage() {
   const shareLinks = useQuery<ShareRow[]>({
     queryKey: ['share_links'],
     queryFn: async () => {
+      if (LOCAL_MODE) return localShareLinks;
       const { data, error } = await supabase
         .from('share_links')
         .select('*')
@@ -123,6 +135,7 @@ export function SettingsPage() {
 
   const createShare = useMutation({
     mutationFn: async () => {
+      if (LOCAL_MODE) return;
       if (!user) throw new Error('not_authed');
       const token = randomToken();
       const { error } = await supabase.from('share_links').insert({ token, user_id: user.id });
@@ -133,6 +146,7 @@ export function SettingsPage() {
 
   const revokeShare = useMutation({
     mutationFn: async (token: string) => {
+      if (LOCAL_MODE) return;
       const { error } = await supabase.from('share_links').update({ revoked: true }).eq('token', token);
       if (error) throw error;
     },
@@ -253,10 +267,12 @@ export function SettingsPage() {
             <div>
               <CardTitle className="font-serif text-lg">分享链接</CardTitle>
               <CardDescription className="text-xs">
-                只读视图 · 显示持仓权重 % 和收益率 %，永远不会暴露金额、CNY 和现金流。
+                {LOCAL_MODE
+                  ? '本地 Debug 模式使用固定 demo 分享链接，不创建线上 token。'
+                  : '只读视图 · 显示持仓权重 % 和收益率 %，永远不会暴露金额、CNY 和现金流。'}
               </CardDescription>
             </div>
-            <Button size="sm" onClick={() => createShare.mutate()} disabled={createShare.isPending}>
+            <Button size="sm" onClick={() => createShare.mutate()} disabled={LOCAL_MODE || createShare.isPending}>
               <Plus className="h-3.5 w-3.5" /> 生成新链接
             </Button>
           </div>
@@ -271,8 +287,8 @@ export function SettingsPage() {
           {(shareLinks.data ?? []).length === 0 ? (
             <EmptyState
               icon={ShieldCheck}
-              title="还没有分享链接"
-              description="点上方按钮生成一个 32 位 hex token，分享地址会立即显示在这里。"
+              title={LOCAL_MODE ? '本地模式不生成分享链接' : '还没有分享链接'}
+              description={LOCAL_MODE ? '本地 demo 链接会固定展示在这里，用来调试只读分享界面。' : '点上方按钮生成一个 32 位 hex token，分享地址会立即显示在这里。'}
             />
           ) : (
             <div className="space-y-2">
@@ -373,6 +389,10 @@ function BenchmarkManager({
   async function runSearch() {
     const q = normalizeSymbol(query);
     if (!q) return;
+    if (LOCAL_MODE) {
+      setResults([{ symbol: q, name: '本地手动添加', exchange: null, type: null }]);
+      return;
+    }
     setSearching(true);
     try {
       const next = await searchSymbols(q);

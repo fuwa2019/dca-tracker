@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,11 +7,30 @@ import { TxnList } from '@/components/TxnList';
 import { TxnForm } from '@/components/TxnForm';
 import { Kicker } from '@/components/Kicker';
 import { useTransactions } from '@/hooks/usePortfolio';
+import { useQuotes } from '@/hooks/useQuotes';
+import { aggregatePositions } from '@/lib/calc/position';
 
 export function TransactionsPage() {
   const [adding, setAdding] = useState(false);
   const { data: txns = [], isLoading } = useTransactions();
   const recent = txns.slice(0, 5);
+  const positions = useMemo(
+    () => aggregatePositions(txns).filter((p) => p.shares > 1e-9),
+    [txns],
+  );
+  const symbols = useMemo(() => positions.map((p) => p.ticker), [positions]);
+  const { data: quotes = [] } = useQuotes(symbols);
+  const defaultTicker = useMemo(() => {
+    const quoteByTicker = new Map(quotes.map((q) => [q.ticker, q]));
+    return [...positions]
+      .sort((a, b) => {
+        const quoteA = quoteByTicker.get(a.ticker);
+        const quoteB = quoteByTicker.get(b.ticker);
+        const priceA = quoteA?.price ?? quoteA?.displayPrice ?? quoteA?.regularPrice ?? a.avgCost;
+        const priceB = quoteB?.price ?? quoteB?.displayPrice ?? quoteB?.regularPrice ?? b.avgCost;
+        return b.shares * priceB - a.shares * priceA;
+      })[0]?.ticker ?? 'QQQ';
+  }, [positions, quotes]);
 
   return (
     <div className="container max-w-5xl px-4 py-5 sm:px-6 sm:py-6 space-y-5">
@@ -26,7 +45,7 @@ export function TransactionsPage() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>新增交易</DialogTitle></DialogHeader>
-            <TxnForm onDone={() => setAdding(false)} />
+            <TxnForm defaultTicker={defaultTicker} onDone={() => setAdding(false)} />
           </DialogContent>
         </Dialog>
       </div>

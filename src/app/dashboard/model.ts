@@ -42,6 +42,8 @@ export interface DashboardModel {
     costBasis: number;
     dayPL: number;
     totalPL: number;
+    unrealizedPL: number;
+    realizedPL: number;
   };
   dayChangePct: number;
   totalReturnPct: number;
@@ -113,15 +115,26 @@ export function useDashboardModel(): DashboardModel {
     let stockMv = 0;
     let costBasis = 0;
     let dayPL = 0;
+    let realizedPL = 0;
     for (const p of positions) {
       const q = quoteByTicker.get(p.ticker);
       const { marketValue, costBasis: cb } = unrealizedPL(p, q?.price ?? null, costBasisMode);
       stockMv += marketValue;
       costBasis += cb;
+      realizedPL += p.realizedUsd;
       if (q?.change != null) dayPL += p.shares * q.change;
     }
     const nav = stockMv + cash;
-    return { nav, stockMv, cash, costBasis, dayPL, totalPL: nav - totalInvested };
+    return {
+      nav,
+      stockMv,
+      cash,
+      costBasis,
+      dayPL,
+      totalPL: nav - totalInvested,
+      unrealizedPL: stockMv - costBasis,
+      realizedPL,
+    };
   }, [positions, quoteByTicker, totalInvested, cash, costBasisMode]);
 
   const prevNav = aggregates.nav - aggregates.dayPL;

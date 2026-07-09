@@ -9,6 +9,7 @@ import { TxnForm } from '@/components/TxnForm';
 import { supabase } from '@/lib/supabase';
 import { usd, shortDate, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { LOCAL_MODE } from '@/lib/localMode';
 import type { Database } from '@/lib/database.types';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
@@ -25,10 +26,15 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
 
   const del = useMutation({
     mutationFn: async (id: string) => {
+      if (LOCAL_MODE) {
+        qc.setQueryData<TxnRow[]>(['transactions'], (rows = []) => rows.filter((row) => row.id !== id));
+        return;
+      }
       const { error } = await supabase.from('transactions').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
+      if (LOCAL_MODE) return;
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
@@ -82,7 +88,7 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                         isLump ? 'bg-warn-soft' : 'bg-surface-elevated text-muted-foreground',
                       )}
                     >
-                      {isLump ? '大额' : '定投'}
+                      {isLump ? '建仓' : '定投'}
                     </span>
                   </div>
                   <div className="flex-1 text-right text-xs tnum text-muted-foreground">
@@ -130,7 +136,7 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                           isLump ? 'bg-warn-soft' : 'bg-surface-elevated text-muted-foreground',
                         )}
                       >
-                        {isLump ? '大额' : '定投'}
+                        {isLump ? '建仓' : '定投'}
                       </span>
                     </div>
                     <div className="flex shrink-0 gap-1">

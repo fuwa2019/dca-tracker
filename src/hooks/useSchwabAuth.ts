@@ -4,11 +4,17 @@ import {
   fetchSchwabAuthorizeUrl,
   type SchwabAuthStatus,
 } from '@/lib/schwab';
+import { LOCAL_MODE } from '@/lib/localMode';
 
 export function useSchwabAuthStatus() {
   return useQuery<SchwabAuthStatus>({
     queryKey: ['schwab_auth_status'],
-    queryFn: fetchSchwabAuthStatus,
+    queryFn: async () => {
+      if (LOCAL_MODE) {
+        return { state: 'unconfigured', message: '本地 Debug 模式不连接 Schwab / Quote Worker。' } as SchwabAuthStatus;
+      }
+      return fetchSchwabAuthStatus();
+    },
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     retry: false,

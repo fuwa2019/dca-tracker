@@ -1,13 +1,14 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
   Activity,
-  ArrowLeftRight,
   BarChart3,
   Layers,
   LayoutDashboard,
   ListOrdered,
+  PanelLeftClose,
+  PanelLeftOpen,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -44,7 +45,6 @@ const NAV: ReadonlyArray<NavItem> = [
   { to: '/performance', label: '业绩', icon: BarChart3, group: 'overview' },
   { to: '/exposure', label: '穿透敞口', icon: Layers, group: 'overview' },
   { to: '/transactions', label: '交易', icon: ListOrdered, group: 'tracking' },
-  { to: '/cashflows', label: '资金', icon: ArrowLeftRight, group: 'tracking' },
   { to: '/health', label: '数据健康', icon: Activity, group: 'ops' },
   { to: '/settings', label: '设置', icon: Settings, group: 'ops' },
 ];
@@ -178,30 +178,63 @@ function TopBar({ title }: { title: string }) {
 }
 
 function DesktopNav() {
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('dca-sidebar-collapsed') === '1';
+  });
   const groups: Array<NavItem['group']> = ['overview', 'tracking', 'ops'];
+
+  useEffect(() => {
+    window.localStorage.setItem('dca-sidebar-collapsed', collapsed ? '1' : '0');
+  }, [collapsed]);
+
   return (
-    <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-surface lg:flex">
-      <div className="flex items-center gap-2.5 px-4 pt-5">
+    <aside
+      className={cn(
+        'hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex',
+        collapsed ? 'w-16' : 'w-56',
+      )}
+    >
+      <div className={cn('flex items-center pt-5', collapsed ? 'justify-center px-2' : 'gap-2.5 px-4')}>
         <Logo className="h-9 w-9" />
-        <div className="leading-tight">
-          <div className="font-serif text-lg font-semibold tracking-tight">DCA Tracker</div>
-          <div className="kicker mt-0.5">Investing Journal</div>
-        </div>
+        {!collapsed && (
+          <div className="min-w-0 flex-1 leading-tight">
+            <div className="truncate font-serif text-lg font-semibold tracking-tight">DCA Tracker</div>
+            <div className="kicker mt-0.5">Investing Journal</div>
+          </div>
+        )}
       </div>
-      {LOCAL_MODE && <div className="px-4 pt-3"><LocalBadge /></div>}
-      <nav className="mt-5 flex flex-col gap-4 px-2.5 pb-6">
+      <div className={cn('pt-3', collapsed ? 'px-2' : 'px-4')}>
+        <button
+          type="button"
+          className={cn(
+            'inline-flex h-8 items-center rounded-md border border-border bg-surface-elevated text-xs font-medium text-muted-foreground transition-colors hover:text-foreground',
+            collapsed ? 'w-full justify-center px-0' : 'gap-2 px-2.5',
+          )}
+          onClick={() => setCollapsed((value) => !value)}
+          title={collapsed ? '展开侧栏' : '隐藏侧栏'}
+          aria-label={collapsed ? '展开侧栏' : '隐藏侧栏'}
+        >
+          {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          {!collapsed && <span>隐藏侧栏</span>}
+        </button>
+      </div>
+      {LOCAL_MODE && !collapsed && <div className="px-4 pt-3"><LocalBadge /></div>}
+      <nav className={cn('mt-5 flex flex-col gap-4 pb-6', collapsed ? 'px-2' : 'px-2.5')}>
         {groups.map((group) => (
           <div key={group}>
-            <div className="kicker px-3 pb-1.5">{GROUP_LABELS[group]}</div>
+            {!collapsed && <div className="kicker px-3 pb-1.5">{GROUP_LABELS[group]}</div>}
             <div className="flex flex-col gap-0.5">
               {NAV.filter((n) => n.group === group).map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
                   to={to}
                   end={to === '/'}
+                  title={collapsed ? label : undefined}
                   className={({ isActive }) =>
                     cn(
-                      'group relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors',
+                      'group relative flex items-center rounded-md py-2 text-sm transition-colors',
+                      collapsed ? 'justify-center px-0' : 'gap-2.5 px-3',
                       isActive
                         ? 'bg-brand/10 text-foreground'
                         : 'text-muted-foreground hover:bg-surface-elevated hover:text-foreground',
@@ -218,7 +251,7 @@ function DesktopNav() {
                         />
                       )}
                       <Icon className={cn('h-4 w-4', isActive && 'text-brand')} />
-                      <span className="font-medium">{label}</span>
+                      {!collapsed && <span className="font-medium">{label}</span>}
                     </>
                   )}
                 </NavLink>
@@ -227,9 +260,11 @@ function DesktopNav() {
           </div>
         ))}
       </nav>
-      <div className="mt-auto border-t border-border px-4 py-3">
-        <div className="kicker">DCA Tracker · v3.1</div>
-        <div className="mt-0.5 text-[10px] text-muted-foreground">穿透敞口 · Schwab 行情 · 公开报告</div>
+      <div className={cn('mt-auto border-t border-border py-3', collapsed ? 'px-2 text-center' : 'px-4')}>
+        <div className="kicker">{collapsed ? 'Commit' : `Commit · ${__APP_COMMIT_DATE__}`}</div>
+        {!collapsed && <div className="mt-0.5 text-[10px] text-muted-foreground">
+          {LOCAL_MODE ? '本地调试 · 10年QQQ样本 · 免登录' : '投资记录 · 公开报告'}
+        </div>}
       </div>
     </aside>
   );

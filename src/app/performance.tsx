@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { RefreshCw, Database, AlertTriangle, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -10,7 +11,6 @@ import { usePerformanceCacheStatus, useRefreshPerformanceCache } from '@/hooks/u
 import { availableRanges, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
 import { signedPct, changeColor } from '@/lib/format';
 import { getSelectedBenchmark } from '@/lib/settings';
-import { cn } from '@/lib/utils';
 
 export function PerformancePage() {
   const [range, setRange] = useState<RangeKey>('ALL');
@@ -126,13 +126,24 @@ export function PerformancePage() {
             </span>
           )}
           <Button
+            asChild
             variant="outline"
             size="sm"
-            onClick={() => refreshCache.mutate()}
-            disabled={refreshCache.isPending}
           >
-            <RefreshCw className={cn('h-3.5 w-3.5', refreshCache.isPending && 'animate-spin')} />
-            刷新缓存
+            <Link to="/health">
+              <RefreshCw className="h-3.5 w-3.5" />
+              补齐日线价格
+            </Link>
+          </Button>
+          <Button
+            type="button"
+            variant={dirty ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => refreshCache.mutate()}
+            disabled={refreshCache.isPending || (!hasCache && history.length === 0)}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshCache.isPending ? 'animate-spin' : ''}`} />
+            {refreshCache.isPending ? '刷新中' : '刷新业绩缓存'}
           </Button>
         </div>
       </div>
@@ -162,7 +173,7 @@ export function PerformancePage() {
         </Card>
       )}
 
-      <div className={cn('grid gap-3', showBenchmark ? 'sm:grid-cols-3' : 'sm:grid-cols-1')}>
+      <div className="grid gap-3 sm:grid-cols-3">
         <StatCard
           label="组合累计表现"
           value={signedPct(portfolioReturn)}
@@ -205,7 +216,7 @@ export function PerformancePage() {
             <div className="min-w-0 flex-1">
               <div className="font-medium text-foreground">还没有业绩缓存</div>
               <p className="mt-1 text-xs text-muted-foreground">
-                录入第一笔交易，并到「数据健康」补齐 {selectedBenchmark}/持仓的历史日线价格，再点上方「刷新缓存」即可生成曲线。
+                录入第一笔交易，并到「数据健康」补齐 {selectedBenchmark}/持仓的历史日线价格，再刷新业绩缓存即可生成曲线。
               </p>
             </div>
           </div>

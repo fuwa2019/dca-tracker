@@ -30,7 +30,7 @@ export default function App() {
         <Route path="/exposure" element={<ExposurePage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="/transactions/all" element={<TransactionsAllPage />} />
-        <Route path="/cashflows" element={<CashflowsPage />} />
+        <Route path="/cashflows" element={LOCAL_MODE ? <Navigate to="/transactions" replace /> : <CashflowsPage />} />
         <Route path="/health" element={<DataHealthPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

@@ -10,12 +10,15 @@
 import datasetJson from '@/data/local-dataset.json';
 import { LOCAL_USER } from '@/lib/localMode';
 import { buildEquityHistory } from '@/lib/calc/history';
+import { aggregatePositions, unrealizedPL } from '@/lib/calc/position';
 import type { PriceMap } from '@/hooks/useDailyPrices';
 import type {
   CashflowRow,
   PerformanceCacheStatus,
   PortfolioHistory,
   SettingsRow,
+  ShareLinkRow,
+  SharedPortfolio,
   TransactionRow,
 } from '@/lib/database.types';
 import type { Quote } from '@/lib/quote';
@@ -34,17 +37,66 @@ const dataset = datasetJson as unknown as Dataset;
 export const LOCAL_TICKER = dataset.ticker;
 export const LOCAL_BENCHMARK = dataset.benchmark;
 
+const DEMO_ALLOCATIONS = [
+  { ticker: 'QQQ', monthlyUsd: 65 },
+  { ticker: 'NVDA', monthlyUsd: 45 },
+  { ticker: 'AAPL', monthlyUsd: 30 },
+  { ticker: 'MSFT', monthlyUsd: 25 },
+  { ticker: 'SMH', monthlyUsd: 25 },
+  { ticker: 'SGOV', monthlyUsd: 10 },
+] as const;
+
+const DEMO_MONTHLY_USD = DEMO_ALLOCATIONS.reduce((sum, row) => sum + row.monthlyUsd, 0);
+
+const DERIVED_SERIES = [
+  { ticker: 'NVDA', start: 12, beta: 1.65, drift: 1.8, wave: 0.08, phase: 0.2 },
+  { ticker: 'AAPL', start: 24, beta: 0.82, drift: 0.22, wave: 0.025, phase: 1.7 },
+  { ticker: 'MSFT', start: 38, beta: 0.95, drift: 0.38, wave: 0.03, phase: 2.4 },
+  { ticker: 'SMH', start: 48, beta: 1.25, drift: 0.72, wave: 0.05, phase: 1.0 },
+  { ticker: 'SGOV', start: 100, beta: 0.02, drift: 0.05, wave: 0.002, phase: 0 },
+] as const;
+
+const DEMO_QUOTE_CHANGE: Record<string, number> = {
+  NVDA: 0.026,
+  AAPL: 0.009,
+  MSFT: 0.004,
+  SGOV: 0.0001,
+  QQQ: -0.012,
+  SMH: -0.024,
+};
+
+function buildLocalPriceSeries(): Record<string, Array<[string, number]>> {
+  const out: Record<string, Array<[string, number]>> = { ...dataset.prices };
+  const base = dataset.prices[LOCAL_TICKER] ?? [];
+  const first = base[0]?.[1] ?? 1;
+  const denom = Math.max(1, base.length - 1);
+
+  for (const cfg of DERIVED_SERIES) {
+    if (out[cfg.ticker]) continue;
+    out[cfg.ticker] = base.map(([date, close], i) => {
+      const t = i / denom;
+      const broadReturn = Math.max(0.01, close / first);
+      const cycle = 1 + cfg.wave * Math.sin(t * Math.PI * 7 + cfg.phase);
+      const price = cfg.start * Math.pow(broadReturn, cfg.beta) * (1 + cfg.drift * t) * cycle;
+      return [date, Number(Math.max(1, price).toFixed(4))];
+    });
+  }
+  return out;
+}
+
+const localPriceSeries = buildLocalPriceSeries();
+
 /** ticker → date → adjusted close (matches `useDailyPrices` PriceMap shape). */
 export const localPriceMap: PriceMap = (() => {
   const map: PriceMap = new Map();
-  for (const [ticker, points] of Object.entries(dataset.prices)) {
+  for (const [ticker, points] of Object.entries(localPriceSeries)) {
     map.set(ticker, new Map(points));
   }
   return map;
 })();
 
 function priceSeries(ticker: string): Array<[string, number]> {
-  return dataset.prices[ticker] ?? [];
+  return localPriceSeries[ticker] ?? [];
 }
 
 function firstTradingDayOnOrAfter(monthStart: string): [string, number] | null {
@@ -79,29 +131,34 @@ function monthlyTradeDays(): Array<[string, number]> {
 
 const trades = monthlyTradeDays();
 
-export const localTransactions: TransactionRow[] = trades.map(([date, close], i) => ({
-  id: `local-txn-${i}`,
-  user_id: LOCAL_USER.id,
-  batch_id: null,
-  trade_date: date,
-  ticker: LOCAL_TICKER,
-  side: 'buy',
-  price: close,
-  shares: Number((dataset.monthlyUsd / close).toFixed(6)),
-  kind: 'dca',
-  note: '[LOCAL_DEMO]',
-  created_at: `${date}T00:00:00.000Z`,
-  updated_at: `${date}T00:00:00.000Z`,
-}));
+export const localTransactions: TransactionRow[] = trades.flatMap(([date], monthIndex) =>
+  DEMO_ALLOCATIONS.map((allocation, assetIndex) => {
+    const close = priceSeries(allocation.ticker).find(([d]) => d === date)?.[1] ?? 1;
+    return {
+      id: `local-txn-${monthIndex}-${allocation.ticker}`,
+      user_id: LOCAL_USER.id,
+      batch_id: null,
+      trade_date: date,
+      ticker: allocation.ticker,
+      side: 'buy' as const,
+      price: close,
+      shares: Number((allocation.monthlyUsd / close).toFixed(6)),
+      kind: assetIndex === 0 ? 'dca' as const : 'lumpsum' as const,
+      note: '[LOCAL_DEMO]',
+      created_at: `${date}T00:0${assetIndex}:00.000Z`,
+      updated_at: `${date}T00:0${assetIndex}:00.000Z`,
+    };
+  }),
+);
 
 export const localCashflows: CashflowRow[] = trades.map(([date], i) => ({
   id: `local-cf-${i}`,
   user_id: LOCAL_USER.id,
   batch_id: null,
   cny_out_date: date,
-  cny_amount: Number((dataset.monthlyUsd * dataset.targetRate).toFixed(2)),
+  cny_amount: Number((DEMO_MONTHLY_USD * dataset.targetRate).toFixed(2)),
   usd_in_date: date,
-  usd_amount: dataset.monthlyUsd,
+  usd_amount: DEMO_MONTHLY_USD,
   target_rate: dataset.targetRate,
   fees_cny: 0,
   fees_usd: 0,
@@ -113,22 +170,25 @@ export const localSettings: SettingsRow = {
   user_id: LOCAL_USER.id,
   target_usd: 1_000_000,
   expected_annual_ret: 0.08,
-  monthly_dca_usd: dataset.monthlyUsd,
+  monthly_dca_usd: DEMO_MONTHLY_USD,
   email_enabled: false,
   email_to: null,
   cost_basis_default: 'avg',
-  watchlist: ['QQQ', 'SPY', 'VOO'],
+  watchlist: DEMO_ALLOCATIONS.map((row) => row.ticker),
   benchmarks: [LOCAL_BENCHMARK],
   selected_benchmark: LOCAL_BENCHMARK,
   updated_at: new Date().toISOString(),
 };
 
 /** Last bundled close per symbol, presented as a "current" quote. */
-export const localQuotes: Quote[] = Object.entries(dataset.prices).map(([ticker, points]) => {
+export const localQuotes: Quote[] = Object.entries(localPriceSeries).map(([ticker, points]) => {
   const last = points[points.length - 1];
-  const prev = points[points.length - 2] ?? last;
   const price = last?.[1] ?? null;
-  const prevClose = prev?.[1] ?? null;
+  const demoChangePct = DEMO_QUOTE_CHANGE[ticker];
+  const prev = points[points.length - 2] ?? last;
+  const prevClose = price != null && demoChangePct != null
+    ? price / (1 + demoChangePct)
+    : prev?.[1] ?? null;
   const change = price != null && prevClose != null ? price - prevClose : null;
   const changePct = change != null && prevClose ? change / prevClose : null;
   return {
@@ -152,7 +212,7 @@ const builtHistory = buildEquityHistory({
   transactions: localTransactions,
   cashflows: localCashflows,
   prices: localPriceMap,
-  asOf: new Date(`${dataset.prices[LOCAL_TICKER].at(-1)?.[0]}T00:00:00Z`),
+  asOf: new Date(`${localPriceSeries[LOCAL_TICKER].at(-1)?.[0]}T00:00:00Z`),
 });
 
 export const localPortfolioHistory: PortfolioHistory = {
@@ -192,3 +252,54 @@ export const localCacheStatus: PerformanceCacheStatus = {
   refresh_ms: 0,
   error: null,
 };
+
+export const LOCAL_SHARE_TOKEN = 'localdemoactive000000000000000001';
+
+const localQuoteByTicker = new Map(localQuotes.map((q) => [q.ticker, q]));
+const localSharePositions = aggregatePositions(localTransactions)
+  .map((position) => {
+    const quote = localQuoteByTicker.get(position.ticker);
+    const { marketValue, unrealizedPct } = unrealizedPL(position, quote?.price ?? null, 'avg');
+    return {
+      ticker: position.ticker,
+      marketValue,
+      returnPct: unrealizedPct,
+      dayChangePct: quote?.changePct ?? null,
+    };
+  })
+  .filter((row) => row.marketValue > 0)
+  .sort((a, b) => b.marketValue - a.marketValue);
+const localShareTotal = localSharePositions.reduce((sum, row) => sum + row.marketValue, 0);
+
+export const localSharedPortfolio: SharedPortfolio = {
+  positions: localSharePositions.map((row) => ({
+    ticker: row.ticker,
+    weight_pct: localShareTotal > 0 ? row.marketValue / localShareTotal : 0,
+    return_pct: row.returnPct,
+    day_change_pct: row.dayChangePct,
+  })),
+  total_return_pct: localPortfolioHistory.series.at(-1)?.return_pct_user ?? 0,
+  has_snapshot_price: true,
+  generated_at: localPortfolioHistory.generated_at,
+};
+
+export const localShareLinks: ShareLinkRow[] = [
+  {
+    token: LOCAL_SHARE_TOKEN,
+    user_id: LOCAL_USER.id,
+    expires_at: null,
+    revoked: false,
+    created_at: localPortfolioHistory.generated_at,
+    access_count: 12,
+    last_accessed_at: localPortfolioHistory.generated_at,
+  },
+  {
+    token: 'localdemorevoked0000000000000002',
+    user_id: LOCAL_USER.id,
+    expires_at: null,
+    revoked: true,
+    created_at: '2025-12-31T00:00:00.000Z',
+    access_count: 3,
+    last_accessed_at: '2026-01-15T00:00:00.000Z',
+  },
+];

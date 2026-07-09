@@ -3,7 +3,7 @@
     "purpose": "手动维护的 ETF 成分股权重,供穿透权重(look-through)计算。每季度核对一次即可。",
     "howToUpdate": "去 stockanalysis.com/etf/<ticker>/holdings 抄前若干大成分股的 % Weight,填成小数(如 18.6% -> 0.186)。未列出的长尾会自动归入「未穿透长尾」,不必填全。",
     "weightUnit": "fraction (0.186 = 18.6%)",
-    "cashLike": ["SGOV", "BIL", "SHV"],
+    "cashLike": ["SGOV", "BIL", "SHV", "BOXX", "TFLO", "USFR", "GBIL", "TBIL", "BILS", "ICSH", "JPST", "MINT"],
     "asOf": {
       "VOO": "2026-04-30",
       "VGT": "2026-03-31",

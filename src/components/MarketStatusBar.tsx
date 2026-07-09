@@ -5,6 +5,7 @@ import { getUsMarketSession, type Quote, type UsMarketSessionKey } from '@/lib/q
 import { getQuoteStatusSummary } from '@/lib/quoteStatus';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';
+import { LOCAL_MODE } from '@/lib/localMode';
 
 interface Props {
   className?: string;
@@ -46,13 +47,23 @@ export function MarketStatusBar({ className, compact = false }: Props) {
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
-    return queryClient.getQueryCache().subscribe(() => {
-      setQuotes(readQuoteCache(queryClient));
+    let active = true;
+    const unsubscribe = queryClient.getQueryCache().subscribe(() => {
+      queueMicrotask(() => {
+        if (!active) return;
+        setQuotes(readQuoteCache(queryClient));
+      });
     });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [queryClient]);
 
   const session = getUsMarketSession(now);
   const quoteSummary = useMemo(() => getQuoteStatusSummary(quotes), [quotes]);
+  const summaryText = LOCAL_MODE ? '内置 QQQ 样本 · 不连接 Supabase / Quote Worker' : quoteSummary.text;
+  const summaryTitle = LOCAL_MODE ? '本地 Debug 模式使用内置 10 年 QQQ 数据' : quoteSummary.title;
 
   return (
     <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground tnum', className)}>
@@ -66,8 +77,8 @@ export function MarketStatusBar({ className, compact = false }: Props) {
         </span>
       )}
       {!compact && (
-        <span className="inline" title={quoteSummary.title}>
-          · {session.detail} · {quoteSummary.text}
+        <span className="inline" title={summaryTitle}>
+          · {session.detail} · {summaryText}
         </span>
       )}
     </div>

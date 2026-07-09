@@ -59,5 +59,6 @@ export async function verifyEmailOtp(email: string, token: string) {
 }
 
 export async function signOut() {
+  if (LOCAL_MODE) return { error: null };
   return supabase.auth.signOut();
 }

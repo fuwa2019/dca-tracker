@@ -3,42 +3,57 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  Activity,
   CalendarDays,
   Clock,
   EyeOff,
   LineChart,
   LockKeyhole,
   ShieldCheck,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { PerformancePanel } from '@/components/IbkrPerformancePanel';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { EmptyState } from '@/components/EmptyState';
-import { ExposureGauge } from '@/components/ExposureGauge';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { Kicker } from '@/components/Kicker';
+import { EquitySpark } from '@/app/dashboard/shared';
 import { supabase } from '@/lib/supabase';
 import { pct, signedPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { availableRanges, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
+import { availableRanges, sliceByRange, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
 import { computeLookThrough, type EtfHoldingsData } from '@/lib/calc/lookThrough';
-import { MONITOR_LINES, SHOVEL_TICKERS } from '@/lib/calc/exposureConfig';
+import { LOCAL_MODE } from '@/lib/localMode';
+import { LOCAL_SHARE_TOKEN, localPortfolioHistory, localShareLinks, localSharedPortfolio } from '@/lib/localData';
 import etfHoldings from '@/data/etf-holdings.json';
 import type { PerformanceHistory, SharedPortfolio, SharedHistory } from '@/lib/database.types';
 
 const HOLDINGS = etfHoldings as unknown as EtfHoldingsData;
-const SHOVEL_SET = new Set(SHOVEL_TICKERS.map((t) => t.toUpperCase()));
+const SHARE_DISTRIBUTION_COLORS = ['#ef476f', '#3b82f6', '#22c55e', '#f97316', '#06b6d4', '#8b5cf6'];
+const SHARE_SECTOR_BY_TICKER: Record<string, string> = {
+  NVDA: 'AI 芯片',
+  QQQ: '纳指 ETF',
+  SMH: '半导体 ETF',
+  AAPL: '大型科技',
+  MSFT: '大型科技',
+  SGOV: '现金 / 国债',
+};
 
 export function SharePage() {
   const { token } = useParams<{ token: string }>();
   const shareToken = isValidShareToken(token) ? token : null;
   const [range, setRange] = useState<RangeKey>('ALL');
-  const showBenchmark = true;
 
   const portfolio = useQuery({
     queryKey: ['share', 'portfolio', shareToken],
     queryFn: async () => {
       if (!shareToken) throw new Error('invalid_token');
+      if (LOCAL_MODE) {
+        const link = localShareLinks.find((row) => row.token === shareToken && !row.revoked);
+        if (!link) return { error: 'not_found' };
+        return localSharedPortfolio;
+      }
       const { data, error } = await supabase.rpc('shared_portfolio', { p_token: shareToken });
       if (error) throw error;
       return data as SharedPortfolio | { error: string };
@@ -53,6 +68,7 @@ export function SharePage() {
     queryKey: ['share', 'history', shareToken],
     queryFn: async () => {
       if (!shareToken) throw new Error('invalid_token');
+      if (LOCAL_MODE) return localPortfolioHistory as PerformanceHistory;
       const performance = await supabase.rpc('shared_performance_history', { p_token: shareToken });
       if (!performance.error) return performance.data as PerformanceHistory | { error: string };
       if (!isMissingRpc(performance.error)) throw performance.error;
@@ -111,6 +127,7 @@ export function SharePage() {
 
   const ranges = useMemo(() => availableRanges(history), [history]);
   const effectiveRange = ranges.includes(range) ? range : (ranges[ranges.length - 1] ?? 'ALL');
+  const chartHistory = useMemo(() => sliceByRange(history, effectiveRange), [history, effectiveRange]);
 
   // 脱敏穿透:仅用公开的持仓权重(%)推算,不涉及任何金额。
   const sharePositions = useMemo(() => {
@@ -121,11 +138,52 @@ export function SharePage() {
       .map((p) => ({ ticker: p.ticker, value: p.weight_pct }));
   }, [portfolio.data]);
   const lookThrough = useMemo(
-    () => computeLookThrough({ holdings: sharePositions, data: HOLDINGS, lines: MONITOR_LINES }),
+    () => computeLookThrough({ holdings: sharePositions, data: HOLDINGS, lines: [] }),
     [sharePositions],
   );
   const lookThroughTop = useMemo(() => lookThrough.stocks.slice(0, 10), [lookThrough.stocks]);
-  const lookThroughMax = lookThroughTop[0]?.weightNav ?? 0.0001;
+  const decomposedWeight = useMemo(
+    () => lookThrough.stocks.reduce((sum, stock) => sum + stock.weightNav, 0),
+    [lookThrough.stocks],
+  );
+  const topLookThrough = lookThroughTop[0];
+  const shareRows = useMemo(() => {
+    const d = portfolio.data;
+    if (!d || 'error' in d) return [] as SharedPortfolio['positions'];
+    return [...d.positions].sort((a, b) => b.weight_pct - a.weight_pct);
+  }, [portfolio.data]);
+  const movers = useMemo(() => {
+    const rows = shareRows
+      .filter((row) => row.day_change_pct !== null && Number.isFinite(row.day_change_pct))
+      .map((row) => ({
+        ticker: row.ticker,
+        changePct: row.day_change_pct ?? 0,
+        contribution: row.weight_pct * (row.day_change_pct ?? 0),
+      }));
+    return {
+      winners: rows.filter((row) => row.changePct > 0).sort((a, b) => b.changePct - a.changePct).slice(0, 3),
+      losers: rows.filter((row) => row.changePct < 0).sort((a, b) => a.changePct - b.changePct).slice(0, 3),
+    };
+  }, [shareRows]);
+  const distribution = useMemo(() => {
+    const byLabel = new Map<string, number>();
+    for (const row of shareRows) {
+      const label = SHARE_SECTOR_BY_TICKER[row.ticker] ?? '其他';
+      byLabel.set(label, (byLabel.get(label) ?? 0) + row.weight_pct);
+    }
+    return [...byLabel.entries()]
+      .map(([label, value], index) => ({
+        label,
+        value,
+        color: SHARE_DISTRIBUTION_COLORS[index % SHARE_DISTRIBUTION_COLORS.length],
+      }))
+      .filter((row) => row.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [shareRows]);
+  const dayReturn = useMemo(
+    () => shareRows.reduce((sum, row) => sum + row.weight_pct * (row.day_change_pct ?? 0), 0),
+    [shareRows],
+  );
 
   if (!shareToken) return <Centered>分享链接无效或已过期</Centered>;
   if (portfolio.isLoading) return <Centered>加载中...</Centered>;
@@ -151,6 +209,10 @@ export function SharePage() {
   const pointCount = history.length;
   const positionCount = data.positions.length;
   const hasProvisionalClose = !!last?.provisional;
+  const annualizedReturn = annualizeReturn(portfolioReturn, history[0]?.date, last?.date);
+  const reportLead = last
+    ? `从 ${history[0].date} 到 ${last.date}，组合累计 ${signedPct(portfolioReturn)}，相对 ${benchmark} ${signedPct(excess)}。`
+    : '等待业绩缓存生成。';
 
   return (
     <div className="min-h-full bg-background text-foreground">
@@ -161,41 +223,38 @@ export function SharePage() {
             <div className="flex min-w-0 items-center gap-2">
               <div className="truncate text-sm font-semibold">DCA Tracker</div>
               <span className="hidden rounded-md border border-border bg-surface-elevated px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline">
-                只读分享
+                分享报告
               </span>
             </div>
-            <div className="truncate text-[11px] text-muted-foreground">仅显示比例、日期和权重，金额已隐藏</div>
+            <div className="truncate text-[11px] text-muted-foreground">收益率、权重与基准对照</div>
           </div>
           <div className="hidden items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-muted-foreground sm:flex">
             <ShieldCheck className="h-3.5 w-3.5" />
-            公开报告
+            报告视图
           </div>
           <ThemeToggle />
         </div>
       </header>
 
-      <main className="container max-w-[1200px] space-y-5 px-4 py-5 sm:px-6 sm:py-7">
-        <section className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-          <div className="max-w-2xl">
-            <div className="kicker">Public Performance Report</div>
-            <h1 className="mt-0.5 font-serif text-2xl font-semibold tracking-tight sm:text-3xl">只读业绩报告</h1>
-            <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              展示组合的时间加权收益率、基准对照、日期区间与持仓权重(含底层穿透),帮助你对外分享业绩表现。
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
-              <MetaChip icon={ShieldCheck} label="隐私安全视图" />
+      <main className="container max-w-[1180px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+        <motion.header
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pb-2"
+        >
+          <Kicker index="01" en="Portfolio Report" zh="组合总览" />
+          <div className="flex flex-col items-start gap-2 text-left sm:items-end sm:text-right">
+            <div className="kicker">Period</div>
+            <div className="font-num text-xs text-muted-foreground">{dateRange}</div>
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <MetaChip icon={ShieldCheck} label="报告视图" />
               <MetaChip icon={CalendarDays} label={usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'} />
               <MetaChip icon={Clock} label={`更新 ${formatDateTime(generatedAt)}`} numeric />
               {hasProvisionalClose && <MetaChip icon={Clock} label="收盘价待核对" />}
             </div>
           </div>
-
-          <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:min-w-[300px] sm:grid-cols-3">
-            <ScopeMeta label="基准" value={benchmark} icon={LineChart} />
-            <ScopeMeta label="交易日点位" value={String(pointCount)} icon={Activity} />
-            <ScopeMeta label="公开持仓" value={String(positionCount)} icon={LockKeyhole} />
-          </div>
-        </section>
+        </motion.header>
 
         {!hasSnapshotPrices && (
           <Card className="flex items-start gap-3 border-warn/30 bg-warn/5 p-3 text-sm">
@@ -203,66 +262,142 @@ export function SharePage() {
             <div className="min-w-0 flex-1">
               <div className="font-medium text-foreground">行情快照未更新</div>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                分享页行情快照未更新，收益率可能按成本估算，与实际市值存在偏差。
+                收益率可能按成本估算，与实际市值存在偏差。
               </p>
             </div>
           </Card>
         )}
 
-        <Card className="overflow-hidden p-0">
-          <div className="grid grid-cols-1 divide-y divide-border md:grid-cols-3 md:divide-x md:divide-y-0">
-            <SummaryCell
-              label="组合累计表现"
-              value={last ? signedPct(portfolioReturn) : '-'}
-              valueClass={cn(last ? changeColor(portfolioReturn) : 'text-muted-foreground', 'text-3xl')}
-              sub={dateRange}
+        <div className="rule-top" />
+
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          className="grid gap-x-10 gap-y-6 py-6 lg:grid-cols-[1.45fr_1fr]"
+        >
+          <div>
+            <div className="kicker">组合累计表现 · TWR</div>
+            <div className={cn('font-serif-fig mt-2 break-all text-[clamp(3rem,8vw,6rem)] font-semibold leading-[0.92]', last ? changeColor(portfolioReturn) : 'text-muted-foreground')}>
+              {last ? signedPct(portfolioReturn) : '-'}
+            </div>
+            <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+              {reportLead}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-px self-start overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2">
+            <ShareHeroKpi
+              label="今日表现 · Today"
+              value={last ? signedPct(dayReturn) : '-'}
+              sub="按持仓权重估算"
+              tone={last ? changeColor(dayReturn) : 'text-muted-foreground'}
             />
-            <SummaryCell
-              label={`${benchmark} · 同期`}
+            <ShareHeroKpi
+              label={`${benchmark} 同期 · Benchmark`}
               value={last ? signedPct(spyReturn) : '-'}
-              valueClass={last ? changeColor(spyReturn) : 'text-muted-foreground'}
-              sub="基准对照"
+              sub="复权价总回报 proxy"
+              tone={last ? changeColor(spyReturn) : 'text-muted-foreground'}
             />
-            <SummaryCell
+            <ShareHeroKpi
               label={`超额 vs ${benchmark}`}
               value={last ? signedPct(excess) : '-'}
-              valueClass={last ? changeColor(excess) : 'text-muted-foreground'}
               sub={`组合 / ${benchmark} 同期`}
+              tone={last ? changeColor(excess) : 'text-muted-foreground'}
+            />
+            <ShareHeroKpi
+              label="报告范围 · Scope"
+              value={`${positionCount} 持仓`}
+              sub={`${pointCount} 个交易日`}
+              tone="text-foreground"
             />
           </div>
-        </Card>
+        </motion.section>
 
-        <PerformancePanel
-          history={history}
-          range={effectiveRange}
-          onRangeChange={setRange}
-          availableRanges={ranges}
-          showBenchmark={showBenchmark}
-          onShowBenchmarkChange={() => undefined}
-          benchmarkLabel={benchmark}
-          loading={historyQuery.isLoading}
-          hideBenchmarkToggle
-          emptyMessage={
-            historyQuery.error
-              ? '历史数据加载失败，请刷新重试'
-              : '暂无可公开展示的历史数据，请让分享者刷新业绩缓存。'
-          }
-        />
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          className="rule-top grid grid-cols-1 divide-y divide-border border-b border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+        >
+          <ShareEditorialMetric
+            en="Annualized · TWR"
+            zh="年化收益"
+            value={annualizedReturn !== null ? signedPct(annualizedReturn) : '-'}
+            tone={annualizedReturn === null ? 'text-muted-foreground' : changeColor(annualizedReturn)}
+            sub="年化 TWR"
+          />
+          <ShareEditorialMetric
+            en="Cumulative · TWR"
+            zh="时间加权累计"
+            value={last ? signedPct(portfolioReturn) : '-'}
+            tone={last ? changeColor(portfolioReturn) : 'text-muted-foreground'}
+            sub={last ? `${history[0].date} 至 ${last.date}` : '等待业绩缓存'}
+          />
+          <ShareEditorialMetric
+            en={`Excess vs ${benchmark}`}
+            zh="超额收益"
+            value={last ? signedPct(excess) : '-'}
+            tone={last ? changeColor(excess) : 'text-muted-foreground'}
+            sub={`组合 − ${benchmark} 同期`}
+          />
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          className="py-4"
+        >
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <Kicker index="02" en="Performance" zh="业绩曲线" />
+            {ranges.length > 1 && (
+              <SegmentedControl
+                value={effectiveRange}
+                onChange={(v) => setRange(v as RangeKey)}
+                options={ranges.map((r) => ({ value: r, label: r === 'ALL' ? 'All' : r }))}
+                size="sm"
+                name="share-chart-range"
+                ariaLabel="选择分享页曲线时间段"
+              />
+            )}
+          </div>
+          <EquitySpark history={chartHistory} colorVar="var(--brand)" height={260} gradientId="share-performance-spark" mode="return" />
+          <div className="font-num mt-1 text-[11px] text-muted-foreground">
+            组合表现：剔除买入影响，适合和 {benchmark} 比较。
+          </div>
+          {historyQuery.error && (
+            <Card className="mt-3 border-loss/30 bg-loss/5 p-3 text-xs text-muted-foreground">
+              历史数据加载失败，请刷新重试。
+            </Card>
+          )}
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          className="grid gap-6 pb-4 lg:grid-cols-3"
+        >
+          <ShareMoverCard title="每日赢家" icon={TrendingUp} rows={movers.winners} />
+          <ShareMoverCard title="每日输家" icon={TrendingDown} rows={movers.losers} />
+          <ShareDistributionCard rows={distribution} assetCount={positionCount} />
+        </motion.section>
 
         <Card className="overflow-hidden rounded-lg p-0">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-surface-elevated/40 px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-semibold">持仓权重</div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">你实际买入的 ETF / 标的 · {positionCount} 只 · 不显示股数与金额</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">ETF / 标的 · {positionCount} 只</div>
             </div>
             <div className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-muted-foreground">
               <LockKeyhole className="h-3.5 w-3.5" />
-              权重和百分比
+              权重口径
             </div>
           </div>
           {positionCount === 0 ? (
             <div className="px-4 py-6">
-              <EmptyState icon={EyeOff} title="未公开持仓" description="分享者未启用持仓展示。" />
+              <EmptyState icon={EyeOff} title="暂无持仓" description="当前报告没有可展示的持仓。" />
             </div>
           ) : (
             <div className="divide-y divide-border">
@@ -323,12 +458,27 @@ export function SharePage() {
               </div>
             </div>
 
-            <div className="grid gap-px bg-border sm:grid-cols-2">
-              {lookThrough.lines.map((line) => (
-                <div key={line.config.id} className="bg-card px-4 py-5">
-                  <ExposureGauge line={line} denomNote="占公开持仓" />
-                </div>
-              ))}
+            <div className="grid gap-px bg-border sm:grid-cols-4">
+              <ShareExposureStat
+                label="最大单票"
+                value={topLookThrough ? `${topLookThrough.ticker} ${pct(topLookThrough.weightNav, 1)}` : '-'}
+                sub="穿透后权重"
+              />
+              <ShareExposureStat
+                label="已穿透"
+                value={pct(decomposedWeight, 1)}
+                sub="ETF 成分 + 直接持有"
+              />
+              <ShareExposureStat
+                label="长尾"
+                value={pct(lookThrough.unclassifiedValue / Math.max(lookThrough.totalNav, 1e-9), 1)}
+                sub="未列出的小成分"
+              />
+              <ShareExposureStat
+                label="现金 / 国债"
+                value={pct(lookThrough.cashValue / Math.max(lookThrough.totalNav, 1e-9), 1)}
+                sub="短债类不拆股"
+              />
             </div>
 
             <div className="divide-y divide-border border-t border-border">
@@ -339,14 +489,11 @@ export function SharePage() {
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold">{s.ticker}</span>
-                    {SHOVEL_SET.has(s.ticker) && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-label="AI 铲子线成分" />
-                    )}
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-surface-elevated">
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{ width: `${Math.max(4, (s.weightNav / lookThroughMax) * 100)}%` }}
+                      animate={{ width: `${Math.min(100, Math.max(2, s.weightNav * 100))}%` }}
                       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.04 * i }}
                       className="h-full rounded-full bg-brand"
                     />
@@ -357,16 +504,13 @@ export function SharePage() {
             </div>
 
             <div className="border-t border-border px-4 py-2.5 text-[10px] leading-4 text-muted-foreground">
-              穿透基于公开持仓权重与一份手动维护的 ETF 成分股表,只取每只 ETF 的前若干大成分,其余归入「未穿透长尾」;占比以公开持仓为分母。
+              ETF 成分按维护表拆分，长尾成分合并显示；占比以组合权重为分母。
             </div>
           </Card>
         )}
 
         <footer className="flex flex-col gap-2 rounded-lg border border-border bg-card px-3 py-3 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <span className="inline-flex items-center gap-2">
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
-            <span>金额、入金、汇兑损耗、交易明细均不通过分享 API 暴露。</span>
-          </span>
+          <span>报告口径：TWR、持仓权重、基准对照。</span>
           <span className="tnum sm:text-right">
             Generated {formatDateTime(data.generated_at)}
           </span>
@@ -376,22 +520,144 @@ export function SharePage() {
   );
 }
 
-function SummaryCell({
-  label,
+function ShareHeroKpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: string }) {
+  return (
+    <div className="bg-surface px-5 py-4">
+      <div className="kicker">{label}</div>
+      <div className={cn('font-serif-fig mt-1.5 whitespace-nowrap text-[1.7rem] font-semibold leading-none sm:text-3xl', tone)}>
+        {value}
+      </div>
+      <div className="font-num mt-1 text-[11px] text-muted-foreground">{sub}</div>
+    </div>
+  );
+}
+
+function ShareMoverCard({
+  title,
+  icon: Icon,
+  rows,
+}: {
+  title: string;
+  icon: LucideIcon;
+  rows: Array<{ ticker: string; changePct: number; contribution: number }>;
+}) {
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <Icon className="h-4 w-4 text-brand" />
+          {title}
+        </div>
+        <div className="text-[10px] text-muted-foreground">今日表现</div>
+      </div>
+      {rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-xs text-muted-foreground">
+          暂无可展示的今日变动
+        </div>
+      ) : (
+        <div className="divide-y divide-border">
+          {rows.map((row) => (
+            <div key={`${title}-${row.ticker}`} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+              <div className="font-semibold">{row.ticker}</div>
+              <div className="text-right">
+                <div className={cn('font-num text-sm font-semibold', changeColor(row.changePct))}>
+                  {signedPct(row.changePct)}
+                </div>
+                <div className={cn('font-num text-[10px]', changeColor(row.contribution))}>
+                  贡献 {signedPct(row.contribution)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ShareDistributionCard({
+  rows,
+  assetCount,
+}: {
+  rows: Array<{ label: string; value: number; color: string }>;
+  assetCount: number;
+}) {
+  let cursor = 0;
+  const stops = rows.map((row) => {
+    const start = cursor;
+    cursor += row.value * 100;
+    return `${row.color} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`;
+  });
+  const donutBackground = stops.length > 0 ? `conic-gradient(${stops.join(', ')})` : 'conic-gradient(#e5e7eb 0% 100%)';
+
+  return (
+    <Card className="p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold">
+          <LineChart className="h-4 w-4 text-brand" />
+          组合分布
+        </div>
+        <div className="text-[10px] text-muted-foreground">板块</div>
+      </div>
+      <div className="grid items-center gap-4 sm:grid-cols-[132px_1fr]">
+        <div
+          className="relative mx-auto h-32 w-32 rounded-full"
+          style={{ background: donutBackground }}
+          aria-label="分享组合分布环形图"
+        >
+          <div className="absolute inset-[27px] flex flex-col items-center justify-center rounded-full bg-surface">
+            <div className="font-serif-fig text-2xl font-semibold">{assetCount}</div>
+            <div className="text-[10px] text-muted-foreground">总资产</div>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {rows.map((row) => (
+            <div key={row.label} className="min-w-0">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
+                  <span className="truncate">{row.label}</span>
+                </span>
+                <span className="font-num font-medium">{pct(row.value, 1)}</span>
+              </div>
+              <div className="font-num ml-3.5 mt-0.5 text-[10px] text-muted-foreground">组合权重</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ShareEditorialMetric({
+  en,
+  zh,
   value,
-  valueClass,
+  tone,
   sub,
 }: {
-  label: string;
+  en: string;
+  zh: string;
   value: string;
-  valueClass: string;
+  tone: string;
   sub: string;
 }) {
   return (
-    <div className="px-5 py-5">
-      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={cn('mt-2 text-2xl font-semibold tnum', valueClass)}>{value}</div>
-      <div className="mt-1 text-[11px] text-muted-foreground tnum">{sub}</div>
+    <div className="px-1 py-5 sm:px-5">
+      <div className="kicker">{en}</div>
+      <div className="mt-1 text-sm text-muted-foreground">{zh}</div>
+      <div className={cn('font-serif-fig mt-2 text-4xl font-semibold leading-none', tone)}>{value}</div>
+      <div className="font-num mt-2 text-[11px] text-muted-foreground">{sub}</div>
+    </div>
+  );
+}
+
+function ShareExposureStat({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="bg-card px-4 py-4">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="font-serif-fig mt-1 text-2xl font-semibold tnum">{value}</div>
+      <div className="mt-1 text-[10px] text-muted-foreground">{sub}</div>
     </div>
   );
 }
@@ -416,26 +682,6 @@ function MetaChip({
   );
 }
 
-function ScopeMeta({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: LucideIcon;
-}) {
-  return (
-    <div className="min-w-0 rounded-md border border-border bg-surface px-3 py-2">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
-        <Icon className="h-3 w-3 shrink-0" />
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="mt-1 truncate text-sm font-semibold tnum">{value}</div>
-    </div>
-  );
-}
-
 function Logo() {
   return (
     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-foreground shadow-sm shadow-brand/25">
@@ -451,7 +697,7 @@ function Centered({ children }: { children: React.ReactNode }) {
         <div className="flex justify-center">
           <Logo />
         </div>
-        <div className="mt-4 text-base font-semibold">只读分享</div>
+        <div className="mt-4 text-base font-semibold">分享报告</div>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{children}</p>
       </div>
     </div>
@@ -464,6 +710,7 @@ function clampPercent(value: number) {
 }
 
 function isValidShareToken(value: string | undefined): value is string {
+  if (LOCAL_MODE && value === LOCAL_SHARE_TOKEN) return true;
   return /^[a-f0-9]{32}$/i.test(value ?? '');
 }
 
@@ -488,6 +735,15 @@ function formatDateTime(value: string | null | undefined) {
 function toFiniteNumber(value: unknown) {
   const number = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function annualizeReturn(cumulativeReturn: number, startDate: string | undefined, endDate: string | undefined) {
+  if (!startDate || !endDate || !Number.isFinite(cumulativeReturn) || cumulativeReturn <= -1) return null;
+  const start = new Date(`${startDate}T00:00:00Z`).getTime();
+  const end = new Date(`${endDate}T00:00:00Z`).getTime();
+  const years = (end - start) / (365.25 * 24 * 60 * 60 * 1000);
+  if (!Number.isFinite(years) || years <= 0) return null;
+  return Math.pow(1 + cumulativeReturn, 1 / years) - 1;
 }
 
 function isMissingRpc(error: { code?: string; message?: string }) {

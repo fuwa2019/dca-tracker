@@ -19,7 +19,9 @@ export function useTransactions() {
   return useQuery<TxnRow[]>({
     queryKey: ['transactions'],
     queryFn: async () => {
-      if (LOCAL_MODE) return localTransactions;
+      if (LOCAL_MODE) {
+        return [...localTransactions].sort((a, b) => b.trade_date.localeCompare(a.trade_date) || b.created_at.localeCompare(a.created_at));
+      }
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
@@ -35,7 +37,7 @@ export function useCashflows() {
   return useQuery<CashRow[]>({
     queryKey: ['cashflows'],
     queryFn: async () => {
-      if (LOCAL_MODE) return localCashflows;
+      if (LOCAL_MODE) return [...localCashflows].sort((a, b) => b.cny_out_date.localeCompare(a.cny_out_date));
       const { data, error } = await supabase
         .from('cashflows')
         .select('*')

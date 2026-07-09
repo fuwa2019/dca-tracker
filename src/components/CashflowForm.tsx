@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { todayLocalIso } from '@/lib/format';
 import { fetchCurrentExchangeRate } from '@/lib/quote';
 import { formatDefaultNumber, shouldAutoFillField } from '@/lib/formAutoFill';
+import { LOCAL_MODE, LOCAL_USER } from '@/lib/localMode';
 import type { Database } from '@/lib/database.types';
 
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
@@ -27,7 +28,7 @@ export function CashflowForm({ initial, onDone }: Props) {
   const [cnyAmount, setCnyAmount] = useState(initial ? String(initial.cny_amount) : '');
   const [usdInDate, setUsdInDate] = useState(initial?.usd_in_date ?? today);
   const [usdAmount, setUsdAmount] = useState(initial?.usd_amount ? String(initial.usd_amount) : '');
-  const [targetRate, setTargetRate] = useState(initial ? String(initial.target_rate) : '');
+  const [targetRate, setTargetRate] = useState(initial ? String(initial.target_rate) : LOCAL_MODE ? '7.2' : '');
   const [rateTouched, setRateTouched] = useState(false);
   const [feesCny, setFeesCny] = useState(initial ? String(initial.fees_cny) : '0');
   const [feesUsd, setFeesUsd] = useState(initial ? String(initial.fees_usd) : '0');
@@ -50,7 +51,7 @@ export function CashflowForm({ initial, onDone }: Props) {
   const currentRate = useQuery<number | null>({
     queryKey: ['fx-rate', 'USDCNY'],
     queryFn: fetchCurrentExchangeRate,
-    enabled: !isEdit,
+    enabled: !isEdit && !LOCAL_MODE,
     staleTime: 10 * 60_000,
     gcTime: 30 * 60_000,
     retry: 1,
@@ -87,6 +88,26 @@ export function CashflowForm({ initial, onDone }: Props) {
         fees_usd: Number(feesUsd) || 0,
         note: note || null,
       };
+      if (LOCAL_MODE) {
+        const now = new Date().toISOString();
+        if (isEdit && initial) {
+          qc.setQueryData<CashRow[]>(['cashflows'], (rows = []) =>
+            rows.map((row) => row.id === initial.id ? { ...row, ...payload } : row),
+          );
+        } else {
+          const row: CashRow = {
+            id: `local-cf-${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Date.now()}`,
+            user_id: user?.id ?? LOCAL_USER.id,
+            batch_id: null,
+            ...payload,
+            created_at: now,
+          };
+          qc.setQueryData<CashRow[]>(['cashflows'], (rows = []) =>
+            [row, ...rows].sort((a, b) => b.cny_out_date.localeCompare(a.cny_out_date)),
+          );
+        }
+        return;
+      }
       if (isEdit && initial) {
         const { error } = await supabase.from('cashflows').update(payload).eq('id', initial.id);
         if (error) throw error;
@@ -97,6 +118,10 @@ export function CashflowForm({ initial, onDone }: Props) {
       }
     },
     onSuccess: () => {
+      if (LOCAL_MODE) {
+        onDone?.();
+        return;
+      }
       qc.invalidateQueries({ queryKey: ['cashflows'] });
       qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       qc.invalidateQueries({ queryKey: ['performance_cache_status'] });

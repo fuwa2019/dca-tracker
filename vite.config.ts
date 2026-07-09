@@ -2,8 +2,20 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
+
+function gitCommitDate() {
+  try {
+    return execSync('git log -1 --format=%cd --date=format:%Y-%m-%d', { encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
 
 export default defineConfig({
+  define: {
+    __APP_COMMIT_DATE__: JSON.stringify(gitCommitDate()),
+  },
   plugins: [
     react(),
     VitePWA({
