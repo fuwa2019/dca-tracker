@@ -66,7 +66,7 @@ export function EquitySpark({
     );
   }
   return (
-    <div className="relative px-1" style={{ height }}>
+    <div className="relative min-w-0 max-w-full overflow-hidden px-0 sm:px-1" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={rows} margin={{ top: 8, right: 6, left: 6, bottom: 6 }}>
           <defs>

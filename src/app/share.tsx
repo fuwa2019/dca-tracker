@@ -217,7 +217,7 @@ export function SharePage() {
   return (
     <div className="min-h-full bg-background text-foreground">
       <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/95 lg:bg-background/80 lg:backdrop-blur lg:supports-[backdrop-filter]:bg-background/75">
-        <div className="container flex max-w-[1200px] items-center gap-3 px-4 py-3 sm:px-6">
+        <div className="container flex max-w-[1200px] items-center gap-2.5 px-3 py-2.5 sm:px-6 sm:py-3">
           <Logo />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
@@ -226,7 +226,7 @@ export function SharePage() {
                 分享报告
               </span>
             </div>
-            <div className="truncate text-[11px] text-muted-foreground">收益率、权重与基准对照</div>
+            <div className="hidden truncate text-[11px] text-muted-foreground sm:block">收益率、权重与基准对照</div>
           </div>
           <div className="hidden items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-muted-foreground sm:flex">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -236,18 +236,18 @@ export function SharePage() {
         </div>
       </header>
 
-      <main className="container max-w-[1180px] space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="container max-w-[1180px] space-y-4 px-3 py-4 sm:space-y-5 sm:px-6 sm:py-6 lg:px-8">
         <motion.header
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pb-2"
+          className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2 pb-1 sm:gap-y-3 sm:pb-2"
         >
           <Kicker index="01" en="Portfolio Report" zh="组合总览" />
-          <div className="flex flex-col items-start gap-2 text-left sm:items-end sm:text-right">
-            <div className="kicker">Period</div>
-            <div className="font-num text-xs text-muted-foreground">{dateRange}</div>
-            <div className="flex flex-wrap gap-2 text-[11px]">
+          <div className="flex flex-col items-start gap-1.5 text-left sm:items-end sm:gap-2 sm:text-right">
+            <div className="hidden kicker sm:block">Period</div>
+            <div className="font-num text-[11px] text-muted-foreground sm:text-xs">{dateRange}</div>
+            <div className="hidden flex-wrap gap-2 text-[11px] sm:flex">
               <MetaChip icon={ShieldCheck} label="报告视图" />
               <MetaChip icon={CalendarDays} label={usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'} />
               <MetaChip icon={Clock} label={`更新 ${formatDateTime(generatedAt)}`} numeric />
@@ -274,19 +274,19 @@ export function SharePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-          className="grid gap-x-10 gap-y-6 py-6 lg:grid-cols-[1.45fr_1fr]"
+          className="grid gap-x-10 gap-y-5 py-4 sm:py-6 lg:grid-cols-[1.45fr_1fr]"
         >
           <div>
             <div className="kicker">组合累计表现 · TWR</div>
-            <div className={cn('font-serif-fig mt-2 break-all text-[clamp(3rem,8vw,6rem)] font-semibold leading-[0.92]', last ? changeColor(portfolioReturn) : 'text-muted-foreground')}>
+            <div className={cn('font-serif-fig mt-2 whitespace-nowrap text-[clamp(3.35rem,17vw,6rem)] font-semibold leading-[0.92]', last ? changeColor(portfolioReturn) : 'text-muted-foreground')}>
               {last ? signedPct(portfolioReturn) : '-'}
             </div>
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-muted-foreground">
+            <p className="mt-3 max-w-2xl text-xs leading-5 text-muted-foreground sm:mt-4 sm:text-sm sm:leading-6">
               {reportLead}
             </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-px self-start overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-px self-start overflow-hidden rounded-xl border border-border bg-border sm:rounded-2xl">
             <ShareHeroKpi
               label="今日表现 · Today"
               value={last ? signedPct(dayReturn) : '-'}
@@ -318,7 +318,7 @@ export function SharePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-          className="rule-top grid grid-cols-1 divide-y divide-border border-b border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+          className="rule-top grid grid-cols-3 divide-x divide-border border-b border-border"
         >
           <ShareEditorialMetric
             en="Annualized · TWR"
@@ -347,9 +347,9 @@ export function SharePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-          className="py-4"
+          className="py-3 sm:py-4"
         >
-          <div className="mb-3 flex items-end justify-between gap-3">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <Kicker index="02" en="Performance" zh="业绩曲线" />
             {ranges.length > 1 && (
               <SegmentedControl
@@ -359,10 +359,11 @@ export function SharePage() {
                 size="sm"
                 name="share-chart-range"
                 ariaLabel="选择分享页曲线时间段"
+                className="w-full sm:w-auto"
               />
             )}
           </div>
-          <EquitySpark history={chartHistory} colorVar="var(--brand)" height={260} gradientId="share-performance-spark" mode="return" />
+          <EquitySpark history={chartHistory} colorVar="var(--brand)" height={230} gradientId="share-performance-spark" mode="return" />
           <div className="font-num mt-1 text-[11px] text-muted-foreground">
             组合表现：剔除买入影响，适合和 {benchmark} 比较。
           </div>
@@ -377,7 +378,7 @@ export function SharePage() {
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
-          className="grid gap-6 pb-4 lg:grid-cols-3"
+          className="grid gap-4 pb-2 sm:gap-6 lg:grid-cols-3"
         >
           <ShareMoverCard title="每日赢家" icon={TrendingUp} rows={movers.winners} />
           <ShareMoverCard title="每日输家" icon={TrendingDown} rows={movers.losers} />
@@ -385,7 +386,7 @@ export function SharePage() {
         </motion.section>
 
         <Card className="overflow-hidden rounded-lg p-0">
-          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-surface-elevated/40 px-4 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-surface-elevated/40 px-3 py-3 sm:px-4">
             <div className="min-w-0">
               <div className="text-sm font-semibold">持仓权重</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">ETF / 标的 · {positionCount} 只</div>
@@ -407,7 +408,7 @@ export function SharePage() {
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.03 }}
-                  className="grid grid-cols-[minmax(56px,72px)_minmax(0,1fr)_64px] items-center gap-3 px-4 py-3 sm:grid-cols-[96px_minmax(0,1fr)_96px_96px]"
+                  className="grid grid-cols-[minmax(48px,62px)_minmax(0,1fr)_52px] items-center gap-2 px-3 py-3 sm:grid-cols-[96px_minmax(0,1fr)_96px_96px] sm:gap-3 sm:px-4"
                 >
                   <div className="min-w-0">
                     <div className="truncate font-semibold">{p.ticker}</div>
@@ -423,7 +424,7 @@ export function SharePage() {
                           className="h-full rounded-full bg-brand"
                         />
                       </div>
-                      <div className="w-12 text-right text-xs text-muted-foreground tnum">
+                      <div className="w-10 shrink-0 text-right text-[11px] text-muted-foreground tnum sm:w-12 sm:text-xs">
                         {pct(p.weight_pct, 1)}
                       </div>
                     </div>
@@ -445,7 +446,7 @@ export function SharePage() {
 
         {lookThroughTop.length > 0 && (
           <Card className="overflow-hidden rounded-lg p-0">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-surface-elevated/40 px-4 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-surface-elevated/40 px-3 py-3 sm:px-4">
               <div className="min-w-0">
                 <div className="text-sm font-semibold">穿透敞口</div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground">
@@ -485,7 +486,7 @@ export function SharePage() {
               {lookThroughTop.map((s, i) => (
                 <div
                   key={s.ticker}
-                  className="grid grid-cols-[64px_minmax(0,1fr)_52px] items-center gap-3 px-4 py-2.5"
+                  className="grid grid-cols-[54px_minmax(0,1fr)_48px] items-center gap-2 px-3 py-2.5 sm:grid-cols-[64px_minmax(0,1fr)_52px] sm:gap-3 sm:px-4"
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold">{s.ticker}</span>
@@ -503,7 +504,7 @@ export function SharePage() {
               ))}
             </div>
 
-            <div className="border-t border-border px-4 py-2.5 text-[10px] leading-4 text-muted-foreground">
+            <div className="border-t border-border px-3 py-2.5 text-[10px] leading-4 text-muted-foreground sm:px-4">
               ETF 成分按维护表拆分，长尾成分合并显示；占比以组合权重为分母。
             </div>
           </Card>
@@ -522,12 +523,12 @@ export function SharePage() {
 
 function ShareHeroKpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: string }) {
   return (
-    <div className="bg-surface px-5 py-4">
-      <div className="kicker">{label}</div>
-      <div className={cn('font-serif-fig mt-1.5 whitespace-nowrap text-[1.7rem] font-semibold leading-none sm:text-3xl', tone)}>
+    <div className="min-w-0 bg-surface px-3 py-3 sm:px-5 sm:py-4">
+      <div className="kicker truncate text-[8px] sm:text-[10px]">{label}</div>
+      <div className={cn('font-serif-fig mt-1.5 whitespace-nowrap text-[clamp(1.25rem,6.5vw,1.7rem)] font-semibold leading-none sm:text-3xl', tone)}>
         {value}
       </div>
-      <div className="font-num mt-1 text-[11px] text-muted-foreground">{sub}</div>
+      <div className="font-num mt-1 truncate text-[9px] text-muted-foreground sm:text-[11px]">{sub}</div>
     </div>
   );
 }
@@ -643,11 +644,11 @@ function ShareEditorialMetric({
   sub: string;
 }) {
   return (
-    <div className="px-1 py-5 sm:px-5">
-      <div className="kicker">{en}</div>
-      <div className="mt-1 text-sm text-muted-foreground">{zh}</div>
-      <div className={cn('font-serif-fig mt-2 text-4xl font-semibold leading-none', tone)}>{value}</div>
-      <div className="font-num mt-2 text-[11px] text-muted-foreground">{sub}</div>
+    <div className="min-w-0 px-2 py-3 sm:px-5 sm:py-5">
+      <div className="kicker truncate text-[8px] sm:text-[10px]">{en}</div>
+      <div className="mt-1 truncate text-[11px] text-muted-foreground sm:text-sm">{zh}</div>
+      <div className={cn('font-serif-fig mt-2 whitespace-nowrap text-[clamp(1rem,5.4vw,1.35rem)] font-semibold leading-none sm:text-4xl', tone)}>{value}</div>
+      <div className="font-num mt-1 hidden truncate text-[11px] text-muted-foreground sm:block">{sub}</div>
     </div>
   );
 }

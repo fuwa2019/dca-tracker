@@ -71,18 +71,18 @@ function pageTitle(pathname: string) {
 export function AppShell() {
   const location = useLocation();
   return (
-    <div className="flex h-full flex-col bg-background lg:flex-row">
+    <div className="flex h-full w-full overflow-hidden bg-background lg:flex-row">
       <DesktopNav />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar title={pageTitle(location.pathname)} />
-        <main className="flex-1 overflow-auto pb-24 lg:pb-10">
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-24 lg:pb-10">
           <RouteErrorBoundary resetKey={location.pathname}>
             <motion.div
               key={location.pathname}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-              className="min-h-full"
+              className="min-h-full min-w-0 overflow-x-hidden"
             >
               <Outlet />
             </motion.div>
@@ -151,12 +151,12 @@ class RouteErrorBoundary extends Component<
 function TopBar({ title }: { title: string }) {
   return (
     <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/95 lg:bg-background/90 lg:backdrop-blur lg:supports-[backdrop-filter]:bg-background/75">
-      <div className="flex flex-col gap-y-1 px-3 py-2 lg:flex-row lg:items-center lg:gap-x-3 lg:px-6 lg:py-2.5">
+      <div className="flex flex-col gap-y-1.5 px-3 py-2 lg:flex-row lg:items-center lg:gap-x-3 lg:px-6 lg:py-2.5">
         {/* Row 1 (mobile): Logo + title + ThemeToggle; Row 1 (desktop): title only */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Logo className="lg:hidden" />
           <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight">{title}</h1>
-          <LocalBadge className="lg:hidden" />
+          <LocalBadge className="hidden sm:inline-flex lg:hidden" />
           <div className="lg:hidden">
             <ThemeToggle />
           </div>
@@ -164,7 +164,7 @@ function TopBar({ title }: { title: string }) {
 
         {/* Row 2 (mobile): MarketStatusBar */}
         <div className="lg:hidden">
-          <MarketStatusBar className="flex" />
+          <MarketStatusBar className="flex" compact />
         </div>
 
         {/* Desktop right side: MarketStatusBar + ThemeToggle */}
@@ -272,8 +272,8 @@ function DesktopNav() {
 
 function MobileNav() {
   return (
-    <nav className="safe-bottom sticky bottom-0 z-20 border-t border-border bg-background lg:hidden">
-      <div className="flex px-1">
+    <nav className="safe-bottom fixed bottom-3 left-3 z-30 w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] lg:hidden">
+      <div className="flex overflow-hidden rounded-2xl border border-border bg-background/92 px-1.5 py-1 shadow-[0_14px_40px_-20px_hsl(var(--elevation)/0.55)] backdrop-blur supports-[backdrop-filter]:bg-background/78">
         {MOBILE_NAV.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -281,19 +281,19 @@ function MobileNav() {
             end={to === '/'}
             className={({ isActive }) =>
               cn(
-                'relative flex flex-1 flex-col items-center gap-0.5 rounded-md py-2 text-[10px] transition-colors',
-                isActive ? 'text-brand' : 'text-muted-foreground',
+                'relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] transition-colors',
+                isActive ? 'bg-brand/10 text-brand' : 'text-muted-foreground hover:bg-surface-elevated hover:text-foreground',
               )
             }
           >
             {({ isActive }) => (
               <>
                 <Icon className="h-[18px] w-[18px]" />
-                <span className="font-medium">{label}</span>
+                <span className="max-w-full truncate font-medium">{label}</span>
                 {isActive && (
                   <motion.span
                     layoutId="mobile-nav-pill"
-                    className="absolute inset-x-5 top-0 h-0.5 rounded-full bg-brand"
+                    className="absolute inset-x-5 top-1 h-0.5 rounded-full bg-brand"
                     transition={{ type: 'spring', damping: 30, stiffness: 350 }}
                   />
                 )}

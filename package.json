@@ -19,6 +19,8 @@
     "schwab:refresh": "node scripts/refresh-schwab-token.mjs",
     "test:ui": "node scripts/verify-ui-behavior.mjs",
     "test:symbols": "node scripts/verify-tracked-symbols.mjs",
+    "content:day": "node scripts/generate-x-content-day.mjs",
+    "content:analyze": "node scripts/analyze-x-analytics-csv.mjs",
     "test:stress": "node scripts/generate-30y-fixtures.mjs && node scripts/verify-30y-stress.mjs"
   },
   "dependencies": {

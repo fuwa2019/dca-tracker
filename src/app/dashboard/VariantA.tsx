@@ -157,15 +157,15 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       initial="hidden"
       animate="show"
       variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07 } } }}
-      className="container max-w-[1180px] px-4 py-6 sm:px-6 lg:px-8"
+      className="container max-w-[1180px] overflow-x-hidden px-3 py-3 sm:px-6 sm:py-6 lg:px-8"
     >
       {/* Masthead */}
       <motion.header
         variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.5, ease } } }}
-        className="flex items-end justify-between gap-4 pb-4"
+        className="flex flex-col items-start gap-3 pb-3 sm:flex-row sm:items-end sm:justify-between sm:pb-4"
       >
         <Kicker index="01" en="Portfolio Report" zh="组合总览" />
-        <div className="flex flex-col items-end gap-2 text-right">
+        <div className="flex w-full flex-col items-start gap-2 text-left sm:w-auto sm:items-end sm:text-right">
           <div className="kicker">Period</div>
           <div className="font-num text-xs text-muted-foreground">{dateRange}</div>
           <DashboardActionBar cacheDirty={cacheDirty} quotesStale={quotesNone || quotesPartial || quotesError} />
@@ -175,10 +175,11 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       {LOCAL_MODE && (
         <motion.div
           variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease } } }}
-          className="mb-5 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-xs text-muted-foreground"
+          className="mb-4 rounded-lg border border-brand/25 bg-brand/10 px-3 py-2 text-xs text-muted-foreground sm:mb-5"
         >
           <span className="font-medium text-brand">本地 Debug 版</span>
-          <span className="ml-2">免邮箱登录，使用内置 10 年 QQQ 派生 demo 数据；交易只写入浏览器内存，不连接 Supabase。</span>
+          <span className="ml-2 sm:hidden">10 年 QQQ demo · 本地内存</span>
+          <span className="ml-2 hidden sm:inline">免邮箱登录，使用内置 10 年 QQQ 派生 demo 数据；交易只写入浏览器内存，不连接 Supabase。</span>
         </motion.div>
       )}
 
@@ -187,23 +188,23 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       {/* Hero: oversized serif NAV + KPI column */}
       <motion.section
         variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
-        className="grid gap-x-10 gap-y-6 py-6 lg:grid-cols-[1.45fr_1fr]"
+        className="grid gap-x-10 gap-y-4 py-4 sm:gap-y-6 sm:py-6 lg:grid-cols-[1.45fr_1fr]"
       >
         <div>
           <div className="flex items-center gap-2 kicker">
             持仓市值 · Portfolio Value
             {cacheDirty && <StatusBadge tone="warn" dot>缓存待刷新</StatusBadge>}
           </div>
-          <div className="font-serif-fig mt-2 break-all text-[clamp(2.75rem,8vw,6rem)] font-semibold leading-[0.92] text-foreground">
+          <div className="font-serif-fig mt-2 break-all text-[clamp(3.2rem,16vw,4.4rem)] font-semibold leading-[0.92] text-foreground lg:text-[clamp(2.75rem,8vw,6rem)]">
             <AnimatedNumber value={aggregates.stockMv} format={(v) => usd0.format(v)} duration={1.1} />
           </div>
-          <div className="font-num mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-[13px] text-muted-foreground">
+          <div className="font-num mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[12px] text-muted-foreground sm:mt-4 sm:text-[13px]">
             <span>资产 <span className="text-foreground">{positions.length} 个</span></span>
             <span>基准 <span className="text-foreground">{selectedBenchmark}</span></span>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-px self-start overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-px self-start overflow-hidden rounded-2xl border border-border bg-border min-[360px]:grid-cols-2">
           <HeroKpi
             label="今日盈亏 · Today"
             value={signedUsd(aggregates.dayPL)}
@@ -250,7 +251,7 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       {/* Three editorial metrics across a ruled row */}
       <motion.section
         variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
-        className="rule-top grid grid-cols-1 divide-y divide-border border-b border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0"
+        className="rule-top grid grid-cols-1 divide-y divide-border border-b border-border min-[360px]:grid-cols-3 min-[360px]:divide-x min-[360px]:divide-y-0"
       >
         <EditorialMetric
           en="Annualized · XIRR" zh="年化收益"
@@ -279,12 +280,12 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       {/* Performance + target */}
       <motion.section
         variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
-        className="grid gap-6 py-8 lg:grid-cols-3"
+        className="grid gap-5 py-6 sm:gap-6 sm:py-8 lg:grid-cols-3"
       >
         <div className="lg:col-span-2">
-          <div className="mb-3 flex items-end justify-between">
+          <div className="mb-3 flex flex-col items-start gap-3 sm:flex-row sm:items-end sm:justify-between">
             <Kicker index="02" en="Performance" zh="业绩曲线" />
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
               <SegmentedControl
                 value={chartMode}
                 onChange={(v) => setChartMode(v as 'value' | 'return')}
@@ -306,12 +307,12 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
                   ariaLabel="选择首页曲线时间段"
                 />
               )}
-              <Button asChild variant="ghost" size="sm" className="shrink-0 text-brand">
+              <Button asChild variant="ghost" size="sm" className="hidden shrink-0 text-brand sm:inline-flex">
                 <Link to="/performance">查看完整业绩 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
               </Button>
             </div>
           </div>
-          <EquitySpark history={chartHistory} colorVar="var(--brand)" height={260} gradientId="va-spark" mode={chartMode} />
+          <EquitySpark history={chartHistory} colorVar="var(--brand)" height={230} gradientId="va-spark" mode={chartMode} />
           <div className="font-num mt-1 text-[11px] text-muted-foreground">{chartModeHint}</div>
         </div>
         <div>
@@ -335,7 +336,7 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
 
       <motion.section
         variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
-        className="grid gap-6 pb-8 lg:grid-cols-3"
+        className="grid gap-3 pb-6 sm:gap-6 sm:pb-8 lg:grid-cols-3"
       >
         <DailyMovers title="每日赢家" icon={TrendingUp} rows={movers.winners} />
         <DailyMovers title="每日输家" icon={TrendingDown} rows={movers.losers} />
@@ -389,17 +390,20 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
 function DashboardActionBar({ cacheDirty, quotesStale }: { cacheDirty: boolean; quotesStale: boolean }) {
   const [tradeOpen, setTradeOpen] = useState(false);
   const [tradeSide, setTradeSide] = useState<'buy' | 'sell'>('buy');
+  const maintenanceLabel = cacheDirty ? '刷新缓存' : quotesStale ? '补齐价格' : '数据维护';
+  const maintenanceShortLabel = cacheDirty ? '刷新' : quotesStale ? '补价' : '维护';
   return (
-    <div className="flex flex-wrap justify-end gap-2">
+    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end">
       <Dialog open={tradeOpen} onOpenChange={setTradeOpen}>
         <DialogTrigger asChild>
           <Button
             size="sm"
             onClick={() => setTradeSide('buy')}
-            className="shadow-none"
+            className="min-w-0 w-full px-2 shadow-none sm:px-3"
           >
             <Plus className="h-3.5 w-3.5" />
-            添加交易
+            <span className="sm:hidden">添加</span>
+            <span className="hidden sm:inline">添加交易</span>
           </Button>
         </DialogTrigger>
         <DialogContent>
@@ -431,10 +435,11 @@ function DashboardActionBar({ cacheDirty, quotesStale }: { cacheDirty: boolean; 
         </DialogContent>
       </Dialog>
 
-      <Button asChild variant={cacheDirty || quotesStale ? 'default' : 'outline'} size="sm">
+      <Button asChild variant={cacheDirty || quotesStale ? 'default' : 'outline'} size="sm" className="min-w-0 w-full px-2 shadow-none sm:px-3">
         <Link to="/health">
           <Database className="h-3.5 w-3.5" />
-          {cacheDirty ? '刷新缓存' : quotesStale ? '补齐价格' : '数据维护'}
+          <span className="sm:hidden">{maintenanceShortLabel}</span>
+          <span className="hidden sm:inline">{maintenanceLabel}</span>
         </Link>
       </Button>
     </div>
@@ -511,13 +516,13 @@ function DistributionPanel({
         </div>
         <div className="text-[10px] text-muted-foreground">板块</div>
       </div>
-      <div className="grid items-center gap-4 sm:grid-cols-[132px_1fr]">
+      <div className="grid grid-cols-[112px_1fr] items-center gap-3 sm:grid-cols-[132px_1fr] sm:gap-4">
         <div
-          className="relative mx-auto h-32 w-32 rounded-full"
+          className="relative mx-auto h-28 w-28 rounded-full sm:h-32 sm:w-32"
           style={{ background: donutBackground }}
           aria-label="组合分布环形图"
         >
-          <div className="absolute inset-[27px] flex flex-col items-center justify-center rounded-full bg-surface">
+          <div className="absolute inset-[24px] flex flex-col items-center justify-center rounded-full bg-surface sm:inset-[27px]">
             <div className="font-serif-fig text-2xl font-semibold">{assetCount}</div>
             <div className="text-[10px] text-muted-foreground">总资产</div>
           </div>
@@ -593,11 +598,15 @@ function LookThroughPanel({
 }
 
 function HeroKpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone: string }) {
+  const mobileLabel = label.split(' · ')[0] || label;
   return (
-    <div className="bg-surface px-5 py-4">
-      <div className="kicker">{label}</div>
-      <div className={cn('font-serif-fig mt-1.5 whitespace-nowrap text-[1.7rem] font-semibold leading-none sm:text-3xl', tone)}>{value}</div>
-      <div className={cn('font-num mt-1 text-[11px]', tone)}>{sub}</div>
+    <div className="min-w-0 bg-surface px-3 py-3 sm:px-5 sm:py-4">
+      <div className="kicker leading-4">
+        <span className="sm:hidden">{mobileLabel}</span>
+        <span className="hidden sm:inline">{label}</span>
+      </div>
+      <div className={cn('font-serif-fig mt-1.5 truncate text-[1.06rem] font-semibold leading-none min-[360px]:text-[1.12rem] min-[400px]:text-[1.2rem] sm:text-3xl', tone)}>{value}</div>
+      <div className={cn('font-num mt-1 truncate text-[11px]', tone)}>{sub}</div>
     </div>
   );
 }
@@ -621,9 +630,12 @@ function EditorialMetric({
 }) {
   const [infoOpen, setInfoOpen] = useState(false);
   return (
-    <div className="px-1 py-5 sm:px-5">
-      <div className="relative flex items-center gap-1.5">
-        <div className="kicker">{en}</div>
+    <div className="grid min-w-0 grid-rows-[2.45rem_auto] px-2.5 py-3 sm:grid-rows-none sm:px-5 sm:py-5">
+      <div className="relative flex min-w-0 items-start gap-1.5">
+        <div className="min-w-0 flex-1">
+          <div className="kicker truncate">{en}</div>
+          <div className="mt-0.5 truncate text-[12px] font-medium text-muted-foreground sm:text-[13px]">{zh}</div>
+        </div>
         {infoTitle && infoBody && (
           <>
             <button
@@ -632,11 +644,11 @@ function EditorialMetric({
               aria-expanded={infoOpen}
               onClick={() => setInfoOpen((v) => !v)}
               className={cn(
-                'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground sm:h-5 sm:w-5',
+                'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground',
                 infoOpen && 'border-brand/40 text-brand',
               )}
             >
-              <Info className="h-4 w-4 sm:h-3 sm:w-3" />
+              <Info className="h-3 w-3" />
             </button>
             {infoOpen && (
               <div className="absolute left-0 top-7 z-20 w-[min(20rem,calc(100vw-2rem))] rounded-md border border-border bg-surface-elevated p-3 text-xs leading-5 text-muted-foreground shadow-lg">
@@ -647,9 +659,8 @@ function EditorialMetric({
           </>
         )}
       </div>
-      <div className="mt-0.5 text-[13px] font-medium text-muted-foreground">{zh}</div>
-      <div className={cn('font-serif-fig mt-2 text-4xl font-semibold leading-none', tone)}>{value}</div>
-      <div className="font-num mt-1.5 text-[11px] text-muted-foreground">{sub}</div>
+      <div className={cn('font-serif-fig self-start whitespace-nowrap text-[clamp(1rem,4.7vw,1.24rem)] font-semibold leading-none sm:mt-2 sm:text-4xl', tone)}>{value}</div>
+      <div className="font-num mt-1.5 hidden truncate text-[10px] text-muted-foreground sm:block sm:text-[11px]">{sub}</div>
     </div>
   );
 }
