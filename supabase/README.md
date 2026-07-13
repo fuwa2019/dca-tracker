@@ -7,7 +7,7 @@
    - `migrations/0002_daily_prices.sql`（资产曲线和基准对照所需的历史价表）
    - `migrations/0003_shared_portfolio_v2.sql`（修复卖出后均价虚高，覆盖旧函数）
    - 后续已部署项目继续按编号运行新增 migration，当前最新版本到
-     `migrations/0039_coverage_empty_required_window.sql`
+     `migrations/0041_shared_portfolio_cash_weight.sql`
 
    新部署只需按顺序跑一次；已部署的项目跑新增的 sql 即可（idempotent）。
 
@@ -38,7 +38,7 @@ performance_history_cache: 主视图和分享视图共用的脱敏收益率曲�
 
 - `funding_batches / cashflows / transactions / share_links / settings / email_log`：每行 `auth.uid() = user_id` 才能访问。
 - `quote_snapshots`：anon + authenticated 都可 select，但 RLS 阻止任何 client 写入（只有 service-role 绕过）。
-- `shared_portfolio(token)`：`security definer` RPC，校验 token 后返回脱敏 JSON（只有持仓权重 % 和收益率 %，无绝对 USD 金额）。
+- `shared_portfolio(token)`：`security definer` RPC，校验 token 后返回脱敏 JSON（证券持仓内权重、现金净值权重和收益率 %，无绝对 USD 金额）。
 - `shared_performance_history(token)`：只读取已缓存的公开收益率曲线，不做匿名重算。
 
 ## 验证

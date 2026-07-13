@@ -118,10 +118,10 @@ export function CashflowsPage() {
                       {usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
+                      <Button aria-label={`编辑 ${shortDate(c.cny_out_date)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
+                      <Button aria-label={`删除 ${shortDate(c.cny_out_date)} 资金流`} variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -144,10 +144,10 @@ export function CashflowsPage() {
                         {c.note && <span className="truncate">· {c.note}</span>}
                       </div>
                       <div className="ml-2 flex shrink-0 gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
+                        <Button aria-label={`编辑 ${shortDate(c.cny_out_date)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
+                        <Button aria-label={`删除 ${shortDate(c.cny_out_date)} 资金流`} variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>

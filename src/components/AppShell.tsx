@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
+import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
   Activity,
@@ -70,12 +70,18 @@ function pageTitle(pathname: string) {
 
 export function AppShell() {
   const location = useLocation();
+  const scrollContainerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    scrollContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [location.key]);
+
   return (
     <div className="flex h-full w-full overflow-hidden bg-background lg:flex-row">
       <DesktopNav />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar title={pageTitle(location.pathname)} />
-        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-24 lg:pb-10">
+        <main ref={scrollContainerRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-24 lg:pb-10">
           <RouteErrorBoundary resetKey={location.pathname}>
             <motion.div
               key={location.pathname}

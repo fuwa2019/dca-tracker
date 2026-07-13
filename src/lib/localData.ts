@@ -279,6 +279,7 @@ export const localSharedPortfolio: SharedPortfolio = {
     day_change_pct: row.dayChangePct,
   })),
   total_return_pct: localPortfolioHistory.series.at(-1)?.return_pct_user ?? 0,
+  cash_weight_pct: 0,
   has_snapshot_price: true,
   generated_at: localPortfolioHistory.generated_at,
 };

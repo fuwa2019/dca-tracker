@@ -129,17 +129,29 @@ export function SharePage() {
   const effectiveRange = ranges.includes(range) ? range : (ranges[ranges.length - 1] ?? 'ALL');
   const chartHistory = useMemo(() => sliceByRange(history, effectiveRange), [history, effectiveRange]);
 
-  // 脱敏穿透:仅用公开的持仓权重(%)推算,不涉及任何金额。
-  const sharePositions = useMemo(() => {
+  // RPC 返回的持仓权重以证券市值为分母；先还原为组合净值权重，现金单列。
+  const cashWeight = useMemo(() => {
     const d = portfolio.data;
-    if (!d || 'error' in d) return [] as Array<{ ticker: string; value: number }>;
-    return d.positions
-      .filter((p) => Number.isFinite(p.weight_pct) && p.weight_pct > 0)
-      .map((p) => ({ ticker: p.ticker, value: p.weight_pct }));
+    if (!d || 'error' in d) return 0;
+    return clampUnit(toFiniteNumber(d.cash_weight_pct) ?? 0);
   }, [portfolio.data]);
+  const shareRows = useMemo(() => {
+    const d = portfolio.data;
+    if (!d || 'error' in d) return [] as SharedPortfolio['positions'];
+    const securityToNav = 1 - cashWeight;
+    return [...d.positions]
+      .map((p) => ({ ...p, weight_pct: Math.max(0, Number(p.weight_pct) || 0) * securityToNav }))
+      .sort((a, b) => b.weight_pct - a.weight_pct);
+  }, [cashWeight, portfolio.data]);
+  const sharePositions = useMemo(
+    () => shareRows
+      .filter((p) => Number.isFinite(p.weight_pct) && p.weight_pct > 0)
+      .map((p) => ({ ticker: p.ticker, value: p.weight_pct })),
+    [shareRows],
+  );
   const lookThrough = useMemo(
-    () => computeLookThrough({ holdings: sharePositions, data: HOLDINGS, lines: [] }),
-    [sharePositions],
+    () => computeLookThrough({ holdings: sharePositions, uninvestedCash: cashWeight, data: HOLDINGS, lines: [] }),
+    [cashWeight, sharePositions],
   );
   const lookThroughTop = useMemo(() => lookThrough.stocks.slice(0, 10), [lookThrough.stocks]);
   const decomposedWeight = useMemo(
@@ -147,11 +159,6 @@ export function SharePage() {
     [lookThrough.stocks],
   );
   const topLookThrough = lookThroughTop[0];
-  const shareRows = useMemo(() => {
-    const d = portfolio.data;
-    if (!d || 'error' in d) return [] as SharedPortfolio['positions'];
-    return [...d.positions].sort((a, b) => b.weight_pct - a.weight_pct);
-  }, [portfolio.data]);
   const movers = useMemo(() => {
     const rows = shareRows
       .filter((row) => row.day_change_pct !== null && Number.isFinite(row.day_change_pct))
@@ -167,10 +174,18 @@ export function SharePage() {
   }, [shareRows]);
   const distribution = useMemo(() => {
     const byLabel = new Map<string, number>();
+    const cashLike = new Set((HOLDINGS._meta?.cashLike ?? []).map((ticker) => ticker.toUpperCase()));
+    let cashLikeWeight = 0;
     for (const row of shareRows) {
+      if (cashLike.has(row.ticker.toUpperCase())) {
+        cashLikeWeight += row.weight_pct;
+        continue;
+      }
       const label = SHARE_SECTOR_BY_TICKER[row.ticker] ?? '其他';
       byLabel.set(label, (byLabel.get(label) ?? 0) + row.weight_pct);
     }
+    const totalCashWeight = lookThrough.totalNav > 0 ? lookThrough.cashValue / lookThrough.totalNav : cashLikeWeight + cashWeight;
+    if (totalCashWeight > 0) byLabel.set('现金 / 国债', totalCashWeight);
     return [...byLabel.entries()]
       .map(([label, value], index) => ({
         label,
@@ -179,7 +194,7 @@ export function SharePage() {
       }))
       .filter((row) => row.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [shareRows]);
+  }, [cashWeight, lookThrough.cashValue, lookThrough.totalNav, shareRows]);
   const dayReturn = useMemo(
     () => shareRows.reduce((sum, row) => sum + row.weight_pct * (row.day_change_pct ?? 0), 0),
     [shareRows],
@@ -209,6 +224,8 @@ export function SharePage() {
   const pointCount = history.length;
   const positionCount = data.positions.length;
   const hasProvisionalClose = !!last?.provisional;
+  const periodDays = calendarDaysBetween(history[0]?.date, last?.date);
+  const shortTermAnnualized = periodDays != null && periodDays < 90;
   const annualizedReturn = annualizeReturn(portfolioReturn, history[0]?.date, last?.date);
   const reportLead = last
     ? `从 ${history[0].date} 到 ${last.date}，组合累计 ${signedPct(portfolioReturn)}，相对 ${benchmark} ${signedPct(excess)}。`
@@ -251,7 +268,7 @@ export function SharePage() {
               <MetaChip icon={ShieldCheck} label="报告视图" />
               <MetaChip icon={CalendarDays} label={usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'} />
               <MetaChip icon={Clock} label={`更新 ${formatDateTime(generatedAt)}`} numeric />
-              {hasProvisionalClose && <MetaChip icon={Clock} label="收盘价待核对" />}
+              {hasProvisionalClose && <MetaChip icon={Clock} label="行情状态：临时收盘价" />}
             </div>
           </div>
         </motion.header>
@@ -321,11 +338,11 @@ export function SharePage() {
           className="rule-top grid grid-cols-3 divide-x divide-border border-b border-border"
         >
           <ShareEditorialMetric
-            en="Annualized · TWR"
-            zh="年化收益"
+            en={shortTermAnnualized ? 'Annualized · TWR · Short window' : 'Annualized · TWR'}
+            zh={shortTermAnnualized ? '时间加权年化（短期外推）' : '时间加权年化'}
             value={annualizedReturn !== null ? signedPct(annualizedReturn) : '-'}
             tone={annualizedReturn === null ? 'text-muted-foreground' : changeColor(annualizedReturn)}
-            sub="年化 TWR"
+            sub={shortTermAnnualized ? '短期外推 · 不等同 XIRR' : '时间加权 TWR'}
           />
           <ShareEditorialMetric
             en="Cumulative · TWR"
@@ -342,6 +359,11 @@ export function SharePage() {
             sub={`组合 − ${benchmark} 同期`}
           />
         </motion.section>
+        {shortTermAnnualized && (
+          <p className="-mt-2 text-[11px] leading-5 text-muted-foreground">
+            当前区间不足 90 天，年化值只是短期外推；累计 TWR 更适合判断这段表现。它与登录页的 XIRR 分别衡量价格表现和资金投入时点，因此可能同时为正负不同方向。
+          </p>
+        )}
 
         <motion.section
           initial={{ opacity: 0, y: 12 }}
@@ -367,6 +389,11 @@ export function SharePage() {
           <div className="font-num mt-1 text-[11px] text-muted-foreground">
             组合表现：剔除买入影响，适合和 {benchmark} 比较。
           </div>
+          {hasProvisionalClose && (
+            <div className="mt-1 text-[11px] text-muted-foreground">
+              行情状态为临时收盘价，最终收盘后收益可能小幅变化。
+            </div>
+          )}
           {historyQuery.error && (
             <Card className="mt-3 border-loss/30 bg-loss/5 p-3 text-xs text-muted-foreground">
               历史数据加载失败，请刷新重试。
@@ -388,8 +415,8 @@ export function SharePage() {
         <Card className="overflow-hidden rounded-lg p-0">
           <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border bg-surface-elevated/40 px-3 py-3 sm:px-4">
             <div className="min-w-0">
-              <div className="text-sm font-semibold">持仓权重</div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">ETF / 标的 · {positionCount} 只</div>
+              <div className="text-sm font-semibold">持仓权重（组合净值）</div>
+              <div className="mt-0.5 text-[11px] text-muted-foreground">证券持仓 · 现金单列 · {positionCount} 只</div>
             </div>
             <div className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-muted-foreground">
               <LockKeyhole className="h-3.5 w-3.5" />
@@ -402,7 +429,7 @@ export function SharePage() {
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {data.positions.map((p, i) => (
+              {shareRows.map((p, i) => (
                 <motion.div
                   key={p.ticker}
                   initial={{ opacity: 0, y: 4 }}
@@ -428,7 +455,7 @@ export function SharePage() {
                         {pct(p.weight_pct, 1)}
                       </div>
                     </div>
-                    <div className="mt-1 hidden text-[10px] text-muted-foreground sm:block">组合权重</div>
+                    <div className="mt-1 hidden text-[10px] text-muted-foreground sm:block">组合净值权重</div>
                   </div>
                   <div className={cn('hidden text-right font-medium tnum sm:block', changeColor(p.return_pct))}>
                     {signedPct(p.return_pct)}
@@ -708,6 +735,18 @@ function Centered({ children }: { children: React.ReactNode }) {
 function clampPercent(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.min(100, Math.max(2, value));
+}
+
+function clampUnit(value: number) {
+  return Math.min(1, Math.max(0, value));
+}
+
+function calendarDaysBetween(startDate: string | undefined, endDate: string | undefined) {
+  if (!startDate || !endDate) return null;
+  const start = new Date(`${startDate}T00:00:00Z`).getTime();
+  const end = new Date(`${endDate}T00:00:00Z`).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null;
+  return Math.round((end - start) / (24 * 60 * 60 * 1000));
 }
 
 function isValidShareToken(value: string | undefined): value is string {

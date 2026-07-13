@@ -67,8 +67,10 @@ type Coverage = {
 
 export function DataHealthPage() {
   const qc = useQueryClient();
-  const { data: txns = [], isLoading: txnsLoading } = useTransactions();
-  const { data: settings } = useSettings();
+  const transactionsQuery = useTransactions();
+  const txns = transactionsQuery.data ?? [];
+  const { data: settings, isLoading: settingsLoading } = useSettings();
+  const txnsLoading = transactionsQuery.isLoading;
   const selectedBenchmark = useMemo(() => getSelectedBenchmark(settings), [settings]);
   const [deletedLocalClosedSymbols, setDeletedLocalClosedSymbols] = useState<string[]>([]);
 
@@ -132,6 +134,10 @@ export function DataHealthPage() {
   const cacheExists = cacheStatus.data?.exists ?? false;
   const cachePoints = cacheStatus.data?.points;
   const newestBenchmark = coverage.find((c) => c.ticker === selectedBenchmark)?.lastDate ?? null;
+  const healthLoading = txnsLoading
+    || settingsLoading
+    || cacheStatus.isLoading
+    || (!LOCAL_MODE && (priceRows.isLoading || shareLinks.isLoading));
 
   const backfillPrices = useMutation({
     mutationFn: async () => {
@@ -196,30 +202,30 @@ export function DataHealthPage() {
         <HealthTile
           icon={Activity}
           label="输入数据"
-          value={hasEvents ? '可计算' : '缺数据'}
-          tone={hasEvents ? 'ok' : 'bad'}
-          detail={`${txns.length} 笔交易`}
+          value={healthLoading ? '检查中' : hasEvents ? '可计算' : '缺数据'}
+          tone={healthLoading ? 'info' : hasEvents ? 'ok' : 'bad'}
+          detail={healthLoading ? '正在读取交易记录' : `${txns.length} 笔交易`}
         />
         <HealthTile
           icon={Database}
           label="价格覆盖"
-          value={stalePrices.length === 0 ? '正常' : `${stalePrices.length} 项需检查`}
-          tone={stalePrices.length === 0 ? 'ok' : 'warn'}
-          detail={`${coverage.reduce((sum, c) => sum + c.points, 0)} 个日线点`}
+          value={healthLoading ? '检查中' : stalePrices.length === 0 ? '正常' : `${stalePrices.length} 项需检查`}
+          tone={healthLoading ? 'info' : stalePrices.length === 0 ? 'ok' : 'warn'}
+          detail={healthLoading ? '正在读取价格覆盖' : `${coverage.reduce((sum, c) => sum + c.points, 0)} 个日线点`}
         />
         <HealthTile
           icon={TrendingUp}
-          label="业绩缓存"
-          value={refreshCache.isPending ? '刷新中' : !cacheExists ? '未初始化' : cacheDirty ? '待刷新' : '最新'}
-          tone={refreshCache.isPending ? 'info' : !cacheExists ? 'warn' : cacheDirty ? 'warn' : 'ok'}
-          detail={cachePoints != null ? `${cachePoints} 个曲线点` : refreshCache.isPending ? '正在重算' : '暂无缓存'}
+          label="计算缓存"
+          value={healthLoading ? '检查中' : refreshCache.isPending ? '刷新中' : !cacheExists ? '未初始化' : cacheDirty ? '待刷新' : '最新'}
+          tone={healthLoading || refreshCache.isPending ? 'info' : !cacheExists ? 'warn' : cacheDirty ? 'warn' : 'ok'}
+          detail={healthLoading ? '正在读取缓存状态' : cachePoints != null ? `${cachePoints} 个曲线点` : refreshCache.isPending ? '正在重算' : '暂无缓存'}
         />
         <HealthTile
           icon={ShieldCheck}
           label="分享安全"
-          value={`${activeShares.length} 个有效`}
-          tone="ok"
-          detail={`${(shareLinks.data ?? []).length} 个总链接`}
+          value={healthLoading ? '检查中' : `${activeShares.length} 个有效`}
+          tone={healthLoading ? 'info' : 'ok'}
+          detail={healthLoading ? '正在读取分享链接' : `${(shareLinks.data ?? []).length} 个总链接`}
         />
       </div>
 
@@ -477,7 +483,7 @@ export function DataHealthPage() {
 
       {!LOCAL_MODE && <DemoDataPanel />}
 
-      {(txnsLoading || priceRows.isLoading || cacheStatus.isLoading) && (
+      {healthLoading && (
         <p className="text-xs text-muted-foreground">正在读取数据健康状态…</p>
       )}
     </div>

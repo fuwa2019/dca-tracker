@@ -182,11 +182,14 @@ export type EmailLogUpdate = Partial<EmailLogInsert>;
 export type SharedPortfolio = {
   positions: Array<{
     ticker: string;
+    /** Weight within securities only; combine with cash_weight_pct for NAV weights. */
     weight_pct: number;
     return_pct: number;
     day_change_pct: number | null;
   }>;
   total_return_pct: number;
+  /** Uninvested cash as a fraction of total NAV; absolute cash is never exposed. */
+  cash_weight_pct: number;
   has_snapshot_price: boolean;
   generated_at: string;
 };

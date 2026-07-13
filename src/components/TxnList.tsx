@@ -98,10 +98,10 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                     {usd.format(notional)}
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(t)}>
+                    <Button aria-label={`编辑 ${t.ticker} 交易`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(t)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(t)}>
+                    <Button aria-label={`删除 ${t.ticker} 交易`} variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(t)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -140,10 +140,10 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                       </span>
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(t)}>
+                      <Button aria-label={`编辑 ${t.ticker} 交易`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(t)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(t)}>
+                      <Button aria-label={`删除 ${t.ticker} 交易`} variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(t)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>

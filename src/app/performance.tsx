@@ -112,13 +112,18 @@ export function PerformancePage() {
             </StatusBadge>
           ) : (
             <StatusBadge tone="ok" dot>
-              缓存最新
+              计算缓存：最新
             </StatusBadge>
           )}
           {last?.provisional && (
             <StatusBadge tone="warn" dot>
-              收盘价待核对
+              行情状态：临时收盘价
             </StatusBadge>
+          )}
+          {last?.provisional && (
+            <span className="basis-full text-[11px] text-muted-foreground">
+              最终收盘后收益可能小幅变化。
+            </span>
           )}
           {generatedAt && (
             <span className="text-[11px] text-muted-foreground tnum">
