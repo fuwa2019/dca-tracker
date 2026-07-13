@@ -13,7 +13,8 @@ import { usePerformanceCacheStatus } from '@/hooks/usePerformanceCache';
 import { aggregatePositions, unrealizedPL, type Position } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
 import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
-import type { HistoryPoint } from '@/lib/calc/history';
+import { buildAccountValueHistory, type HistoryPoint } from '@/lib/calc/history';
+import { useDailyPrices } from '@/hooks/useDailyPrices';
 import type { Quote } from '@/lib/quote';
 import { getSelectedBenchmark, getWatchlist } from '@/lib/settings';
 
@@ -33,6 +34,7 @@ export interface DashboardModel {
   quotesPartial: boolean;
   cacheDirty: boolean;
   history: HistoryPoint[];
+  accountValueHistory: HistoryPoint[];
   last: HistoryPoint | undefined;
   costBasisMode: 'avg' | 'fifo';
   aggregates: {
@@ -73,8 +75,12 @@ export function useDashboardModel(): DashboardModel {
     [txns],
   );
   const symbols = useMemo(
-    () => [...new Set([...positions.map((p) => p.ticker), ...watchlist, selectedBenchmark])],
-    [positions, watchlist, selectedBenchmark],
+    () => [...new Set([...txns.map((t) => t.ticker), ...watchlist, selectedBenchmark])],
+    [txns, watchlist, selectedBenchmark],
+  );
+  const accountValueSymbols = useMemo(
+    () => [...new Set(txns.map((txn) => txn.ticker))],
+    [txns],
   );
   const { data: quotes = [], isLoading: quotesLoading, isError: quotesError } = useQuotes(symbols);
   useEffect(() => {
@@ -90,6 +96,14 @@ export function useDashboardModel(): DashboardModel {
   });
 
   const portfolioHistory = usePortfolioHistory(selectedBenchmark);
+  const accountValueStartDate = useMemo(() => {
+    const dates = [
+      ...txns.map((txn) => txn.trade_date),
+      ...cashflows.map((cashflow) => cashflow.usd_in_date ?? cashflow.cny_out_date),
+    ].filter(Boolean).sort();
+    return dates[0] ?? null;
+  }, [txns, cashflows]);
+  const dailyPrices = useDailyPrices(accountValueSymbols, accountValueStartDate);
   const rawHistory: HistoryPoint[] = useMemo(() => {
     const rows = portfolioHistory.data?.series ?? [];
     return rows.map((p) => ({
@@ -138,8 +152,17 @@ export function useDashboardModel(): DashboardModel {
   }, [positions, quoteByTicker, totalInvested, cash, costBasisMode]);
 
   const history = useMemo(
-    () => hydrateDisplayNav(rawHistory, aggregates.nav),
-    [rawHistory, aggregates.nav],
+    () => rawHistory,
+    [rawHistory],
+  );
+  const accountValueHistory = useMemo(
+    () => buildAccountValueHistory({
+      transactions: txns,
+      cashflows,
+      prices: dailyPrices.data ?? new Map(),
+      todayQuotes: new Map(quotes.filter((quote) => quote.price != null).map((quote) => [quote.ticker, quote.price as number])),
+    }),
+    [txns, cashflows, dailyPrices.data, quotes],
   );
 
   const prevNav = aggregates.nav - aggregates.dayPL;
@@ -182,6 +205,7 @@ export function useDashboardModel(): DashboardModel {
     quotesPartial,
     cacheDirty: !!cacheStatus.data?.dirty,
     history,
+    accountValueHistory,
     last,
     costBasisMode,
     aggregates,
@@ -197,23 +221,4 @@ export function useDashboardModel(): DashboardModel {
     excessVsBenchmark,
     isEmpty,
   };
-}
-
-function hydrateDisplayNav(history: HistoryPoint[], currentNav: number): HistoryPoint[] {
-  if (history.length === 0 || !(currentNav > 0)) return history;
-  if (history.some((point) => point.navUser > 0)) return history;
-  const last = history[history.length - 1];
-  const lastGrowth = 1 + last.returnPctUser;
-  const baseNav = Number.isFinite(lastGrowth) && lastGrowth > 0
-    ? currentNav / lastGrowth
-    : currentNav;
-  return history.map((point) => {
-    const growth = 1 + point.returnPctUser;
-    const navUser = Number.isFinite(growth) && growth > 0 ? baseNav * growth : 0;
-    return {
-      ...point,
-      navUser,
-      pnlUser: navUser - point.invested,
-    };
-  });
 }

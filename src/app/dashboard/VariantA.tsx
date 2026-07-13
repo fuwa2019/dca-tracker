@@ -80,7 +80,7 @@ const DISTRIBUTION_COLORS = ['#3b82f6', '#ef476f', '#22c55e', '#f97316', '#06b6d
 export function DashboardVariantA({ model }: { model: DashboardModel }) {
   const {
     positions, selectedBenchmark, quoteByTicker, quotesNone, quotesPartial, quotesError,
-    cacheDirty, history, last, costBasisMode, aggregates, dayChangePct, totalReturnPct,
+    cacheDirty, history, accountValueHistory, last, costBasisMode, aggregates, dayChangePct, totalReturnPct,
     target, annualRet, monthlyDca, monthsToTarget, xirr, portfolioCumulative,
     excessVsBenchmark, isEmpty,
   } = model;
@@ -90,7 +90,10 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
   const dateRange = last ? `${history[0].date} — ${last.date}` : '—';
   const ranges = useMemo(() => availableRanges(history), [history]);
   const effectiveRange = ranges.includes(chartRange) ? chartRange : (ranges[ranges.length - 1] ?? 'ALL');
-  const chartHistory = useMemo(() => sliceByRange(history, effectiveRange), [history, effectiveRange]);
+  const chartHistory = useMemo(
+    () => sliceByRange(chartMode === 'value' ? accountValueHistory : history, effectiveRange),
+    [chartMode, accountValueHistory, history, effectiveRange],
+  );
   const chartModeHint = chartMode === 'value'
     ? '账户美元规模：买入会抬高曲线，适合看资金滚大。'
     : '组合表现：剔除买入影响，适合和 SPY 比较。';

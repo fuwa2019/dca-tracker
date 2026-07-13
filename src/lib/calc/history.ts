@@ -33,6 +33,100 @@ export interface BuildHistoryInput {
 }
 
 /**
+ * Build the account-value line shown on the dashboard.
+ *
+ * This is deliberately separate from buildEquityHistory(): the latter models
+ * trade-funded TWR and therefore ignores idle cash by design. Account value
+ * must instead include actual USD deposits, then subtract buys/add sells on
+ * their real dates. Do not derive old values from today's NAV and a return
+ * series: later deposits would be incorrectly projected into the past.
+ */
+export function buildAccountValueHistory(input: BuildHistoryInput): HistoryPoint[] {
+  const { transactions, cashflows, prices, todayQuotes, asOf } = input;
+  const eventDates = [
+    ...transactions.map((t) => t.trade_date),
+    ...cashflows.map((c) => c.usd_in_date ?? c.cny_out_date),
+  ].filter(Boolean).sort();
+  if (eventDates.length === 0) return [];
+
+  const startIso = eventDates[0];
+  const todayIso = isoDateInNewYork(asOf ?? new Date());
+  const depositsByDate = new Map<string, number>();
+  for (const cashflow of cashflows) {
+    const amount = Number(cashflow.usd_amount) || 0;
+    const date = cashflow.usd_in_date ?? cashflow.cny_out_date;
+    if (amount > 0 && date) depositsByDate.set(date, (depositsByDate.get(date) ?? 0) + amount);
+  }
+  const txnsByDate = new Map<string, TransactionRow[]>();
+  for (const txn of transactions) {
+    const rows = txnsByDate.get(txn.trade_date) ?? [];
+    rows.push(txn);
+    txnsByDate.set(txn.trade_date, rows);
+  }
+
+  const lastClose = new Map<string, number>();
+  const lastTradePrice = new Map<string, number>();
+  const shares = new Map<string, number>();
+  const out: HistoryPoint[] = [];
+  let cash = 0;
+  let invested = 0;
+  let costBasis = 0;
+
+  for (let iso = startIso; iso <= todayIso; iso = addDays(iso, 1)) {
+    for (const [ticker, dailyMap] of prices) {
+      const close = dailyMap.get(iso);
+      if (typeof close === 'number' && close > 0) lastClose.set(ticker, close);
+    }
+
+    const deposit = depositsByDate.get(iso) ?? 0;
+    cash += deposit;
+    invested += deposit;
+    const dayTxns = txnsByDate.get(iso) ?? [];
+    for (const txn of dayTxns) {
+      const quantity = Number(txn.shares) || 0;
+      const price = Number(txn.price) || 0;
+      const notional = quantity * price;
+      if (!(quantity > 0) || !(price > 0)) continue;
+      const delta = txn.side === 'buy' ? quantity : -quantity;
+      shares.set(txn.ticker, (shares.get(txn.ticker) ?? 0) + delta);
+      lastTradePrice.set(txn.ticker, price);
+      cash += txn.side === 'buy' ? -notional : notional;
+      costBasis += txn.side === 'buy' ? notional : -notional;
+    }
+
+    let stockValue = 0;
+    for (const [ticker, quantity] of shares) {
+      if (Math.abs(quantity) < 1e-9) continue;
+      const price = iso === todayIso && todayQuotes?.get(ticker) != null
+        ? todayQuotes.get(ticker)!
+        : (lastClose.get(ticker) ?? lastTradePrice.get(ticker) ?? 0);
+      stockValue += quantity * price;
+    }
+    const navUser = stockValue + cash;
+    out.push({
+      date: iso,
+      invested,
+      costBasis,
+      navUser,
+      navSpy: 0,
+      returnPctUser: 0,
+      returnPctSpy: 0,
+      pnlUser: navUser - invested,
+      pnlSpy: 0,
+      txns: dayTxns.map((txn) => ({
+        side: txn.side,
+        ticker: txn.ticker,
+        shares: Number(txn.shares),
+        price: Number(txn.price),
+        kind: txn.kind,
+      })),
+    });
+  }
+
+  return out;
+}
+
+/**
  * Build the daily equity-history series with a SPY benchmark obtained by the
  * trade-funding model: the curve starts on the first trade date, sell proceeds
  * fund later buys first, and only the unfunded portion of a buy is treated as a
