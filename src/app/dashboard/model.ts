@@ -75,9 +75,10 @@ export function useDashboardModel(): DashboardModel {
   const cacheStatus = usePerformanceCacheStatus(selectedBenchmark);
 
   const watchlist = useMemo(() => getWatchlist(settings), [settings]);
+  const allPositions = useMemo(() => aggregatePositions(txns), [txns]);
   const positions = useMemo(
-    () => aggregatePositions(txns).filter((p) => p.shares > 1e-9),
-    [txns],
+    () => allPositions.filter((p) => p.shares > 1e-9),
+    [allPositions],
   );
   const symbols = useMemo(
     () => [...new Set([...txns.map((t) => t.ticker), ...watchlist, selectedBenchmark])],
@@ -137,15 +138,14 @@ export function useDashboardModel(): DashboardModel {
     let stockMv = 0;
     let costBasis = 0;
     let dayPL = 0;
-    let realizedPL = 0;
     for (const p of positions) {
       const q = quoteByTicker.get(p.ticker);
       const { marketValue, costBasis: cb } = unrealizedPL(p, q?.price ?? null, costBasisMode);
       stockMv += marketValue;
       costBasis += cb;
-      realizedPL += p.realizedUsd;
       if (q?.change != null) dayPL += p.shares * q.change;
     }
+    const realizedPL = allPositions.reduce((sum, p) => sum + p.realizedUsd, 0);
     const nav = stockMv + cash;
     return {
       nav,
@@ -157,7 +157,7 @@ export function useDashboardModel(): DashboardModel {
       unrealizedPL: stockMv - costBasis,
       realizedPL,
     };
-  }, [positions, quoteByTicker, totalInvested, cash, costBasisMode]);
+  }, [positions, allPositions, quoteByTicker, totalInvested, cash, costBasisMode]);
 
   const history = useMemo(
     () => rawHistory,
