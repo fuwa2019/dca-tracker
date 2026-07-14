@@ -25,6 +25,11 @@ function approx(actual, expected, epsilon = 1e-8) {
   assert.ok(Math.abs(actual - expected) <= epsilon, `expected ${expected}, got ${actual}`);
 }
 
+function dailyPnl(row, previous) {
+  if (!previous) return null;
+  return row.nav - (row.invested - previous.invested) - previous.nav;
+}
+
 // Single buy followed by a 10% price move.
 approx(dailyLinkedTwr([
   { date: '2026-01-01', nav: 100, flow: 100 },
@@ -49,5 +54,10 @@ approx(modifiedDietz({
   endValue: 210,
   flows: [{ amount: 100, weight: 0.5 }],
 }), 10 / 150);
+
+assert.equal(dailyPnl({ nav: 100, invested: 100 }, null), null, 'first trading day has no prior NAV baseline');
+approx(dailyPnl({ nav: 110, invested: 100 }, { nav: 100, invested: 100 }), 10);
+approx(dailyPnl({ nav: 200, invested: 200 }, { nav: 100, invested: 100 }), 0);
+approx(dailyPnl({ nav: 215, invested: 200 }, { nav: 110, invested: 100 }), 5);
 
 console.log('performance fixtures ok');

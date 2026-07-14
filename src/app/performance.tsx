@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { StatCard } from '@/components/StatCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { PerformancePanel } from '@/components/IbkrPerformancePanel';
+import { MonthlyPerformanceCalendar } from '@/components/MonthlyPerformanceCalendar';
 import { usePortfolioHistory, useSettings } from '@/hooks/usePortfolio';
 import { usePerformanceCacheStatus, useRefreshPerformanceCache } from '@/hooks/usePerformanceCache';
 import { availableRanges, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
@@ -202,6 +203,8 @@ export function PerformancePage() {
           />
         )}
       </div>
+
+      <MonthlyPerformanceCalendar history={history} benchmark={selectedBenchmark} />
 
       <PerformancePanel
         history={history}

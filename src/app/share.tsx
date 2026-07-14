@@ -30,7 +30,14 @@ import etfHoldings from '@/data/etf-holdings.json';
 import type { PerformanceHistory, SharedPortfolio, SharedHistory } from '@/lib/database.types';
 
 const HOLDINGS = etfHoldings as unknown as EtfHoldingsData;
-const SHARE_DISTRIBUTION_COLORS = ['#ef476f', '#3b82f6', '#22c55e', '#f97316', '#06b6d4', '#8b5cf6'];
+const SHARE_DISTRIBUTION_COLOR_BY_LABEL: Record<string, string> = {
+  'AI 芯片': '#3b82f6',
+  '纳指 ETF': '#8b5cf6',
+  '半导体 ETF': '#22c55e',
+  '大型科技': '#ef476f',
+  '现金 / 国债': '#7c3aed',
+  '其他': '#64748b',
+};
 const SHARE_SECTOR_BY_TICKER: Record<string, string> = {
   NVDA: 'AI 芯片',
   QQQ: '纳指 ETF',
@@ -170,6 +177,7 @@ export function SharePage() {
     return {
       winners: rows.filter((row) => row.changePct > 0).sort((a, b) => b.changePct - a.changePct).slice(0, 3),
       losers: rows.filter((row) => row.changePct < 0).sort((a, b) => a.changePct - b.changePct).slice(0, 3),
+      hasQuotes: rows.length > 0,
     };
   }, [shareRows]);
   const distribution = useMemo(() => {
@@ -187,10 +195,10 @@ export function SharePage() {
     const totalCashWeight = lookThrough.totalNav > 0 ? lookThrough.cashValue / lookThrough.totalNav : cashLikeWeight + cashWeight;
     if (totalCashWeight > 0) byLabel.set('现金 / 国债', totalCashWeight);
     return [...byLabel.entries()]
-      .map(([label, value], index) => ({
+      .map(([label, value]) => ({
         label,
         value,
-        color: SHARE_DISTRIBUTION_COLORS[index % SHARE_DISTRIBUTION_COLORS.length],
+        color: SHARE_DISTRIBUTION_COLOR_BY_LABEL[label] ?? '#64748b',
       }))
       .filter((row) => row.value > 0)
       .sort((a, b) => b.value - a.value);
@@ -407,8 +415,8 @@ export function SharePage() {
           transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
           className="grid gap-4 pb-2 sm:gap-6 lg:grid-cols-3"
         >
-          <ShareMoverCard title="每日赢家" icon={TrendingUp} rows={movers.winners} />
-          <ShareMoverCard title="每日输家" icon={TrendingDown} rows={movers.losers} />
+          <ShareMoverCard title="每日赢家" icon={TrendingUp} rows={movers.winners} hasQuotes={movers.hasQuotes} />
+          <ShareMoverCard title="每日输家" icon={TrendingDown} rows={movers.losers} hasQuotes={movers.hasQuotes} />
           <ShareDistributionCard rows={distribution} assetCount={positionCount} />
         </motion.section>
 
@@ -564,10 +572,12 @@ function ShareMoverCard({
   title,
   icon: Icon,
   rows,
+  hasQuotes,
 }: {
   title: string;
   icon: LucideIcon;
   rows: Array<{ ticker: string; changePct: number; contribution: number }>;
+  hasQuotes: boolean;
 }) {
   return (
     <Card className="p-4">
@@ -580,7 +590,7 @@ function ShareMoverCard({
       </div>
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-xs text-muted-foreground">
-          暂无可展示的今日变动
+          {hasQuotes ? (title === '每日赢家' ? '今日暂无上涨持仓' : '今日暂无下跌持仓') : '暂无今日行情'}
         </div>
       ) : (
         <div className="divide-y divide-border">

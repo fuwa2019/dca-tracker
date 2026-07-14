@@ -7,7 +7,7 @@
    - `migrations/0002_daily_prices.sql`（资产曲线和基准对照所需的历史价表）
    - `migrations/0003_shared_portfolio_v2.sql`（修复卖出后均价虚高，覆盖旧函数）
    - 后续已部署项目继续按编号运行新增 migration，当前最新版本到
-     `migrations/0041_shared_portfolio_cash_weight.sql`
+     `migrations/0042_private_performance_daily_pnl.sql`
 
    新部署只需按顺序跑一次；已部署的项目跑新增的 sql 即可（idempotent）。
 
@@ -32,6 +32,7 @@ auth.users (1) ──┬── settings (1)
 quote_snapshots: 单表，service-role 写、所有人读（供 share 视图用）
 daily_prices: 日线价格，`trade_date` 是美东交易日，`as_of_timestamp` 记录行情时间，`is_provisional` 标记等待正式 candle reconcile 的收盘后报价
 performance_history_cache: 主视图和分享视图共用的脱敏收益率曲线缓存
+performance_daily_pnl_cache: 仅登录用户可读的日度 USD 盈亏缓存，不含 NAV、现金流或交易明细
 ```
 
 ## RLS 摘要
@@ -40,6 +41,7 @@ performance_history_cache: 主视图和分享视图共用的脱敏收益率曲�
 - `quote_snapshots`：anon + authenticated 都可 select，但 RLS 阻止任何 client 写入（只有 service-role 绕过）。
 - `shared_portfolio(token)`：`security definer` RPC，校验 token 后返回脱敏 JSON（证券持仓内权重、现金净值权重和收益率 %，无绝对 USD 金额）。
 - `shared_performance_history(token)`：只读取已缓存的公开收益率曲线，不做匿名重算。
+- `performance_daily_pnl(start, end, benchmark)`：仅 `authenticated` 可调用，日期范围最多 42 天；匿名用户和其他用户不能读取金额缓存。
 
 ## 验证
 

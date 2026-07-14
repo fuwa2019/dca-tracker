@@ -280,6 +280,16 @@ export type PerformanceCacheStatus = {
   error?: string | null;
 };
 
+export type PerformanceDailyPnl = {
+  benchmark: string;
+  currency: 'USD';
+  generated_at: string;
+  series: Array<{
+    date: string;
+    daily_pnl_user: number | null;
+  }>;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -313,6 +323,10 @@ export interface Database {
       performance_history: {
         Args: { p_benchmark?: string | null };
         Returns: PerformanceHistory | { error: string };
+      };
+      performance_daily_pnl: {
+        Args: { p_start_date: string; p_end_date: string; p_benchmark?: string | null };
+        Returns: PerformanceDailyPnl | { error: string };
       };
       refresh_portfolio_history_cache: {
         Args: Record<string, never>;

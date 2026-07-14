@@ -75,7 +75,21 @@ const SECTOR_BY_TICKER: Record<string, string> = {
   SGOV: '现金 / 国债',
 };
 
-const DISTRIBUTION_COLORS = ['#3b82f6', '#ef476f', '#22c55e', '#f97316', '#06b6d4', '#8b5cf6'];
+const DISTRIBUTION_COLOR_BY_LABEL: Record<string, string> = {
+  '半导体': '#22c55e',
+  'AI 芯片': '#3b82f6',
+  '半导体软件': '#06b6d4',
+  '大型科技': '#ef476f',
+  '企业软件': '#8b5cf6',
+  '消费与互联网': '#f97316',
+  '消费防御': '#eab308',
+  '金融': '#14b8a6',
+  '医疗': '#ec4899',
+  '能源': '#a3a3a3',
+  '现金 / 国债': '#7c3aed',
+  '其他板块': '#f59e0b',
+  '其他股票': '#64748b',
+};
 
 export function DashboardVariantA({ model }: { model: DashboardModel }) {
   const {
@@ -109,6 +123,7 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
     return {
       winners: rows.filter((r) => (r.changePct ?? 0) > 0).sort((a, b) => (b.changePct ?? 0) - (a.changePct ?? 0)).slice(0, 3),
       losers: rows.filter((r) => (r.changePct ?? 0) < 0).sort((a, b) => (a.changePct ?? 0) - (b.changePct ?? 0)).slice(0, 3),
+      hasQuotes: rows.length > 0,
     };
   }, [positions, quoteByTicker]);
   const lookThrough = useMemo(
@@ -135,9 +150,11 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       add(SECTOR_BY_TICKER[stock.ticker] ?? '其他股票', stock.value);
     }
     add('现金 / 国债', lookThrough.cashValue);
-    add('未穿透长尾', lookThrough.unclassifiedValue);
+    // 这是板块视图，不把 ETF 未列出的剩余成分暴露为内部术语「未穿透」。
+    // 它们的具体板块未知，因此诚实归入「其他板块」。
+    add('其他板块', lookThrough.unclassifiedValue);
     return [...bySector.entries()]
-      .map(([label, value], index) => ({ label, value, color: DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length] }))
+      .map(([label, value]) => ({ label, value, color: DISTRIBUTION_COLOR_BY_LABEL[label] ?? '#64748b' }))
       .filter((r) => r.value > 0)
       .sort((a, b) => b.value - a.value);
   }, [lookThrough.stocks, lookThrough.cashValue, lookThrough.unclassifiedValue]);
@@ -341,8 +358,8 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
         variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
         className="grid gap-3 pb-6 sm:gap-6 sm:pb-8 lg:grid-cols-3"
       >
-        <DailyMovers title="每日赢家" icon={TrendingUp} rows={movers.winners} />
-        <DailyMovers title="每日输家" icon={TrendingDown} rows={movers.losers} />
+        <DailyMovers title="每日赢家" icon={TrendingUp} rows={movers.winners} hasQuotes={movers.hasQuotes} />
+        <DailyMovers title="每日输家" icon={TrendingDown} rows={movers.losers} hasQuotes={movers.hasQuotes} />
         <DistributionPanel rows={distribution} total={distributionTotal} assetCount={positions.length} />
       </motion.section>
 
@@ -453,10 +470,12 @@ function DailyMovers({
   title,
   icon: Icon,
   rows,
+  hasQuotes,
 }: {
   title: string;
   icon: LucideIcon;
   rows: Array<{ ticker: string; changePct: number | null; changeUsd: number | null }>;
+  hasQuotes: boolean;
 }) {
   return (
     <Card className="p-4">
@@ -469,7 +488,7 @@ function DailyMovers({
       </div>
       {rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border px-3 py-5 text-center text-xs text-muted-foreground">
-          等待本地或实时行情
+          {hasQuotes ? (title === '每日赢家' ? '今日暂无上涨持仓' : '今日暂无下跌持仓') : '暂无今日行情'}
         </div>
       ) : (
         <div className="divide-y divide-border">
@@ -546,6 +565,9 @@ function DistributionPanel({
             </div>
           );
         })}
+        {rows.some((row) => row.label === '其他板块') && (
+          <div className="pt-0.5 text-[10px] text-muted-foreground">其他板块为 ETF 成分表未列出的剩余持仓。</div>
+        )}
         </div>
       </div>
     </Card>

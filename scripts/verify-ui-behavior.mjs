@@ -35,6 +35,20 @@ assert.equal(shouldAutoFillField({ isEdit: true, touched: false, currentValue: '
 const performance = readFileSync(new URL('../src/app/performance.tsx', import.meta.url), 'utf8');
 assert.match(performance, /交易业绩是否跑赢 \{selectedBenchmark\}/, 'performance title uses selected benchmark');
 assert.doesNotMatch(performance, /交易业绩是否跑赢 SPY/, 'performance title must not hard-code SPY');
+assert.match(performance, /MonthlyPerformanceCalendar/, 'performance page includes the monthly calendar');
+
+const calendar = readFileSync(new URL('../src/components/MonthlyPerformanceCalendar.tsx', import.meta.url), 'utf8');
+assert.match(calendar, /金额/, 'calendar has amount mode');
+assert.match(calendar, /百分比/, 'calendar has percentage mode');
+assert.match(calendar, /本月暂无业绩数据/, 'calendar has an empty-month state');
+
+const dailyPnlMigration = readFileSync(new URL('../supabase/migrations/0042_private_performance_daily_pnl.sql', import.meta.url), 'utf8');
+assert.match(dailyPnlMigration, /create table if not exists public\.performance_daily_pnl_cache/, 'private daily PnL cache exists');
+assert.match(dailyPnlMigration, /\(select auth\.uid\(\)\) is not null and \(select auth\.uid\(\)\) = user_id/, 'private cache is owner-scoped');
+assert.match(dailyPnlMigration, /p_end_date - p_start_date > 41/, 'daily PnL RPC caps requests at 42 days');
+assert.match(dailyPnlMigration, /revoke all on function public\.performance_daily_pnl\(date, date, text\) from public, anon, authenticated/, 'daily PnL RPC is not public');
+assert.match(dailyPnlMigration, /grant execute on function public\.performance_daily_pnl\(date, date, text\) to authenticated/, 'daily PnL RPC is authenticated-only');
+assert.match(dailyPnlMigration, /v_history := v_history - 'warnings'/, 'public cache strips amount-bearing diagnostics');
 
 const cashflow = readFileSync(new URL('../src/components/CashflowForm.tsx', import.meta.url), 'utf8');
 assert.match(cashflow, /fetchCurrentExchangeRate/, 'cashflow form fetches current FX rate');

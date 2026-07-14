@@ -90,6 +90,16 @@ Share views never recompute performance anonymously. They read the sanitized
 cache only. If no cache exists, the share view returns an empty public history
 state rather than running a long SQL calculation.
 
+## Monthly PnL calendar
+
+The authenticated performance page may read `performance_daily_pnl()` for a
+single calendar month. Its private cache stores only `daily_pnl_user` in USD,
+keyed by owner, benchmark, and benchmark trading date. The value is computed as
+`current NAV - current trade-funding flow - previous trading-day NAV`; the first
+trading point has no prior baseline and is returned as null. The public
+`performance_history_cache` and `shared_performance_history()` remain
+percentage-only and never expose these amount fields.
+
 Source changes mark cache dirty:
 
 - transactions insert/update/delete

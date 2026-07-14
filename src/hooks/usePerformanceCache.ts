@@ -136,6 +136,7 @@ export function useRefreshPerformanceCache(benchmark?: string) {
       await qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       await qc.invalidateQueries({ queryKey: ['share', 'history'] });
       await qc.invalidateQueries({ queryKey: ['price_coverage'] });
+      await qc.invalidateQueries({ queryKey: ['performance_daily_pnl'] });
       await qc.refetchQueries({ queryKey: ['performance_cache_status'] });
     },
     onError: async () => {
