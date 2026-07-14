@@ -17,6 +17,11 @@ import { buildAccountValueHistory, type HistoryPoint } from '@/lib/calc/history'
 import { useDailyPrices } from '@/hooks/useDailyPrices';
 import type { Quote } from '@/lib/quote';
 import { getSelectedBenchmark, getWatchlist } from '@/lib/settings';
+import etfHoldings from '@/data/etf-holdings.json';
+
+const CASH_LIKE_TICKERS = new Set(
+  (etfHoldings._meta.cashLike ?? []).map((ticker) => ticker.toUpperCase()),
+);
 
 /**
  * Shared dashboard data + derived figures. Both dashboard variants render the
@@ -79,7 +84,9 @@ export function useDashboardModel(): DashboardModel {
     [txns, watchlist, selectedBenchmark],
   );
   const accountValueSymbols = useMemo(
-    () => [...new Set(txns.map((txn) => txn.ticker))],
+    () => [...new Set(txns
+      .filter((txn) => !CASH_LIKE_TICKERS.has(txn.ticker.toUpperCase()))
+      .map((txn) => txn.ticker))],
     [txns],
   );
   const { data: quotes = [], isLoading: quotesLoading, isError: quotesError } = useQuotes(symbols);
@@ -97,12 +104,13 @@ export function useDashboardModel(): DashboardModel {
 
   const portfolioHistory = usePortfolioHistory(selectedBenchmark);
   const accountValueStartDate = useMemo(() => {
-    const dates = [
-      ...txns.map((txn) => txn.trade_date),
-      ...cashflows.map((cashflow) => cashflow.usd_in_date ?? cashflow.cny_out_date),
-    ].filter(Boolean).sort();
+    const dates = txns
+      .filter((txn) => !CASH_LIKE_TICKERS.has(txn.ticker.toUpperCase()))
+      .map((txn) => txn.trade_date)
+      .filter(Boolean)
+      .sort();
     return dates[0] ?? null;
-  }, [txns, cashflows]);
+  }, [txns]);
   const dailyPrices = useDailyPrices(accountValueSymbols, accountValueStartDate);
   const rawHistory: HistoryPoint[] = useMemo(() => {
     const rows = portfolioHistory.data?.series ?? [];
@@ -161,6 +169,7 @@ export function useDashboardModel(): DashboardModel {
       cashflows,
       prices: dailyPrices.data ?? new Map(),
       todayQuotes: new Map(quotes.filter((quote) => quote.price != null).map((quote) => [quote.ticker, quote.price as number])),
+      excludedValueTickers: CASH_LIKE_TICKERS,
     }),
     [txns, cashflows, dailyPrices.data, quotes],
   );

@@ -94,7 +94,7 @@ export function MonthlyPerformanceCalendar({ history, benchmark = 'SPY' }: { his
             只显示 {normalizedBenchmark} 实际价格日；周末、休市日和未来日期留空。
           </p>
         </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="grid w-full grid-cols-[2rem_minmax(5.75rem,1fr)_2rem_auto] items-center gap-2 sm:flex sm:w-auto">
           <MonthButton
             label="上一个业绩月份"
             disabled={previousDisabled}
@@ -102,7 +102,7 @@ export function MonthlyPerformanceCalendar({ history, benchmark = 'SPY' }: { his
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </MonthButton>
-          <div className="min-w-[104px] text-center text-sm font-semibold tnum" aria-live="polite">
+          <div className="min-w-0 text-center text-sm font-semibold tnum sm:min-w-[104px]" aria-live="polite">
             {formatMonth(month)}
           </div>
           <MonthButton
@@ -119,7 +119,7 @@ export function MonthlyPerformanceCalendar({ history, benchmark = 'SPY' }: { his
             size="sm"
             name="performance-calendar-mode"
             ariaLabel="选择日历显示模式"
-            className="ml-1"
+            className="ml-0 sm:ml-1"
           />
         </div>
       </div>
@@ -134,7 +134,7 @@ export function MonthlyPerformanceCalendar({ history, benchmark = 'SPY' }: { his
         </div>
       )}
 
-      <div className="px-3 py-3 sm:px-4 sm:py-4">
+      <div className="px-2 py-3 min-[380px]:px-3 sm:px-4 sm:py-4">
         <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-border bg-border">
           {WEEKDAYS.map((weekday) => (
             <div key={weekday} className="bg-surface-elevated px-1 py-2 text-center text-[10px] font-medium text-muted-foreground sm:text-[11px]">
@@ -219,19 +219,24 @@ function CalendarCell({
   const title = point ? `${date} · ${fullLabel}` : date;
 
   return (
-    <div className={cn('min-h-[58px] overflow-hidden px-1.5 py-1.5 transition-colors sm:min-h-[76px] sm:px-2 sm:py-2', background)} title={title}>
+    <div className={cn('min-h-[58px] overflow-hidden px-1 py-1.5 transition-colors min-[380px]:px-1.5 sm:min-h-[76px] sm:px-2 sm:py-2', background)} title={title}>
       <div className="flex items-center justify-between gap-1 text-[10px] text-muted-foreground sm:text-[11px]">
         <span className="tnum">{Number(date.slice(-2))}</span>
         {point && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand/60" aria-label="交易日" />}
       </div>
       {point && (
-        <div className={cn('mt-2 truncate font-mono text-[10px] font-semibold leading-tight tnum sm:text-xs', tone)}>
+        <div className={cn('mt-2 truncate font-mono text-[9px] font-semibold leading-tight tracking-tight tnum min-[380px]:text-[10px] sm:text-xs sm:tracking-normal', tone)}>
           {loading ? '…' : displayMode === 'amount' ? (
             <>
               <span className="hidden sm:inline">{formatAmount(value, false)}</span>
-              <span className="sm:hidden">{formatAmount(value, true)}</span>
+              <span className="sm:hidden">{formatCompactAmount(value)}</span>
             </>
-          ) : formatPercent(value)}
+          ) : (
+            <>
+              <span className="hidden sm:inline">{formatPercent(value)}</span>
+              <span className="sm:hidden">{formatCompactPercent(value)}</span>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -257,8 +262,22 @@ function formatAmount(value: number | null | undefined, compact: boolean): strin
   return `${sign}$${absolute.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function formatCompactAmount(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  const sign = value > 0 ? '+' : value < 0 ? '−' : '';
+  return `${sign}$${compactNumber(Math.abs(value))}`;
+}
+
+function formatCompactPercent(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  const percent = value * 100;
+  const sign = percent > 0 ? '+' : percent < 0 ? '−' : '';
+  return `${sign}${Math.abs(percent).toFixed(1)}%`;
+}
+
 function compactNumber(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
-  return value.toFixed(2);
+  if (value >= 10) return value.toFixed(0);
+  return value.toFixed(1).replace(/\.0$/, '');
 }

@@ -109,7 +109,7 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
     [chartMode, accountValueHistory, history, effectiveRange],
   );
   const chartModeHint = chartMode === 'value'
-    ? '账户美元规模：买入会抬高曲线，适合看资金滚大。'
+    ? '目标资产美元规模：买入会抬高曲线；现金、SGOV 等短债不计为买入。'
     : '组合表现：剔除买入影响，适合和 SPY 比较。';
   const movers = useMemo(() => {
     const rows = positions

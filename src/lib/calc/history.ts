@@ -30,33 +30,33 @@ export interface BuildHistoryInput {
   /** Today's SPY price (used for the very last day's benchmark NAV). */
   todaySpyPrice?: number;
   asOf?: Date;
+  /** Tickers treated as cash substitutes and omitted from the value curve. */
+  excludedValueTickers?: Iterable<string>;
 }
 
 /**
  * Build the account-value line shown on the dashboard.
  *
  * This is deliberately separate from buildEquityHistory(): the latter models
- * trade-funded TWR and therefore ignores idle cash by design. Account value
- * must instead include actual USD deposits, then subtract buys/add sells on
- * their real dates. Do not derive old values from today's NAV and a return
- * series: later deposits would be incorrectly projected into the past.
+ * trade-funded TWR. The value line shows the dollar scale of the user's target
+ * assets, so cash substitutes (SGOV, BIL, etc.) can be excluded without
+ * changing account NAV or performance elsewhere. Funding is inferred from the
+ * remaining trades: sell proceeds fund later buys before a buy raises the line.
  */
 export function buildAccountValueHistory(input: BuildHistoryInput): HistoryPoint[] {
-  const { transactions, cashflows, prices, todayQuotes, asOf } = input;
-  const eventDates = [
-    ...transactions.map((t) => t.trade_date),
-    ...cashflows.map((c) => c.usd_in_date ?? c.cny_out_date),
-  ].filter(Boolean).sort();
+  const { prices, todayQuotes, asOf } = input;
+  const excludedTickers = new Set(
+    [...(input.excludedValueTickers ?? [])].map((ticker) => ticker.trim().toUpperCase()),
+  );
+  const transactions = input.transactions.filter(
+    (txn) => !excludedTickers.has(txn.ticker.trim().toUpperCase()),
+  );
+  const eventDates = transactions.map((t) => t.trade_date).filter(Boolean).sort();
   if (eventDates.length === 0) return [];
 
   const startIso = eventDates[0];
   const todayIso = isoDateInNewYork(asOf ?? new Date());
-  const depositsByDate = new Map<string, number>();
-  for (const cashflow of cashflows) {
-    const amount = Number(cashflow.usd_amount) || 0;
-    const date = cashflow.usd_in_date ?? cashflow.cny_out_date;
-    if (amount > 0 && date) depositsByDate.set(date, (depositsByDate.get(date) ?? 0) + amount);
-  }
+  const flowByDate = inferTradeFundingFlows(transactions);
   const txnsByDate = new Map<string, TransactionRow[]>();
   for (const txn of transactions) {
     const rows = txnsByDate.get(txn.trade_date) ?? [];
@@ -78,9 +78,9 @@ export function buildAccountValueHistory(input: BuildHistoryInput): HistoryPoint
       if (typeof close === 'number' && close > 0) lastClose.set(ticker, close);
     }
 
-    const deposit = depositsByDate.get(iso) ?? 0;
-    cash += deposit;
-    invested += deposit;
+    const flow = flowByDate.get(iso) ?? 0;
+    cash += flow;
+    invested += flow;
     const dayTxns = txnsByDate.get(iso) ?? [];
     for (const txn of dayTxns) {
       const quantity = Number(txn.shares) || 0;
