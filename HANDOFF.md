@@ -10,6 +10,7 @@ Git history, refs, current work, or rollback capability.
 
 ## Git State
 
+- Current repository: `/Users/junxihuo/Workspace/dca_system`
 - Branch: `backup/pre-workspace-migration-20260727`
 - Protected source checkpoint:
   `bc9a977c9a8e1fa68cda70d4ef354d95193e23ca`
@@ -19,6 +20,10 @@ Git history, refs, current work, or rollback capability.
   source changes.
 - A small record-only commit follows the standardization commit so the
   migration log can name it.
+- Workspace copy baseline:
+  `15caf40a514866cd7f2f413ba929dfb09eefb40a`
+- The current working tree contains only verified post-copy migration records
+  pending the next documentation checkpoint.
 
 ## Completed
 
@@ -31,6 +36,11 @@ Git history, refs, current work, or rollback capability.
 - Project knowledge standardized and committed.
 - External Codex artifact candidates reviewed; no unique verified artifact
   required import.
+- Repository copied to Workspace with matching Git refs and clean `git fsck`.
+- Active project path references and DCA-specific user skill paths repaired.
+- Fresh installs, CI-equivalent checks, local build, Worker dry-runs, and
+  browser smoke tests completed in the Workspace copy.
+- Codex-only, Claude-only, and combined knowledge entry checks passed.
 
 ## Current Blockers
 
@@ -38,13 +48,11 @@ None.
 
 ## Next Steps
 
-1. Copy the repository into the empty Workspace destination.
-2. Compare Git state and run `git fsck --full`.
-3. Repair old path references in the project and DCA-specific user skills.
-4. Run CI-equivalent checks, local-mode build, and a local smoke test.
-5. Verify Codex-only, Claude-only, and combined entry paths.
-6. Switch the old path to a compatibility symlink only after core checks pass.
-7. Write the final report and preserve all rollback material.
+1. Commit the post-copy migration record.
+2. Fast-forward the old repository to the same commit and recheck parity.
+3. Rename the old directory and create the compatibility symlink.
+4. Re-run Git, path, and smoke checks after the switch.
+5. Write the final report and preserve all rollback material.
 
 ## Related Files
 

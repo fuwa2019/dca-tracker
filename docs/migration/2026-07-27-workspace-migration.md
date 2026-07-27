@@ -242,3 +242,181 @@ Git status immediately after the standardization commit:
 ```text
 ## backup/pre-workspace-migration-20260727
 ```
+
+The record-only follow-up commit is
+`15caf40a514866cd7f2f413ba929dfb09eefb40a`
+(`docs: record migration standardization checkpoint`). This became the copy
+baseline.
+
+## Stage 8: Copy to Workspace
+
+Status: complete
+
+- Rechecked `/Users/junxihuo/Workspace/dca_system` immediately before copying;
+  the existing directory was empty.
+- Copied the repository with `.git`, hidden project configuration, source,
+  tests, migrations, docs, lockfiles, and current branch state.
+- Excluded real environment files, token files, private portfolio imports,
+  dependencies, build output, Wrangler state/logs, local Claude state,
+  `.DS_Store`, and ignored session logs.
+- The public tracked `.env.example` template is present.
+- The source directory remained unchanged.
+
+Copy baseline:
+
+- Branch: `backup/pre-workspace-migration-20260727`
+- HEAD: `15caf40a514866cd7f2f413ba929dfb09eefb40a`
+
+## Stage 9: Git Integrity in Workspace
+
+Status: complete
+
+Verified in `/Users/junxihuo/Workspace/dca_system`:
+
+- `git rev-parse --show-toplevel` resolves to the Workspace repository.
+- Working tree was clean immediately after copy.
+- HEAD and branch matched the source.
+- All local branches, remote branches, tags, and other refs matched by hash.
+- `origin` fetch/push URLs matched.
+- Stash lists matched and were empty.
+- Tracked index lists matched by hash.
+- Key configuration and entry files matched byte-for-byte.
+- `git fsck --full` passed with no output.
+- The copied repository contains no real environment, token, or private
+  portfolio import file.
+- The new repository reports only its own main worktree, as expected after
+  copying a normal repository with no linked worktrees.
+
+## Stage 10: Project Old-Path Search
+
+Status: complete
+
+- Searched all requested old DCA path variants while excluding Git internals,
+  dependencies, builds, environment files, logs, CSVs, and binaries.
+- No active source, script, config, README, AI entry, or maintained runbook
+  contains an old path.
+- The only old-path occurrences are deliberate provenance in this migration log
+  and `docs/archive/ai/CLAUDE_HANDOFF.legacy.md`.
+- The archive header explicitly marks its absolute paths as historical.
+
+## Stage 11: User-Level DCA Skills
+
+Status: complete
+
+Read-only search covered:
+
+- `/Users/junxihuo/.codex/skills`
+- `/Users/junxihuo/.claude/skills`
+- `/Users/junxihuo/.agents/skills`
+- `/Users/junxihuo/.cc-switch/skills`
+
+Only two explicitly DCA-specific skills contained old paths:
+
+- `dca-supabase-connector`
+- `dca-system-wrangler`
+
+The `.codex/skills` and `.cc-switch/skills` copies are separate files, so both
+sets were updated. Eight files changed:
+
+- each skill's `SKILL.md`;
+- each Supabase skill's `references/project.md`;
+- each Wrangler skill's `scripts/dca_wrangler.sh`.
+
+Path behavior now prefers the current DCA Tracker Git root and falls back to
+`/Users/junxihuo/Workspace/dca_system`. The Wrangler helper also accepts an
+explicit `DCA_PROJECT_ROOT`.
+
+Backup and validation:
+
+- Pre-change SHA-256 hashes and reversible old-path lines are stored in
+  `docs/migration/2026-07-27-user-skill-path-backup.md`.
+- Full file copies were not made because the files contain unrelated personal
+  account metadata that the migration safety rules prohibit duplicating.
+- Both Wrangler helpers pass `bash -n`.
+- The `.codex` and `.cc-switch` copies match byte-for-byte after the change.
+- No searched user-level skill contains an old DCA path.
+- No network call, deployment, OAuth flow, secret update, or database action
+  was performed.
+
+## Stage 12: Workspace Development Verification
+
+Status: complete
+
+Package manager and install:
+
+- npm selected from the committed root and Worker lockfiles.
+- `npm ci` passed at the root.
+- `npm ci` passed in `workers/quote`.
+- `npm ci` passed in `workers/email-cron`.
+- No lockfile changed.
+
+Checks in the Workspace repository:
+
+- `npm run test:finance`: passed.
+- `npm run test:email-reminder`: passed.
+- `npm run test:quote-status`: passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm run build:local`: passed.
+- `npm run test:ui`: passed.
+- `npm run test:symbols`: passed.
+
+Configuration recognition:
+
+- Found 44 ordered Supabase migration SQL files; the latest is
+  `0042_private_performance_daily_pnl.sql`.
+- `supabase/performance_cache_verify.sql` and
+  `supabase/diagnose_performance.sql` are present.
+- The repository has no versioned `supabase/config.toml`; hosted Supabase plus
+  ordered SQL migrations is the existing project setup. This predates the
+  migration and was not changed.
+- Both installed Worker toolchains report Wrangler `3.114.17`.
+- Both Worker configurations passed `wrangler deploy --dry-run` and produced
+  local bundles. No deployment occurred.
+
+Browser smoke test:
+
+- Started `npm run dev:local` on `127.0.0.1:5173`.
+- Playwright opened `/` and `/performance` in a real browser.
+- The root rendered the local-mode marker without a login.
+- The performance deep route rendered its page heading.
+- Both routes returned HTTP 200.
+- Console result: 0 errors and four React Router future-flag warnings.
+- Browser and Vite sessions were closed after verification.
+- Playwright artifacts were moved to `/private/tmp` and were not added to Git.
+
+Existing warnings and dependency risk:
+
+- The email reminder test emits a Node module-type performance warning because
+  the Worker package does not declare `"type": "module"`. The test passes.
+- npm audit reports 9 root vulnerabilities (1 low, 4 moderate, 4 high).
+- npm audit reports 6 vulnerabilities for each Worker (2 moderate, 4 high).
+- Wrangler warns that the locked major version 3 is behind major version 4.
+- These warnings come from the existing lockfiles/configuration. No automatic
+  audit fix, major upgrade, or unrelated dependency change was performed.
+
+## Stage 13: Codex and Claude Compatibility
+
+Status: complete
+
+Codex-only:
+
+- `AGENTS.md`, `PROJECT.md`, and `HANDOFF.md` exist and are linked as the entry
+  path.
+- No Claude session or user-level memory is required.
+
+Claude-only:
+
+- `CLAUDE.md` starts with `@AGENTS.md`.
+- Claude-specific content is limited to sub-agent and auto-memory constraints.
+- The Workspace copy intentionally has no project-local `.claude` state.
+- No old Claude project index or session is required.
+
+Codex plus Claude:
+
+- Shared facts are maintained only in `PROJECT.md`.
+- Shared execution rules are maintained only in `AGENTS.md`.
+- Current task state is maintained only in `HANDOFF.md`.
+- `CLAUDE_HANDOFF.md` is no longer an active root file.
+- Legacy notes are clearly archived and do not compete with current state.
+- Automated entry checks and all Markdown local-link checks passed.
