@@ -135,6 +135,7 @@ Additional scoped checks:
 ```bash
 npm run test:ui
 npm run test:symbols
+npm run test:nyse-calendar-sync
 npm run test:stress
 npm run test:schwab
 ```
@@ -202,6 +203,8 @@ for the production application.
 - Keep the local date behavior in transaction and cashflow forms.
 - Extend the hardcoded NYSE holiday calendar each December before the covered
   years expire.
+- After adding or changing holidays, run `npm run test:nyse-calendar-sync` to
+  confirm all three copies remain identical.
 - Keep the performance warnings aggregation separated from the series
   aggregation; collapsing them recreates a SQL grouping failure.
 - Treat quote Worker CORS as deployment-specific configuration.

@@ -13,6 +13,7 @@
     "typecheck": "tsc -b --noEmit && tsc --noEmit -p workers/quote && tsc --noEmit -p workers/email-cron",
     "test:finance": "node scripts/verify-performance-fixtures.mjs",
     "test:email-reminder": "node --experimental-strip-types scripts/verify-email-reminder-dates.mjs",
+    "test:nyse-calendar-sync": "node scripts/verify-nyse-calendar-sync.mjs",
     "test:quote-status": "node scripts/verify-quote-status.mjs",
     "test:schwab": "node scripts/verify-schwab-market-data.mjs",
     "schwab:oauth": "node scripts/schwab-oauth.mjs",
