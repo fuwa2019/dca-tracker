@@ -20,6 +20,22 @@ The current product includes:
 - an offline local demo mode;
 - draft-only X content operations and analysis scripts.
 
+## Product Goal and Scope
+
+- Users: one authenticated portfolio owner and recipients of sanitized,
+  read-only share links.
+- Core problem: maintain an application-owned record of a long-term US ETF
+  portfolio and report trustworthy holdings, cashflow, and performance metrics
+  without exposing private financial data.
+- Current stage: the SPA, two Workers, Supabase schema, local demo, and
+  verification workflows are implemented and maintained from this repository.
+- In scope: portfolio records, market-data ingestion, performance calculation,
+  data-health operations, reminders, private authentication, and sanitized
+  sharing.
+- Out of scope: brokerage order execution, brokerage account or position sync,
+  anonymous reconstruction of private history, and disclosure of absolute
+  portfolio amounts through public links.
+
 ## Sources of Truth
 
 Use project facts in this order:
@@ -95,6 +111,8 @@ More detail:
 - `tests/fixtures/`: finance and long-horizon regression fixtures.
 - `docs/`: specifications, architecture, decisions, runbooks, tasks,
   migrations, archived AI notes, and X content operations.
+- `references/`: reviewed links to external platform and provider
+  documentation.
 - `artifacts/x-content/`: dated, non-runtime X content work products.
 
 Keep this real structure. Do not reorganize the project into template
@@ -239,6 +257,7 @@ do not grant deployment authority.
 - `AGENTS.md`: shared execution rules.
 - `CLAUDE.md`: Claude Code-specific additions only.
 - `HANDOFF.md`: the current unfinished task and verified state.
+- `references/index.md`: reviewed external documentation used by the project.
 
 Update durable facts in the appropriate architecture, decision, or runbook
 document. Keep temporary progress in `HANDOFF.md` and the relevant task log.

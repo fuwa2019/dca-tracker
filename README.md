@@ -63,7 +63,9 @@ the same checks.
 - [docs/LOOKTHROUGH_SPEC.md](./docs/LOOKTHROUGH_SPEC.md): exposure contract
 - [docs/architecture/](./docs/architecture/): system design
 - [docs/decisions/](./docs/decisions/): accepted technical decisions
+- [docs/tasks/](./docs/tasks/): active complex-task briefs
 - [docs/runbooks/](./docs/runbooks/): development, migration, and deployment
+- [references/index.md](./references/index.md): reviewed external documentation
 - [supabase/README.md](./supabase/README.md): database setup and RLS overview
 - [workers/quote/README.md](./workers/quote/README.md): quote Worker
 - [workers/email-cron/README.md](./workers/email-cron/README.md): email Worker

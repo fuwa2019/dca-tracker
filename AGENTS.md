@@ -5,7 +5,8 @@
 1. Read `PROJECT.md` for stable project facts and constraints.
 2. Read `HANDOFF.md` for the current task and verified state.
 3. Run `git status --short --branch` before changing anything.
-4. Inspect the relevant code, tests, migrations, and current configuration.
+4. Confirm the affected application, database, and deployment scope.
+5. Inspect the relevant code, tests, migrations, and current configuration.
 
 Do not rely on previous sessions, chat history, external plans, or AI memory as
 project truth.
@@ -33,6 +34,9 @@ project truth.
 - Do not add a `Database` generic to the shared Supabase client.
 - Preserve local-date form defaults and `public/_redirects`.
 - Do not introduce or upgrade major dependencies without a concrete need.
+- For Cloudflare, Supabase, Schwab, Resend, or other external service work,
+  check the project documentation and `references/index.md` before relying on
+  provider behavior.
 
 ## Verification
 
@@ -56,7 +60,10 @@ refactoring.
 Before finishing:
 
 - inspect the final diff and Git status;
-- record checks actually run and their results;
+- report the modified files, commands run, and verification results;
+- state database and deployment impact, including when there is none;
+- state unresolved issues and the next concrete step, including when there are
+  none;
 - update `HANDOFF.md` if unfinished work remains;
 - place durable architecture, decision, or operational knowledge under
   `docs/` instead of duplicating it in an AI-specific file.

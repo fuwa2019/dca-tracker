@@ -1,7 +1,20 @@
-# Current Tasks
+# Task Briefs
 
-Active complex work should have a task document here and a concise current
-state in `HANDOFF.md`. Completed task history belongs in Git or an appropriate
-archive, not in the active handoff.
+Each complex task must include:
 
-- `workspace-migration.md`: repository standardization and path migration.
+- objective;
+- background;
+- allowed change scope;
+- prohibited change scope;
+- database impact;
+- deployment impact;
+- acceptance commands;
+- rollback.
+
+## Active Tasks
+
+None.
+
+Keep only unfinished work in this directory and summarize its current state in
+`HANDOFF.md`. Completed task briefs belong in `docs/archive/tasks/`; detailed
+execution records may remain in the appropriate durable documentation area.
