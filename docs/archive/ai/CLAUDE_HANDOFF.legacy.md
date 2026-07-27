@@ -1,3 +1,10 @@
+# Archived AI Handoff
+
+> Archived on 2026-07-27 during project knowledge standardization.
+> This is historical context, not an active instruction or current project
+> state. Current work is maintained only in `HANDOFF.md`. Historical absolute
+> paths below are intentionally preserved as provenance.
+
 # Claude Handoff - dca_system
 
 更新时间：2026-06-15

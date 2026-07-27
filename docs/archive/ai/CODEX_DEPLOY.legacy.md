@@ -1,3 +1,9 @@
+# Archived Codex Deployment Handoff
+
+> Archived on 2026-07-27. Stable local-mode and deployment procedures now live
+> in `PROJECT.md` and `docs/runbooks/`. This file is historical and does not
+> authorize a deployment.
+
 # 本地版 + 前端 UI 升级 — 交接给 Codex（部署用）
 
 > 这份文档给 Codex：说明这次改了什么、改在哪些文件、本地版怎么跑/怎么部署，

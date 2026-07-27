@@ -1,3 +1,8 @@
+# Archived UI and Data Plan
+
+> Archived on 2026-07-27. This plan records a previous design phase and is not
+> an active task list. Verify any claim against current code and Git.
+
 # DCA Tracker 前端 UI 与数据链路优化计划
 
 ## Summary

@@ -1,3 +1,8 @@
+# Archived Deployment Note
+
+> Archived on 2026-07-27 after the described front-end change was incorporated.
+> This is not an active deployment instruction.
+
 # 部署说明：字体统一 + 市场状态配色对齐 TradingView
 
 本次改动是**纯前端**（React SPA），不涉及 Supabase 迁移、RPC、Worker 或环境变量。
