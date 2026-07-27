@@ -4,9 +4,9 @@ Updated: 2026-07-27
 
 ## Current Goal
 
-Standardize the repository's shared project knowledge and migrate the complete
-working repository from the Documents path to the Workspace path without losing
-Git history, refs, current work, or rollback capability.
+Migration completed. The repository's shared project knowledge is standardized,
+the canonical working directory is the Workspace path, and the former Documents
+path is a compatibility symlink.
 
 ## Git State
 
@@ -22,8 +22,7 @@ Git history, refs, current work, or rollback capability.
   migration log can name it.
 - Workspace copy baseline:
   `15caf40a514866cd7f2f413ba929dfb09eefb40a`
-- The current working tree contains only verified post-copy migration records
-  pending the next documentation checkpoint.
+- Final migration state: lightweight tag `workspace-migration-20260727`.
 
 ## Completed
 
@@ -41,6 +40,8 @@ Git history, refs, current work, or rollback capability.
 - Fresh installs, CI-equivalent checks, local build, Worker dry-runs, and
   browser smoke tests completed in the Workspace copy.
 - Codex-only, Claude-only, and combined knowledge entry checks passed.
+- Former Documents path switched to a verified compatibility symlink.
+- Final migration report prepared.
 
 ## Current Blockers
 
@@ -48,11 +49,14 @@ None.
 
 ## Next Steps
 
-1. Commit the post-copy migration record.
-2. Fast-forward the old repository to the same commit and recheck parity.
-3. Rename the old directory and create the compatibility symlink.
-4. Re-run Git, path, and smoke checks after the switch.
-5. Write the final report and preserve all rollback material.
+No migration work remains after the final report commit and tag.
+
+Future maintenance:
+
+1. Keep the compatibility symlink and all recovery material for an appropriate
+   retention period.
+2. Handle npm audit findings and the Wrangler major upgrade as a separate task.
+3. Continue normal development only from the Workspace repository.
 
 ## Related Files
 

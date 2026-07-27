@@ -420,3 +420,41 @@ Codex plus Claude:
 - `CLAUDE_HANDOFF.md` is no longer an active root file.
 - Legacy notes are clearly archived and do not compete with current state.
 - Automated entry checks and all Markdown local-link checks passed.
+
+## Stage 14: Compatibility Path Switch
+
+Status: complete
+
+- Rechecked the Workspace and Documents repositories: both were clean and at
+  `831022f111bcb87370aafa7e46e1c7fa5c3210e8`.
+- Renamed the former repository to
+  `/Users/junxihuo/Documents/dca_system.old-20260727`.
+- Created `/Users/junxihuo/Documents/dca_system` as a symlink to
+  `/Users/junxihuo/Workspace/dca_system`.
+- Verified `readlink` and `realpath` resolve directly to the Workspace
+  repository with no loop.
+- Verified the Workspace repository, symlink path, and old copy reported the
+  same branch and HEAD.
+- Ran `git fsck --full` in both independent repositories.
+- Verified no nested Git repository exists under the Workspace repository.
+- Verified the directory backup, old repository, and Git bundle remain present
+  and readable.
+- Ran `npm run test:finance` successfully through the compatibility path.
+- Started `npm run dev:local` through the compatibility path and received HTTP
+  200 for `/` and `/performance`.
+- Stopped the post-switch local server after the check.
+
+Git status after stage:
+
+```text
+## backup/pre-workspace-migration-20260727
+```
+
+## Finalization
+
+- Final report:
+  `docs/migration/2026-07-27-workspace-migration-report.md`
+- Final HEAD reference: lightweight tag `workspace-migration-20260727`.
+- No production deployment, production database change, OAuth operation,
+  secret update, or private-data migration was performed.
+- All rollback material remains intact.
