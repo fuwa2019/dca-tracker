@@ -156,6 +156,8 @@ for the production application.
 ## Data, Auth, and Privacy
 
 - Supabase Email Magic Link is the browser authentication mechanism.
+- `VITE_DEV_BYPASS_AUTH` only applies in Vite dev mode and bypasses login unless
+  explicitly set to `0`; `.env.example` keeps `0` as the safe default.
 - User-owned tables are protected by RLS using `auth.uid() = user_id`.
 - Service-role access belongs only in Workers or explicitly authorized
   administration.
