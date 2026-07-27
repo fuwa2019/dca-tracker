@@ -29,6 +29,7 @@ const CASH_LIKE_TICKERS = new Set(
  * This is a verbatim lift of the original DashboardPage computation.
  */
 export interface DashboardModel {
+  loading: boolean;
   positions: Position[];
   selectedBenchmark: string;
   quotes: Quote[];
@@ -66,9 +67,13 @@ export interface DashboardModel {
 }
 
 export function useDashboardModel(): DashboardModel {
-  const { data: txns = [] } = useTransactions();
-  const { data: cashflows = [] } = useCashflows();
-  const { data: settings } = useSettings();
+  const transactionsQuery = useTransactions();
+  const cashflowsQuery = useCashflows();
+  const settingsQuery = useSettings();
+  const txns = transactionsQuery.data ?? [];
+  const cashflows = cashflowsQuery.data ?? [];
+  const settings = settingsQuery.data;
+  const coreLoading = transactionsQuery.isPending || cashflowsQuery.isPending || settingsQuery.isPending;
   const { total: totalInvested } = useTotalInvested();
   const { cash } = useCashBalance();
   const selectedBenchmark = useMemo(() => getSelectedBenchmark(settings), [settings]);
@@ -81,8 +86,10 @@ export function useDashboardModel(): DashboardModel {
     [allPositions],
   );
   const symbols = useMemo(
-    () => [...new Set([...txns.map((t) => t.ticker), ...watchlist, selectedBenchmark])],
-    [txns, watchlist, selectedBenchmark],
+    () => coreLoading
+      ? []
+      : [...new Set([...txns.map((t) => t.ticker), ...watchlist, selectedBenchmark])],
+    [coreLoading, txns, watchlist, selectedBenchmark],
   );
   const accountValueSymbols = useMemo(
     () => [...new Set(txns
@@ -92,6 +99,7 @@ export function useDashboardModel(): DashboardModel {
   );
   const { data: quotes = [], isLoading: quotesLoading, isError: quotesError } = useQuotes(symbols);
   useEffect(() => {
+    if (symbols.length === 0) return;
     void registerTrackedSymbols(symbols, 'dashboard').catch((error) => {
       if (import.meta.env.DEV) console.warn('[tracked-symbols] dashboard registration failed:', error);
     });
@@ -204,6 +212,7 @@ export function useDashboardModel(): DashboardModel {
   const isEmpty = positions.length === 0 && cashflows.length === 0 && txns.length === 0;
 
   return {
+    loading: coreLoading || (positions.length > 0 && quotesLoading),
     positions,
     selectedBenchmark,
     quotes,

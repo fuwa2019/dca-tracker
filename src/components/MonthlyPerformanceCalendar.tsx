@@ -208,18 +208,13 @@ function CalendarCell({
 
   const hasValue = value !== undefined;
   const tone = hasValue && value != null ? changeColor(value) : 'text-muted-foreground';
-  const background = hasValue && value != null && value > 0
-    ? 'bg-gain-soft/60'
-    : hasValue && value != null && value < 0
-      ? 'bg-loss-soft/60'
-      : 'bg-surface';
   const fullLabel = displayMode === 'amount'
     ? formatAmount(value, false)
     : formatPercent(value);
   const title = point ? `${date} · ${fullLabel}` : date;
 
   return (
-    <div className={cn('min-h-[58px] overflow-hidden px-1 py-1.5 transition-colors min-[380px]:px-1.5 sm:min-h-[76px] sm:px-2 sm:py-2', background)} title={title}>
+    <div className="min-h-[58px] overflow-hidden bg-surface px-1 py-1.5 min-[380px]:px-1.5 sm:min-h-[76px] sm:px-2 sm:py-2" title={title}>
       <div className="flex items-center justify-between gap-1 text-[10px] text-muted-foreground sm:text-[11px]">
         <span className="tnum">{Number(date.slice(-2))}</span>
         {point && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand/60" aria-label="交易日" />}

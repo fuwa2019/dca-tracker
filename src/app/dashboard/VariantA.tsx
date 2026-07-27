@@ -93,7 +93,7 @@ const DISTRIBUTION_COLOR_BY_LABEL: Record<string, string> = {
 
 export function DashboardVariantA({ model }: { model: DashboardModel }) {
   const {
-    positions, selectedBenchmark, quoteByTicker, quotesNone, quotesPartial, quotesError,
+    loading, positions, selectedBenchmark, quoteByTicker, quotesNone, quotesPartial, quotesError,
     cacheDirty, history, accountValueHistory, last, costBasisMode, aggregates, dayChangePct, totalReturnPct,
     target, annualRet, monthlyDca, monthsToTarget, xirr, portfolioCumulative,
     excessVsBenchmark, isEmpty,
@@ -164,6 +164,10 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
   );
   const lookThroughTop = useMemo(() => lookThrough.stocks.slice(0, 6), [lookThrough.stocks]);
 
+  if (loading) {
+    return <DashboardLoading />;
+  }
+
   if (isEmpty) {
     return (
       <div className="container max-w-[1180px] px-4 py-6 sm:px-6">
@@ -212,14 +216,16 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       >
         <div>
           <div className="flex items-center gap-2 kicker">
-            持仓市值 · Portfolio Value
+            账户净值 · Net Asset Value
             {cacheDirty && <StatusBadge tone="warn" dot>缓存待刷新</StatusBadge>}
           </div>
           <div className="font-serif-fig mt-2 break-all text-[clamp(3.2rem,16vw,4.4rem)] font-semibold leading-[0.92] text-foreground lg:text-[clamp(2.75rem,8vw,6rem)]">
-            <AnimatedNumber value={aggregates.stockMv} format={(v) => usd0.format(v)} duration={1.1} />
+            <AnimatedNumber value={aggregates.nav} format={(v) => usd0.format(v)} duration={1.1} />
           </div>
           <div className="font-num mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[12px] text-muted-foreground sm:mt-4 sm:text-[13px]">
             <span>资产 <span className="text-foreground">{positions.length} 个</span></span>
+            <span>持仓 <span className="text-foreground">{usd0.format(aggregates.stockMv)}</span></span>
+            <span>现金 <span className="text-foreground">{usd0.format(aggregates.cash)}</span></span>
             <span>基准 <span className="text-foreground">{selectedBenchmark}</span></span>
           </div>
         </div>
@@ -228,7 +234,7 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
           <HeroKpi
             label="今日盈亏 · Today"
             value={signedUsd(aggregates.dayPL)}
-            sub={Number.isFinite(dayChangePct) && aggregates.stockMv > 0 ? signedPct(dayChangePct) : '—'}
+            sub={Number.isFinite(dayChangePct) && aggregates.nav > 0 ? signedPct(dayChangePct) : '—'}
             tone={changeColor(aggregates.dayPL)}
           />
           <HeroKpi
@@ -404,6 +410,39 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
       </motion.section>
 
     </motion.div>
+  );
+}
+
+function DashboardLoading() {
+  return (
+    <div
+      className="container max-w-[1180px] px-3 py-3 sm:px-6 sm:py-6 lg:px-8"
+      aria-busy="true"
+      aria-label="正在加载组合数据"
+    >
+      <div className="flex items-end justify-between pb-4">
+        <div className="h-5 w-28 animate-pulse rounded bg-muted" />
+        <div className="h-8 w-40 animate-pulse rounded bg-muted" />
+      </div>
+      <div className="rule-top grid gap-6 py-6 lg:grid-cols-[1.45fr_1fr]">
+        <div>
+          <div className="h-3 w-36 animate-pulse rounded bg-muted" />
+          <div className="mt-4 h-16 w-64 max-w-full animate-pulse rounded bg-muted" />
+          <div className="mt-4 h-3 w-44 animate-pulse rounded bg-muted" />
+        </div>
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div key={index} className="h-20 animate-pulse bg-card" />
+          ))}
+        </div>
+      </div>
+      <div className="rule-top grid grid-cols-3 gap-px bg-border">
+        {Array.from({ length: 3 }, (_, index) => (
+          <div key={index} className="h-24 animate-pulse bg-card" />
+        ))}
+      </div>
+      <div className="mt-8 h-56 animate-pulse rounded-lg bg-muted" />
+    </div>
   );
 }
 
