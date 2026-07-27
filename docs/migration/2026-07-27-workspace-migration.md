@@ -212,7 +212,7 @@ Status: complete
 
 ## Stage 7: Pre-Copy Standardization Commit
 
-Status: in progress
+Status: complete
 
 Pre-commit validation:
 
@@ -230,3 +230,15 @@ Pre-commit validation:
 The Node warning comes from `workers/email-cron/package.json` not declaring
 `"type": "module"` while the test imports TypeScript ES module syntax. It does
 not fail the test and predates this migration, so it was not changed here.
+
+- Standardization commit:
+  `d006848a047f3cb04be5cf52f48d48fc0cb7fd17`
+  (`docs: standardize project knowledge for workspace migration`)
+- The commit contains only reviewed project entry files, durable documentation,
+  archived legacy notes, and the migration record.
+
+Git status immediately after the standardization commit:
+
+```text
+## backup/pre-workspace-migration-20260727
+```

@@ -11,12 +11,14 @@ Git history, refs, current work, or rollback capability.
 ## Git State
 
 - Branch: `backup/pre-workspace-migration-20260727`
-- HEAD at the start of standardization:
+- Protected source checkpoint:
   `bc9a977c9a8e1fa68cda70d4ef354d95193e23ca`
+- Project knowledge standardization:
+  `d006848a047f3cb04be5cf52f48d48fc0cb7fd17`
 - The checkpoint commit protects the three pre-existing dashboard/calendar
   source changes.
-- The current working tree contains the documentation standardization and
-  migration log that will be committed before the repository copy.
+- A small record-only commit follows the standardization commit so the
+  migration log can name it.
 
 ## Completed
 
@@ -26,7 +28,9 @@ Git history, refs, current work, or rollback capability.
 - Two clean, reachable Codex worktrees removed through Git and pruned.
 - Pre-existing source work protected on a dedicated branch and checkpoint
   commit.
-- Project knowledge standardization is in progress.
+- Project knowledge standardized and committed.
+- External Codex artifact candidates reviewed; no unique verified artifact
+  required import.
 
 ## Current Blockers
 
@@ -34,17 +38,13 @@ None.
 
 ## Next Steps
 
-1. Complete and verify project documentation and archive stale AI notes.
-2. Inspect only directly relevant external Codex artifacts for validated,
-   non-duplicate knowledge.
-3. Commit the standardization.
-4. Copy the repository into the empty Workspace destination.
-5. Compare Git state and run `git fsck --full`.
-6. Repair old path references in the project and DCA-specific user skills.
-7. Run CI-equivalent checks, local-mode build, and a local smoke test.
-8. Verify Codex-only, Claude-only, and combined entry paths.
-9. Switch the old path to a compatibility symlink only after core checks pass.
-10. Write the final report and preserve all rollback material.
+1. Copy the repository into the empty Workspace destination.
+2. Compare Git state and run `git fsck --full`.
+3. Repair old path references in the project and DCA-specific user skills.
+4. Run CI-equivalent checks, local-mode build, and a local smoke test.
+5. Verify Codex-only, Claude-only, and combined entry paths.
+6. Switch the old path to a compatibility symlink only after core checks pass.
+7. Write the final report and preserve all rollback material.
 
 ## Related Files
 
