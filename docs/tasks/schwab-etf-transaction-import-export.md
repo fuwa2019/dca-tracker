@@ -1,32 +1,32 @@
-# Schwab ETF Transaction Import and Export
+# Schwab Transaction Import and Export
 
 ## Scope
 
 - Add browser-only parsing for Schwab transaction CSV/TSV exports.
-- Import confirmed ETF `Buy`/`Sell` rows and positive Schwab deposits.
-- Recognize `Wire Received`, `MoneyLink Transfer`, and other supported transfer
-  actions; ignore outbound transfers, dividends, reinvestments, and taxes.
+- Import every standard `Buy`/`Sell` row, including ETFs and individual stocks.
+- Ignore deposits, withdrawals, dividends, reinvestments, taxes, and other
+  non-trade rows; partial transfer history is not used to infer broker cash.
 - Support append-only import and atomic full portfolio-input reset/import.
-- Export confirmed ETF trades and Schwab deposits in the same eight-column
-  Schwab format.
+- Export all stored trades in the same eight-column Schwab format.
 - Preserve application metadata for matching transactions only in append mode.
 - Include transaction fees in private portfolio calculations.
 
 ## Database Contract
 
-- Migrations: `0043_schwab_transaction_import.sql` and
-  `0044_full_reset_schwab_import.sql`.
+- Existing migrations: `0043_schwab_transaction_import.sql` and
+  `0044_full_reset_schwab_import.sql`; the zero-cash correction needs no new
+  database migration.
 - Add transaction fee, source description, import source, and import key fields.
-- Add a broker-deposit cashflow kind without inventing CNY amounts or exchange
-  rates; imported deposits remain excluded from exchange-loss calculations.
+- The historical broker-deposit schema remains compatible with the deployed
+  RPC, but the current client always sends an empty cashflow array.
 - Enforce per-user import-key uniqueness.
 - Expose an authenticated, security-invoker import RPC.
 - Derive ownership from `auth.uid()` and rely on transaction RLS.
-- Append mode matches existing manual cashflows by USD date and amount to avoid
-  double counting and retain Schwab source identity for complete re-export.
 - Full reset removes every transaction, cashflow, and funding batch owned by
-  the current user, then rebuilds only the confirmed ETF trades and positive
-  deposits from the current file.
+  the current user, then rebuilds every standard Buy/Sell row from the current
+  file without rebuilding cashflows.
+- Broker cash is intentionally fixed at zero. Total invested capital is inferred
+  from trade funding so a reset without cashflows does not corrupt total P/L.
 - Settings, share links, quotes, daily prices, caches owned by system workflows,
   and other users' rows remain outside the reset scope.
 - Keep all public-share responses unchanged.
@@ -36,16 +36,16 @@
 - Do not read or commit real brokerage exports.
 - Use synthetic fixtures in tests.
 - Do not apply the migration or deploy without separate authorization.
-- Full reset intentionally deletes individual-stock transactions, manual
-  cashflows, imported deposits, ETF transactions, and funding batches.
-- The confirmation must state that only confirmed ETF trades and positive
-  deposits in the current file will be rebuilt.
+- Full reset intentionally deletes all transactions, manual cashflows, imported
+  deposits, and funding batches.
+- The confirmation must state that all standard trades will be rebuilt,
+  cashflows will not be rebuilt, and broker cash is treated as zero.
 - Any validation, oversell, or write failure must roll back the full import.
 
 ## Verification
 
-- Schwab parsing, deposit idempotency, strict reset, and trade/deposit
-  round-trip export tests.
+- Schwab parsing, all-security import, ignored-transfer, strict reset, and
+  trade-only round-trip export tests.
 - Fee-aware finance fixtures.
 - Migration numbering and static database contract checks.
 - UI behavior checks, typecheck, and production build.

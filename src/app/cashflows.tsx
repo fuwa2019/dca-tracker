@@ -49,7 +49,7 @@ export function CashflowsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Kicker en="Cash Flow" zh="资金流水" />
-          <p className="mt-1.5 text-[11px] text-muted-foreground">汇总手工换汇与嘉信导入入金；汇兑损耗仅计算 CNY → USD 记录。</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">用于手工换汇与 XIRR；不参与账户现金，嘉信账户现金固定按 $0 处理。</p>
         </div>
         <Dialog open={adding} onOpenChange={setAdding}>
           <DialogTrigger asChild>
@@ -63,7 +63,7 @@ export function CashflowsPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="累计 USD 到账" value={usd.format(stats.totalUsdActual)} sub={`${rows.length} 笔入金`} />
+        <StatCard label="累计 USD 到账" value={usd.format(stats.totalUsdActual)} sub={`${rows.length} 笔手工记录`} />
         <StatCard
           label="累计损耗"
           value={signedUsd(-stats.totalLoss)}
@@ -77,7 +77,7 @@ export function CashflowsPage() {
         <EmptyState
           icon={Plus}
           title="还没有资金流水"
-          description="添加手工换汇，或从交易页导入嘉信入金后，现金余额与 XIRR 会自动更新。"
+          description="可添加手工换汇用于汇兑统计与 XIRR；账户现金始终按 $0 处理。"
           action={
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus className="h-3.5 w-3.5" /> 添加第一笔

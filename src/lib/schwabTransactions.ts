@@ -45,7 +45,7 @@ export interface SchwabIgnoredRow {
   action: string;
   symbol: string;
   description: string;
-  reason: 'unsupported_action' | 'non_positive_cashflow';
+  reason: 'unsupported_action';
 }
 
 export interface SchwabParseError {
@@ -174,38 +174,6 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
     const action = cells[1].trim();
     const side = parseSide(action);
     if (!side) {
-      if (isSchwabDepositAction(action)) {
-        const depositDate = parseSchwabDate(cells[0]);
-        const amount = parseMoneyNumber(cells[7]);
-        const rowErrors: string[] = [];
-        if (!depositDate) rowErrors.push('日期无效');
-        if (!Number.isFinite(amount)) rowErrors.push('入金金额无效');
-        if (amount >= 1_000_000_000_000) rowErrors.push('入金金额超出数据库精度');
-        if (decimalPlaces(cells[7]) > 2) rowErrors.push('入金金额最多支持 2 位小数');
-
-        if (Number.isFinite(amount) && amount <= 0) {
-          ignored.push({
-            sourceIndex,
-            action,
-            symbol: normalizeTicker(cells[2]),
-            description: cells[3].trim(),
-            reason: 'non_positive_cashflow',
-          });
-          continue;
-        }
-        if (rowErrors.length > 0 || !depositDate) {
-          errors.push({ sourceIndex, message: `第 ${sourceIndex} 行：${rowErrors.join('；')}` });
-          continue;
-        }
-        validDeposits.push({
-          source_index: sourceIndex,
-          deposit_date: depositDate,
-          source_action: action,
-          source_description: cells[3].trim(),
-          amount,
-        });
-        continue;
-      }
       ignored.push({
         sourceIndex,
         action,
@@ -449,7 +417,7 @@ export function exportSchwabTransactions(
         formatSchwabDate(transaction.trade_date),
         transaction.side === 'buy' ? 'Buy' : 'Sell',
         normalizeTicker(transaction.ticker),
-        transaction.source_description?.trim() || `${normalizeTicker(transaction.ticker)} ETF`,
+        transaction.source_description?.trim() || normalizeTicker(transaction.ticker),
         formatDecimal(shares, 6),
         `$${formatDecimal(price, 4)}`,
         fee > 0 ? `$${fee.toFixed(2)}` : '',

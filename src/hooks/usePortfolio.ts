@@ -2,9 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Database, PerformanceHistory, PortfolioHistory, SharedHistory } from '@/lib/database.types';
 import { aggregatePositions } from '@/lib/calc/position';
+import { assumedBrokerCashBalance } from '@/lib/calc/cashBalance';
+import { totalTradeFunding } from '@/lib/calc/history';
 import { normalizeSymbol } from '@/lib/symbols';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { transactionCashAmount } from '@/lib/calc/transactionAmounts';
 import { summarizeCashflows } from '@/lib/calc/cashflows';
 import {
   localCashflows,
@@ -160,31 +161,17 @@ export function usePositions() {
 }
 
 export function useTotalInvested() {
-  const cashflows = useCashflows();
-  const total = summarizeCashflows(cashflows.data ?? []).totalUsdActual;
-  return { ...cashflows, total };
+  const txns = useTransactions();
+  const total = totalTradeFunding(txns.data ?? []);
+  return { ...txns, total };
 }
 
 /**
- * Cash USD currently sitting in Schwab — i.e. money you deposited but haven't
- * deployed into stock yet. Must be included in NAV so XIRR / charts don't
- * report a fake loss when you've deposited more than you've bought.
- *
- *   cash = Σ cashflow.usd_amount − Σ buy_total_cost + Σ sell_net_proceeds
+ * This account is intentionally modeled with zero idle cash. Schwab transfer
+ * rows are not complete enough to reconcile a trustworthy historical balance.
  */
 export function useCashBalance() {
-  const cashflows = useCashflows();
-  const txns = useTransactions();
-  const depositedUsd = summarizeCashflows(cashflows.data ?? []).totalUsdActual;
-  let buyUsd = 0;
-  let sellUsd = 0;
-  for (const t of txns.data ?? []) {
-    const cashAmount = transactionCashAmount(t);
-    if (t.side === 'buy') buyUsd += cashAmount;
-    else sellUsd += cashAmount;
-  }
-  const cash = depositedUsd - buyUsd + sellUsd;
-  return { cash, depositedUsd, buyUsd, sellUsd, isLoading: cashflows.isLoading || txns.isLoading };
+  return { cash: assumedBrokerCashBalance(), isLoading: false };
 }
 
 export function useExchangeLoss() {

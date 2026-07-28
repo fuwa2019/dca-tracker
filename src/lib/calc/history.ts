@@ -298,7 +298,7 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
   return out;
 }
 
-function inferTradeFundingFlows(transactions: TransactionRow[]): Map<string, number> {
+export function inferTradeFundingFlows(transactions: TransactionRow[]): Map<string, number> {
   const out = new Map<string, number>();
   let cash = 0;
 
@@ -325,6 +325,12 @@ function inferTradeFundingFlows(transactions: TransactionRow[]): Map<string, num
   }
 
   return out;
+}
+
+export function totalTradeFunding(transactions: TransactionRow[]): number {
+  let total = 0;
+  for (const amount of inferTradeFundingFlows(transactions).values()) total += amount;
+  return total;
 }
 
 function addDays(iso: string, n: number): string {

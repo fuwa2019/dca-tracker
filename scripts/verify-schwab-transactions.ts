@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { assumedBrokerCashBalance } from '../src/lib/calc/cashBalance.ts';
+import { totalTradeFunding } from '../src/lib/calc/history.ts';
 import {
-  buildSchwabDepositImportDiff,
   buildSchwabImportDiff,
   classifySchwabSymbol,
   exportSchwabTransactions,
@@ -13,6 +14,7 @@ const tabFixture = [
   'Transactions for account XXX123',
   SCHWAB_HEADERS.join('\t'),
   '04/18/2025\tBuy\tVGT\tSYNTHETIC TECHNOLOGY ETF\t0.25\t$200.00\t\t-$50.00',
+  '04/18/2025\tBuy\tLITE\tSYNTHETIC COMMON STOCK\t1\t$10.00\t\t-$10.00',
   '04/17/2025\tWire Received\t\tSYNTHETIC TEST DEPOSIT\t\t\t\t$125.40',
   '04/16/2025\tReinvest Shares\tVGT\tSYNTHETIC TECHNOLOGY ETF\t0.01\t$200.00\t\t-$2.00',
   '04/15/2025 as of 04/14/2025\tSell\tSGOV\tSYNTHETIC TREASURY ETF\t0.5\t$100.00\t\t$50.00',
@@ -23,16 +25,17 @@ const tabFixture = [
 const parsedTab = parseSchwabTransactions(`\uFEFF${tabFixture}`);
 assert.equal(parsedTab.delimiter, '\t');
 assert.equal(parsedTab.headerRow, 2);
-assert.equal(parsedTab.rows.length, 2);
-assert.equal(parsedTab.deposits.length, 2);
-assert.equal(parsedTab.ignored.length, 2);
+assert.equal(parsedTab.rows.length, 3, 'all standard Buy/Sell rows are imported, including stocks');
+assert.equal(parsedTab.deposits.length, 0, 'brokerage transfer rows are intentionally not imported');
+assert.equal(parsedTab.ignored.length, 4);
 assert.equal(parsedTab.errors.length, 0);
-assert.equal(parsedTab.rows[1].trade_date, '2025-04-14', '`as of` date is effective');
+assert.equal(parsedTab.rows[2].trade_date, '2025-04-14', '`as of` date is effective');
 assert.equal(parsedTab.rows[0].fees_usd, 0, 'blank fee becomes zero');
-assert.equal(parsedTab.deposits[0].source_action, 'Wire Received');
-assert.equal(parsedTab.deposits[1].deposit_date, '2025-04-14', 'deposit uses the effective `as of` date');
-assert.equal(parsedTab.deposits[1].amount, 25);
-assert.equal(parsedTab.ignored[1].reason, 'non_positive_cashflow', 'outbound transfer is not a deposit');
+assert.equal(parsedTab.rows[1].ticker, 'LITE');
+assert.ok(
+  parsedTab.ignored.some((row) => row.action === 'MoneyLink Transfer'),
+  'brokerage transfers are ignored regardless of direction',
+);
 
 const commaFixture = [
   SCHWAB_HEADERS.join(','),
@@ -75,17 +78,8 @@ const invalidDeposit = parseSchwabTransactions([
   '04/10/2025\tWire Received\t\tSYNTHETIC TEST DEPOSIT\t\t\t\t$125.401',
 ].join('\n'));
 assert.equal(invalidDeposit.deposits.length, 0);
-assert.match(invalidDeposit.errors[0].message, /入金金额最多支持 2 位小数/);
-
-const duplicateDeposits = parseSchwabTransactions([
-  SCHWAB_HEADERS.join('\t'),
-  '04/10/2025\tMoneyLink Transfer\t\tSYNTHETIC LINKED BANK\t\t\t\t$75.00',
-  '04/10/2025\tMoneyLink Transfer\t\tSYNTHETIC LINKED BANK\t\t\t\t$75.00',
-].join('\n'));
-assert.equal(duplicateDeposits.deposits.length, 2);
-assert.equal(duplicateDeposits.deposits[0].duplicate_ordinal, 1);
-assert.equal(duplicateDeposits.deposits[1].duplicate_ordinal, 2);
-assert.notEqual(duplicateDeposits.deposits[0].import_key, duplicateDeposits.deposits[1].import_key);
+assert.equal(invalidDeposit.errors.length, 0, 'ignored transfer rows do not block trade import');
+assert.equal(invalidDeposit.ignored.length, 1);
 
 const duplicate = parseSchwabTransactions([
   SCHWAB_HEADERS.join('\t'),
@@ -150,54 +144,6 @@ assert.deepEqual(
   ['existing-1', 'old-etf-row', 'stock-row'],
 );
 
-const existingCashflows = [
-  {
-    id: 'manual-fx',
-    usd_in_date: '2025-04-10',
-    usd_amount: 75,
-    cashflow_kind: 'fx_transfer' as const,
-    import_source: null,
-    import_key: null,
-  },
-  {
-    id: 'old-schwab-deposit',
-    usd_in_date: '2026-05-01',
-    usd_amount: 20,
-    cashflow_kind: 'broker_deposit' as const,
-    import_source: 'schwab',
-    import_key: 'old-key',
-  },
-];
-const appendDepositDiff = buildSchwabDepositImportDiff(
-  duplicateDeposits.deposits,
-  existingCashflows,
-  'append',
-);
-assert.equal(appendDepositDiff.unchanged.length, 1, 'matching manual cashflow is preserved');
-assert.equal(appendDepositDiff.added.length, 1, 'a second identical real deposit can coexist');
-assert.equal(appendDepositDiff.removed.length, 0);
-const resetDepositDiff = buildSchwabDepositImportDiff(
-  [duplicateDeposits.deposits[0]],
-  [
-    ...existingCashflows,
-    {
-      id: 'matching-schwab-deposit',
-      usd_in_date: duplicateDeposits.deposits[0].deposit_date,
-      usd_amount: duplicateDeposits.deposits[0].amount,
-      cashflow_kind: 'broker_deposit' as const,
-      import_source: 'schwab',
-      import_key: duplicateDeposits.deposits[0].import_key,
-    },
-  ],
-  'reset_all',
-);
-assert.equal(resetDepositDiff.unchanged.length, 0);
-assert.equal(resetDepositDiff.added.length, 1);
-assert.deepEqual(
-  resetDepositDiff.removed.map((row) => row.id),
-  ['manual-fx', 'old-schwab-deposit', 'matching-schwab-deposit'],
-);
-
 const exported = exportSchwabTransactions([
   {
     trade_date: '2025-04-10',
@@ -218,48 +164,31 @@ const exported = exportSchwabTransactions([
     fees_usd: 0,
     created_at: '2025-04-09T10:00:00Z',
   },
-], [
-  {
-    id: 'wire-deposit',
-    created_at: '2025-04-11T10:00:00Z',
-    usd_in_date: '2025-04-11',
-    usd_amount: 125.4,
-    source_action: 'Wire Received',
-    source_description: 'SYNTHETIC FOREIGN CURRENCY DEPOSIT',
-  },
-  {
-    id: 'moneylink-deposit',
-    created_at: '2025-04-10T11:00:00Z',
-    usd_in_date: '2025-04-10',
-    usd_amount: 75,
-    source_action: 'MoneyLink Transfer',
-    source_description: 'SYNTHETIC LINKED BANK',
-  },
 ]);
 assert.ok(exported.startsWith('\uFEFF'));
 assert.match(exported, /Date\tAction\tSymbol\tDescription\tQuantity\tPrice\tFees & Comm\tAmount/);
 assert.match(exported, /-\$50\.01/);
 assert.match(exported, /\t\$50\.00\r\n$/);
-assert.match(
-  exported,
-  /04\/11\/2025\tWire Received\t\tSYNTHETIC FOREIGN CURRENCY DEPOSIT\t\t\t\t\$125\.40/,
-);
-assert.match(
-  exported,
-  /04\/10\/2025\tMoneyLink Transfer\t\tSYNTHETIC LINKED BANK\t\t\t\t\$75\.00/,
-);
+assert.doesNotMatch(exported, /Wire Received|MoneyLink Transfer/);
 
 const roundTrip = parseSchwabTransactions(exported);
 assert.equal(roundTrip.errors.length, 0);
 assert.equal(roundTrip.rows.length, 2);
-assert.equal(roundTrip.deposits.length, 2);
+assert.equal(roundTrip.deposits.length, 0);
 assert.equal(roundTrip.rows[0].fees_usd, 0.01);
 assert.equal(roundTrip.rows[0].source_description, 'SYNTHETIC\t"TECH" ETF');
-assert.equal(roundTrip.rows[1].source_description, 'SGOV ETF');
-assert.equal(roundTrip.deposits[0].source_action, 'Wire Received');
-assert.equal(roundTrip.deposits[0].source_description, 'SYNTHETIC FOREIGN CURRENCY DEPOSIT');
-assert.equal(roundTrip.deposits[1].source_action, 'MoneyLink Transfer');
-assert.equal(roundTrip.deposits[1].amount, 75);
+assert.equal(roundTrip.rows[1].source_description, 'SGOV');
+
+const inferredFundingRows = [
+  syntheticTransaction('funding-1', '2026-07-01', 'VOO', 10, 100),
+  syntheticTransaction('funding-2', '2026-07-02', 'QQQ', 1, 477),
+];
+assert.equal(totalTradeFunding(inferredFundingRows), 1477);
+assert.equal(
+  assumedBrokerCashBalance(),
+  0,
+  'a partial transfer history never creates synthetic idle cash',
+);
 
 const migration = readFileSync(
   new URL('../supabase/migrations/0043_schwab_transaction_import.sql', import.meta.url),
@@ -379,5 +308,32 @@ assert.match(
   /grant execute on function public\.import_schwab_transactions\(jsonb, jsonb, text\[\], text\)\s+to authenticated/,
   'authenticated users retain access to the corrected RPC',
 );
+
+function syntheticTransaction(
+  id: string,
+  tradeDate: string,
+  ticker: string,
+  shares: number,
+  price: number,
+) {
+  return {
+    id,
+    user_id: 'synthetic-user',
+    batch_id: null,
+    trade_date: tradeDate,
+    ticker,
+    side: 'buy' as const,
+    price,
+    shares,
+    fees_usd: 0,
+    kind: 'dca' as const,
+    note: null,
+    source_description: null,
+    import_source: null,
+    import_key: null,
+    created_at: `${tradeDate}T12:00:00.000Z`,
+    updated_at: `${tradeDate}T12:00:00.000Z`,
+  };
+}
 
 console.log('Schwab transaction import/export checks passed');

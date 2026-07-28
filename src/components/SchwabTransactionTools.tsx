@@ -15,23 +15,16 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { searchSymbols } from '@/lib/quote';
 import { normalizeSymbol } from '@/lib/symbols';
 import {
-  buildSchwabDepositImportDiff,
   buildSchwabImportDiff,
-  classifySchwabSymbol,
   exportSchwabTransactions,
-  isSchwabDepositAction,
   parseSchwabTransactions,
   type SchwabImportKind,
   type SchwabImportRow,
-  type SchwabDepositImportRow,
   type SchwabParseResult,
-  type SchwabSymbolClassification,
 } from '@/lib/schwabTransactions';
 import { useCashflows } from '@/hooks/usePortfolio';
-import etfHoldings from '@/data/etf-holdings.json';
 import type {
   Database,
   SchwabTransactionImportResult,
@@ -49,11 +42,6 @@ interface FileInfo {
   size: number;
 }
 
-const KNOWN_ETF_SYMBOLS = new Set([
-  ...Object.keys(etfHoldings.etfs),
-  ...(etfHoldings._meta.cashLike ?? []),
-].map((symbol) => normalizeSymbol(symbol)));
-
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 
 export function SchwabTransactionTools({ transactions }: Props) {
@@ -64,15 +52,11 @@ export function SchwabTransactionTools({ transactions }: Props) {
     isError: cashflowsError,
   } = useCashflows();
   const inputRef = useRef<HTMLInputElement>(null);
-  const classificationRunRef = useRef(0);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<ImportMode>('append');
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
   const [parsed, setParsed] = useState<SchwabParseResult | null>(null);
-  const [classifications, setClassifications] = useState<Record<string, SchwabSymbolClassification>>({});
-  const [manualEtfs, setManualEtfs] = useState<Set<string>>(new Set());
   const [kinds, setKinds] = useState<Record<string, SchwabImportKind>>({});
-  const [classifying, setClassifying] = useState(false);
   const [resetCoverageConfirmed, setResetCoverageConfirmed] = useState(false);
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -81,60 +65,25 @@ export function SchwabTransactionTools({ transactions }: Props) {
   const [notice, setNotice] = useState<string | null>(null);
   const [result, setResult] = useState<SchwabTransactionImportResult | null>(null);
 
-  const allSymbolDescriptions = useMemo(() => {
-    const descriptions = new Map<string, string>();
-    for (const transaction of transactions) {
-      const ticker = normalizeSymbol(transaction.ticker);
-      if (transaction.source_description) descriptions.set(ticker, transaction.source_description);
-    }
-    for (const row of parsed?.rows ?? []) {
-      if (row.source_description) descriptions.set(row.ticker, row.source_description);
-    }
-    return descriptions;
-  }, [parsed?.rows, transactions]);
-
-  const symbolUniverse = useMemo(() => {
-    return [...new Set([
-      ...transactions.map((transaction) => normalizeSymbol(transaction.ticker)),
-      ...(parsed?.rows.map((row) => row.ticker) ?? []),
-    ])].filter(Boolean).sort();
-  }, [parsed?.rows, transactions]);
-
-  const previouslyImportedEtfSymbols = useMemo(() => new Set(
-    transactions
-      .filter((transaction) => transaction.import_source === 'schwab')
-      .map((transaction) => normalizeSymbol(transaction.ticker)),
-  ), [transactions]);
-
-  const confirmedEtfSymbols = useMemo(() => new Set(
-    symbolUniverse.filter((ticker) =>
-      classifications[ticker] === 'etf' || manualEtfs.has(ticker)),
-  ), [classifications, manualEtfs, symbolUniverse]);
-
   const selectedRows = useMemo(() => (parsed?.rows ?? [])
-    .filter((row) => confirmedEtfSymbols.has(row.ticker))
     .map((row) => ({ ...row, kind: kinds[row.import_key] ?? row.kind })),
-  [confirmedEtfSymbols, kinds, parsed?.rows]);
+  [kinds, parsed?.rows]);
+  const importSymbols = useMemo(
+    () => [...new Set(selectedRows.map((row) => normalizeSymbol(row.ticker)))],
+    [selectedRows],
+  );
 
   const diff = useMemo(() => buildSchwabImportDiff(
     selectedRows,
     transactions,
     mode,
   ), [mode, selectedRows, transactions]);
-  const depositDiff = useMemo(() => buildSchwabDepositImportDiff(
-    parsed?.deposits ?? [],
-    cashflows,
-    mode,
-  ), [cashflows, mode, parsed?.deposits]);
-
   const ignoredCount = (parsed?.ignored.length ?? 0)
     + (parsed?.rows.length ?? 0) - selectedRows.length;
   const canImport = !!parsed
     && parsed.errors.length === 0
-    && (selectedRows.length > 0 || parsed.deposits.length > 0)
-    && !classifying
-    && !cashflowsLoading
-    && !cashflowsError
+    && selectedRows.length > 0
+    && (mode === 'append' || (!cashflowsLoading && !cashflowsError))
     && !importing
     && (mode === 'append' || resetCoverageConfirmed);
 
@@ -142,7 +91,6 @@ export function SchwabTransactionTools({ transactions }: Props) {
     const file = event.target.files?.[0];
     if (!file) return;
     resetImportState();
-    const classificationRun = classificationRunRef.current;
     setFileInfo({ name: file.name, size: file.size });
     if (file.size > MAX_FILE_BYTES) {
       setError('文件超过 5 MB，未读取。');
@@ -153,43 +101,14 @@ export function SchwabTransactionTools({ transactions }: Props) {
       const nextParsed = parseSchwabTransactions(await file.text());
       setParsed(nextParsed);
       setKinds(Object.fromEntries(nextParsed.rows.map((row) => [row.import_key, 'dca'])));
-      const descriptions = new Map(allSymbolDescriptions);
-      for (const transaction of transactions) {
-        if (transaction.source_description) {
-          descriptions.set(normalizeSymbol(transaction.ticker), transaction.source_description);
-        }
-      }
-      for (const row of nextParsed.rows) {
-        if (row.source_description) descriptions.set(row.ticker, row.source_description);
-      }
-      const symbols = [...new Set([
-        ...transactions.map((transaction) => normalizeSymbol(transaction.ticker)),
-        ...nextParsed.rows.map((row) => row.ticker),
-      ])].filter(Boolean);
-      setClassifying(true);
-      const resolved = await resolveClassifications(
-        symbols,
-        descriptions,
-        previouslyImportedEtfSymbols,
-      );
-      if (classificationRun === classificationRunRef.current) {
-        setClassifications(resolved);
-      }
     } catch (fileError) {
       setError(fileError instanceof Error ? fileError.message : '文件读取失败。');
-    } finally {
-      if (classificationRun === classificationRunRef.current) {
-        setClassifying(false);
-      }
     }
   }
 
   function resetImportState() {
-    classificationRunRef.current += 1;
     setFileInfo(null);
     setParsed(null);
-    setClassifications({});
-    setManualEtfs(new Set());
     setKinds({});
     setResetCoverageConfirmed(false);
     setConfirmingReset(false);
@@ -230,15 +149,10 @@ export function SchwabTransactionTools({ transactions }: Props) {
       }));
       const response = await supabase.rpc('import_schwab_transactions', {
         p_rows: payload,
-        p_cashflows: parsed.deposits.map((row) => ({
-          source_index: row.source_index,
-          deposit_date: row.deposit_date,
-          source_action: row.source_action,
-          source_description: row.source_description,
-          amount: row.amount,
-          duplicate_ordinal: row.duplicate_ordinal,
-        })),
-        p_etf_symbols: [...confirmedEtfSymbols],
+        p_cashflows: [],
+        // The RPC parameter keeps its historical name for rolling-deploy
+        // compatibility; it now carries every imported security symbol.
+        p_etf_symbols: importSymbols,
         p_mode: mode,
       });
       if (response.error) throw response.error;
@@ -270,58 +184,16 @@ export function SchwabTransactionTools({ transactions }: Props) {
     setNotice(null);
     setError(null);
     try {
-      if (cashflowsLoading) {
-        setNotice('正在读取入金记录，请稍后再导出。');
-        return;
-      }
-      if (cashflowsError) {
-        throw new Error('入金记录读取失败，已阻止导出不完整文件。');
-      }
-      const descriptions = new Map<string, string>();
-      for (const transaction of transactions) {
-        if (transaction.source_description) {
-          descriptions.set(normalizeSymbol(transaction.ticker), transaction.source_description);
-        }
-      }
-      const symbols = [...new Set(transactions.map((transaction) => normalizeSymbol(transaction.ticker)))];
-      const resolved = await resolveClassifications(
-        symbols,
-        descriptions,
-        previouslyImportedEtfSymbols,
-      );
-      const etfSymbols = new Set(symbols.filter((symbol) => resolved[symbol] === 'etf'));
       const exportRows = [...transactions]
-        .filter((transaction) =>
-          (transaction.side === 'buy' || transaction.side === 'sell')
-          && etfSymbols.has(normalizeSymbol(transaction.ticker)))
-      const exportDeposits = cashflows.filter((cashflow) =>
-        cashflow.import_source === 'schwab'
-        && !!cashflow.usd_in_date
-        && Number(cashflow.usd_amount) > 0
-        && !!cashflow.source_action
-        && isSchwabDepositAction(cashflow.source_action));
-      if (exportRows.length === 0 && exportDeposits.length === 0) {
-        setNotice('没有可导出的 ETF 交易或嘉信入金。');
+        .filter((transaction) => transaction.side === 'buy' || transaction.side === 'sell');
+      if (exportRows.length === 0) {
+        setNotice('没有可导出的交易。');
         return;
       }
 
-      const content = exportSchwabTransactions(
-        exportRows,
-        exportDeposits.map((cashflow) => ({
-          id: cashflow.id,
-          created_at: cashflow.created_at,
-          usd_in_date: cashflow.usd_in_date!,
-          usd_amount: cashflow.usd_amount!,
-          source_action: cashflow.source_action!,
-          source_description: cashflow.source_description,
-        })),
-      );
+      const content = exportSchwabTransactions(exportRows);
       downloadTextFile(content, `Schwab_Transactions_${fileTimestamp(new Date())}.csv`);
-      const unknownCount = symbols.filter((symbol) => resolved[symbol] === 'unknown').length;
-      setNotice(
-        `已导出 ${exportRows.length} 笔 ETF 交易、${exportDeposits.length} 笔入金`
-        + (unknownCount > 0 ? `；${unknownCount} 个无法确认的代码未导出。` : '。'),
-      );
+      setNotice(`已导出 ${exportRows.length} 笔交易。`);
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : '导出失败。');
     } finally {
@@ -350,12 +222,12 @@ export function SchwabTransactionTools({ transactions }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            title="导出 ETF 交易与嘉信入金文件"
-            disabled={exporting || cashflowsLoading || (transactions.length === 0 && cashflows.length === 0)}
+            title="导出嘉信买卖交易文件"
+            disabled={exporting || transactions.length === 0}
             onClick={() => void runExport()}
           >
             <Download className="h-4 w-4" />
-            {exporting ? '识别中…' : '导出'}
+            {exporting ? '生成中…' : '导出'}
           </Button>
         </div>
         {(notice || (!open && error)) && (
@@ -380,8 +252,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
             <ResetConfirmation
               transactionAdded={diff.added.length}
               transactionRemoved={diff.removed.length}
-              cashflowAdded={depositDiff.added.length}
-              cashflowRemoved={depositDiff.removed.length}
+              cashflowRemoved={cashflows.length}
               importing={importing}
               error={error}
               onBack={() => setConfirmingReset(false)}
@@ -390,9 +261,9 @@ export function SchwabTransactionTools({ transactions }: Props) {
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>导入嘉信 ETF 交易与入金</DialogTitle>
+                <DialogTitle>导入嘉信买卖交易</DialogTitle>
                 <DialogDescription>
-                  文件只在此设备解析；仅标准化后的 ETF 买卖与正向入账会发送到数据库。
+                  文件只在此设备解析；导入所有标准 Buy / Sell，不统计入金、出金和账户现金。
                 </DialogDescription>
               </DialogHeader>
 
@@ -460,42 +331,24 @@ export function SchwabTransactionTools({ transactions }: Props) {
                       </div>
 
                       <div className="grid min-w-0 grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-6">
-                        <DiffMetric label="ETF" value={selectedRows.length} />
-                        <DiffMetric label="入金" value={parsed.deposits.length} />
+                        <DiffMetric label="交易" value={selectedRows.length} />
+                        <DiffMetric label="现金" value="$0" />
                         <DiffMetric label="忽略" value={ignoredCount} />
                         <DiffMetric
-                          label="交易 / 入金未变"
-                          value={`${diff.unchanged.length} / ${depositDiff.unchanged.length}`}
+                          label="交易未变"
+                          value={diff.unchanged.length}
                         />
                         <DiffMetric label={mode === 'reset_all' ? '交易 + / −' : '交易新增'} value={
                           mode === 'reset_all'
                             ? `${diff.added.length} / ${diff.removed.length}`
                             : diff.added.length
                         } />
-                        <DiffMetric label={mode === 'reset_all' ? '入金 + / −' : '入金新增'} value={
+                        <DiffMetric label={mode === 'reset_all' ? '现金流移除' : '现金流新增'} value={
                           mode === 'reset_all'
-                            ? `${depositDiff.added.length} / ${depositDiff.removed.length}`
-                            : depositDiff.added.length
+                            ? cashflows.length
+                            : 0
                         } />
                       </div>
-
-                      <SymbolReview
-                        symbols={symbolUniverse}
-                        descriptions={allSymbolDescriptions}
-                        classifications={classifications}
-                        manualEtfs={manualEtfs}
-                        classifying={classifying}
-                        onToggle={(ticker, checked) => {
-                          setManualEtfs((current) => {
-                            const next = new Set(current);
-                            if (checked) next.add(ticker);
-                            else next.delete(ticker);
-                            return next;
-                          });
-                        }}
-                      />
-
-                      {parsed.deposits.length > 0 && <DepositReview rows={parsed.deposits} />}
 
                       {diff.added.length > 0 && (
                         <KindReview
@@ -537,7 +390,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
                               {resetCoverageConfirmed ? '已确认清空全部组合数据' : '确认清空全部组合数据'}
                             </span>
                             <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                              全部交易、全部现金流和资金批次将先清除，再按文件重建已确认的 ETF 交易与正向入金。
+                              全部交易、全部现金流和资金批次将先清除，再按文件重建全部标准 Buy / Sell；账户现金按 $0 处理。
                             </span>
                           </span>
                         </label>
@@ -553,8 +406,8 @@ export function SchwabTransactionTools({ transactions }: Props) {
                           ))}
                         </div>
                       )}
-                      {cashflowsError && (
-                        <p className="text-xs text-loss">现有入金读取失败，已阻止导入以避免重复记录。</p>
+                      {mode === 'reset_all' && cashflowsError && (
+                        <p className="text-xs text-loss">现有现金流读取失败，已阻止全量重置。</p>
                       )}
                     </>
                   )}
@@ -571,7 +424,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
                         else void runImport();
                       }}
                     >
-                      {classifying ? '识别 ETF 中…' : mode === 'reset_all' ? '继续确认' : '导入新增记录'}
+                      {mode === 'reset_all' ? '继续确认' : '导入新增记录'}
                     </Button>
                   </div>
                 </div>
@@ -581,62 +434,6 @@ export function SchwabTransactionTools({ transactions }: Props) {
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-function SymbolReview({
-  symbols,
-  descriptions,
-  classifications,
-  manualEtfs,
-  classifying,
-  onToggle,
-}: {
-  symbols: string[];
-  descriptions: Map<string, string>;
-  classifications: Record<string, SchwabSymbolClassification>;
-  manualEtfs: Set<string>;
-  classifying: boolean;
-  onToggle: (ticker: string, checked: boolean) => void;
-}) {
-  if (symbols.length === 0) return null;
-  return (
-    <div className="space-y-2 border-t border-border pt-4">
-      <div className="flex items-center justify-between gap-3">
-        <Label>ETF 识别</Label>
-        <span className="text-[11px] text-muted-foreground">
-          {classifying ? '正在核对代码…' : '未知代码默认忽略'}
-        </span>
-      </div>
-      <div className="max-h-40 min-w-0 divide-y divide-border overflow-y-auto rounded-lg border border-border">
-        {symbols.map((ticker) => {
-          const classification = classifications[ticker] ?? 'unknown';
-          const isEtf = classification === 'etf' || manualEtfs.has(ticker);
-          const isStock = classification === 'stock';
-          return (
-            <label
-              key={ticker}
-              className="grid min-w-0 grid-cols-[auto_3.5rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-xs"
-            >
-              <input
-                type="checkbox"
-                className="h-4 w-4 shrink-0 accent-primary"
-                checked={isEtf}
-                disabled={classification === 'etf' || isStock || classifying}
-                onChange={(event) => onToggle(ticker, event.target.checked)}
-              />
-              <span className="font-semibold">{ticker}</span>
-              <span className="min-w-0 flex-1 truncate text-muted-foreground">
-                {descriptions.get(ticker) || '无证券描述'}
-              </span>
-              <span className={isStock ? 'text-loss' : isEtf ? 'text-gain' : 'text-warn'}>
-                {isStock ? '个股 · 忽略' : isEtf ? 'ETF' : '待确认'}
-              </span>
-            </label>
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
@@ -691,28 +488,6 @@ function KindReview({
   );
 }
 
-function DepositReview({ rows }: { rows: SchwabDepositImportRow[] }) {
-  return (
-    <div className="space-y-2 border-t border-border pt-4">
-      <Label>识别到的入金</Label>
-      <div className="max-h-36 min-w-0 divide-y divide-border overflow-y-auto rounded-lg border border-border">
-        {rows.map((row) => (
-          <div
-            key={row.import_key}
-            className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-xs"
-          >
-            <span className="tnum">{row.deposit_date}</span>
-            <span className="min-w-0 truncate text-muted-foreground">
-              {row.source_action}{row.source_description ? ` · ${row.source_description}` : ''}
-            </span>
-            <span className="font-semibold tnum">${row.amount.toFixed(2)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function DiffMetric({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="bg-background px-3 py-2 text-center">
@@ -725,7 +500,6 @@ function DiffMetric({ label, value }: { label: string; value: number | string })
 function ResetConfirmation({
   transactionAdded,
   transactionRemoved,
-  cashflowAdded,
   cashflowRemoved,
   importing,
   error,
@@ -734,7 +508,6 @@ function ResetConfirmation({
 }: {
   transactionAdded: number;
   transactionRemoved: number;
-  cashflowAdded: number;
   cashflowRemoved: number;
   importing: boolean;
   error: string | null;
@@ -746,12 +519,12 @@ function ResetConfirmation({
       <DialogHeader>
         <DialogTitle>确认清空全部组合数据并导入</DialogTitle>
         <DialogDescription>
-          全部交易将删除 {transactionRemoved} 笔，并从文件重建 {transactionAdded} 笔已确认的 ETF 交易；
-          全部现金流将删除 {cashflowRemoved} 笔，并从文件重建 {cashflowAdded} 笔正向入金。
+          全部交易将删除 {transactionRemoved} 笔，并从文件重建 {transactionAdded} 笔标准 Buy / Sell；
+          全部现金流将删除 {cashflowRemoved} 笔且不重建，账户现金固定按 $0 处理。
         </DialogDescription>
       </DialogHeader>
       <div className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-3 text-sm">
-        个股交易、手工现金流和资金批次也会删除。设置、分享链接、行情与日线价格不受影响；
+        手工交易、手工现金流和资金批次也会删除。设置、分享链接、行情与日线价格不受影响；
         任何错误都会回滚整批清空和写入。
       </div>
       {error && <p className="text-xs text-loss">{error}</p>}
@@ -779,7 +552,7 @@ function ImportResult({
         <DiffMetric label="交易 新 / 留 / 移" value={
           `${result.transactions_added} / ${result.transactions_unchanged} / ${result.transactions_removed}`
         } />
-        <DiffMetric label="入金 新 / 留 / 移" value={
+        <DiffMetric label="现金流 新 / 留 / 移" value={
           `${result.cashflows_added} / ${result.cashflows_unchanged} / ${result.cashflows_removed}`
         } />
         <DiffMetric label="批次移除" value={result.funding_batches_removed} />
@@ -787,7 +560,7 @@ function ImportResult({
         <DiffMetric label="错误" value={result.errors} />
       </div>
       <p className="text-sm text-muted-foreground">
-        交易、入金、现金余额和业绩缓存状态已刷新。新增 ETF 的日线价格可在“数据健康”中补齐。
+        交易和业绩缓存状态已刷新，账户现金按 $0 处理。新增证券的日线价格可在“数据健康”中补齐。
       </p>
       <div className="flex flex-wrap justify-end gap-2">
         <Button type="button" variant="outline" asChild>
@@ -797,37 +570,6 @@ function ImportResult({
       </div>
     </div>
   );
-}
-
-async function resolveClassifications(
-  symbols: string[],
-  descriptions: Map<string, string>,
-  previouslyImportedEtfSymbols: ReadonlySet<string>,
-): Promise<Record<string, SchwabSymbolClassification>> {
-  const knownEtfSymbols = new Set([...KNOWN_ETF_SYMBOLS, ...previouslyImportedEtfSymbols]);
-  const pairs = await Promise.all(symbols.map(async (rawTicker) => {
-    const ticker = normalizeSymbol(rawTicker);
-    const local = classifySchwabSymbol({
-      ticker,
-      description: descriptions.get(ticker),
-      knownEtfSymbols,
-    });
-    if (local !== 'unknown') return [ticker, local] as const;
-
-    try {
-      const results = await searchSymbols(ticker);
-      const exact = results.find((row) => normalizeSymbol(row.symbol) === ticker);
-      return [ticker, classifySchwabSymbol({
-        ticker,
-        description: descriptions.get(ticker),
-        knownEtfSymbols,
-        providerType: exact?.type,
-      })] as const;
-    } catch {
-      return [ticker, 'unknown'] as const;
-    }
-  }));
-  return Object.fromEntries(pairs);
 }
 
 function downloadTextFile(content: string, filename: string) {

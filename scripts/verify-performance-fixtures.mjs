@@ -6,6 +6,7 @@ import {
   transactionCashEffect,
 } from '../src/lib/calc/transactionAmounts.ts';
 import { summarizeCashflows } from '../src/lib/calc/cashflows.ts';
+import { assumedBrokerCashBalance } from '../src/lib/calc/cashBalance.ts';
 
 function dailyLinkedTwr(rows) {
   let cumulative = 1;
@@ -86,6 +87,11 @@ approx(importedDepositSummary.totalCny, 720);
 approx(importedDepositSummary.totalUsdIdeal, 100);
 approx(importedDepositSummary.totalLoss, 1);
 approx(importedDepositSummary.lossPct, 0.01);
+assert.equal(
+  assumedBrokerCashBalance(),
+  0,
+  'broker cash is intentionally assumed to be zero instead of inferred from transfers',
+);
 
 const buyWithFee = transaction({
   id: 'buy-fee',
