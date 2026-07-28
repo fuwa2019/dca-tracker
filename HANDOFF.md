@@ -8,8 +8,9 @@ No active unfinished task.
 
 ## Current Status
 
-- Current repository: `/Users/junxihuo/Documents/dca_system`
-- Branch: `master`
+- Current repository:
+  `/Users/junxihuo/.codex/worktrees/c32c/dca_system`
+- Branch: detached worktree; released commits are pushed to `master`.
 - Current revision: inspect with `git rev-parse --short HEAD`; this file does
   not cache live Git state.
 - The original import/export implementation is committed as `1400798` and
@@ -41,11 +42,7 @@ No active unfinished task.
 - The three required production Pages variable names were confirmed in the
   Cloudflare project without copying their values.
 - Cloudflare Git rebuild `466c30fc-9ba5-464b-9145-794a322f3b98` completed
-  successfully from commit `1400798` and is the current production deployment.
-- The canonical site serves `index-BssVJPEd.js`; the bundle does not contain
-  the missing-Supabase-config warning. Fresh browser verification produced no
-  console warnings or errors, and `/login` plus `/transactions` return HTTP
-  200.
+  successfully from commit `1400798`.
 - The existing Chrome production tab was refreshed through the PWA update and
   now loads the current production bundle.
 - No real Schwab export has been read or imported.
@@ -71,12 +68,29 @@ No active unfinished task.
   protection remain outside this task.
 - Cloudflare Pages production deployment
   `03cc20da-8558-4ead-a8b8-5f31a80c738c` completed from commit `a459e9f`.
-  The canonical site serves `index-C86Or5YJ.js`, which contains `reset_all` and
-  the full-reset UI without the missing-Supabase-config warning. `/`,
-  `/login`, and `/transactions` return HTTP 200.
+  It served `index-C86Or5YJ.js` with the full-reset UI.
+- The cash correction is committed as `7780f68` and pushed to `master`.
+  Schwab import now ignores all transfer rows, imports every standard Buy/Sell,
+  and treats broker cash as zero. Required investment capital is inferred from
+  trade funding instead of cashflows.
+- Zero-cash verification passed on 2026-07-28:
+  `test:csv-import`, `test:finance`, `test:ui`,
+  `test:migration-numbering`, `test:email-reminder`, `test:quote-status`,
+  `typecheck`, `build`, and `git diff --check`.
+- Synthetic browser verification confirmed 2 standard buys, including an
+  individual stock, one ignored MoneyLink row, and `$0` cash on desktop and
+  390px mobile. The final import action was not executed.
+- Cloudflare Pages production deployment
+  `c81a5b11-46d5-4180-a16f-cc6725e35ca6` completed from `7780f68`.
+  `/`, `/login`, and `/transactions` return HTTP 200 and serve
+  `index-Dsy3wFOu.js`, which contains the zero-cash import UI without the
+  missing-Supabase-config warning.
+- No database migration or production database change was required for the
+  zero-cash correction.
 - Working tree: inspect with `git status`; this file does not cache live Git
   state.
-- Deployment status: `0044` and the full-reset frontend are live in production.
+- Deployment status: `0044` and the zero-cash full-reset frontend are live in
+  production.
 
 ## Next Steps
 
@@ -95,10 +109,9 @@ during verification.
 
 ## Risks and Blockers
 
-- Full reset is destructive: individual-stock transactions, manual cashflows,
-  and funding batches are deleted and are not rebuilt unless represented by
-  supported rows in the current import file.
+- Full reset is destructive: all transactions, cashflows, and funding batches
+  are deleted. Every standard Buy/Sell in the selected file is rebuilt;
+  non-trade rows and cashflows are intentionally not rebuilt.
 - No real CSV import was read or attempted during the fix.
-- A browser that loaded the temporary broken PWA bundle may require a second
-  reload while the auto-updating service worker activates. The current Chrome
-  production tab has already completed that update.
+- A browser with the previous PWA bundle may need a reload while the
+  auto-updating service worker activates.

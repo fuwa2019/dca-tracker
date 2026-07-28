@@ -74,3 +74,7 @@
   `03cc20da-8558-4ead-a8b8-5f31a80c738c` serves `index-C86Or5YJ.js` from the
   canonical site with `reset_all`, the full-reset UI, and the required
   Supabase build configuration.
+- Zero-cash commit `7780f68` is on `master`. Production deployment
+  `c81a5b11-46d5-4180-a16f-cc6725e35ca6` serves `index-Dsy3wFOu.js` with
+  all-security Buy/Sell import, ignored transfer rows, and broker cash fixed at
+  zero. No database migration or production database change was required.
