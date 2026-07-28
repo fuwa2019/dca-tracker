@@ -100,6 +100,11 @@ export function CashflowForm({ initial, onDone }: Props) {
             user_id: user?.id ?? LOCAL_USER.id,
             batch_id: null,
             ...payload,
+            cashflow_kind: 'fx_transfer',
+            source_action: null,
+            source_description: null,
+            import_source: null,
+            import_key: null,
             created_at: now,
           };
           qc.setQueryData<CashRow[]>(['cashflows'], (rows = []) =>

@@ -6,6 +6,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TxnList } from '@/components/TxnList';
 import { Kicker } from '@/components/Kicker';
 import { useTransactions } from '@/hooks/usePortfolio';
+import { transactionCashAmount } from '@/lib/calc/transactionAmounts';
 
 type Filter = 'all' | 'buy' | 'sell' | 'dca' | 'lumpsum' | 'note';
 
@@ -43,12 +44,12 @@ export function TransactionsAllPage() {
         return needle ? note.includes(needle) : true;
       }
       if (!needle) return true;
-      const notional = Number(t.shares) * Number(t.price);
+      const cashAmount = transactionCashAmount(t);
       const hay = [
         t.ticker,
         t.trade_date,
         t.note ?? '',
-        notional.toFixed(2),
+        cashAmount.toFixed(2),
         Number(t.price).toFixed(2),
         Number(t.shares).toFixed(4),
       ].join(' ').toLowerCase();

@@ -21,6 +21,14 @@ Keep `public/_redirects` in the build for SPA deep links. Configure public
 `VITE_` values through the Pages environment, never by committing a real
 environment file.
 
+The production Pages project uses Git integration so its build environment can
+inject the required `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and
+`VITE_QUOTE_WORKER_URL` values. Do not direct-upload a locally built `dist/`
+unless those variables were present during that build and the resulting login
+page has been checked for the missing-Supabase-config warning. A Vite build
+without them succeeds but falls back to the local stub and breaks production
+authentication.
+
 ## Quote Worker
 
 ```bash

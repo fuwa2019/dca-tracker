@@ -9,6 +9,7 @@ import { Kicker } from '@/components/Kicker';
 import { useTransactions } from '@/hooks/usePortfolio';
 import { useQuotes } from '@/hooks/useQuotes';
 import { aggregatePositions } from '@/lib/calc/position';
+import { SchwabTransactionTools } from '@/components/SchwabTransactionTools';
 
 export function TransactionsPage() {
   const [adding, setAdding] = useState(false);
@@ -39,15 +40,18 @@ export function TransactionsPage() {
           <Kicker en="Recent Trades" zh="最近交易" />
           <p className="mt-1.5 text-[11px] text-muted-foreground">{txns.length} 笔已记录 · 展示最近 5 笔</p>
         </div>
-        <Dialog open={adding} onOpenChange={setAdding}>
-          <DialogTrigger asChild>
-            <Button size="sm"><Plus className="h-4 w-4" />添加交易</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>新增交易</DialogTitle></DialogHeader>
-            <TxnForm defaultTicker={defaultTicker} onDone={() => setAdding(false)} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <SchwabTransactionTools transactions={txns} />
+          <Dialog open={adding} onOpenChange={setAdding}>
+            <DialogTrigger asChild>
+              <Button size="sm"><Plus className="h-4 w-4" />添加交易</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>新增交易</DialogTitle></DialogHeader>
+              <TxnForm defaultTicker={defaultTicker} onDone={() => setAdding(false)} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {isLoading ? (

@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { addTrackedSymbol } from '@/lib/trackedSymbols';
 import { normalizeSymbol } from '@/lib/symbols';
 import { LOCAL_MODE, LOCAL_USER } from '@/lib/localMode';
+import { transactionCashAmount } from '@/lib/calc/transactionAmounts';
 import type { Database } from '@/lib/database.types';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
@@ -40,6 +41,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
   const [price, setPrice] = useState(initial ? String(initial.price) : '');
   const [priceTouched, setPriceTouched] = useState(false);
   const [shares, setShares] = useState(initial ? String(initial.shares) : '');
+  const [feesUsd, setFeesUsd] = useState(initial ? String(initial.fees_usd ?? 0) : '');
   const [kind, setKind] = useState<'dca' | 'lumpsum'>(initial?.kind ?? defaultKind);
   const [note, setNote] = useState(initial?.note ?? '');
 
@@ -50,6 +52,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
       setSide(initial.side);
       setPrice(String(initial.price));
       setShares(String(initial.shares));
+      setFeesUsd(String(initial.fees_usd ?? 0));
       setKind(initial.kind);
       setNote(initial.note ?? '');
       setTickerTouched(false);
@@ -101,6 +104,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
         side,
         price: Number(price),
         shares: Number(shares),
+        fees_usd: feesUsd.trim() === '' ? 0 : Number(feesUsd),
         kind,
         note: note || null,
       };
@@ -116,6 +120,9 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
             user_id: user?.id ?? LOCAL_USER.id,
             batch_id: null,
             ...payload,
+            source_description: null,
+            import_source: null,
+            import_key: null,
             created_at: now,
             updated_at: now,
           };
@@ -147,6 +154,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
+      qc.invalidateQueries({ queryKey: ['performance_daily_pnl'] });
       qc.invalidateQueries({ queryKey: ['tracked_symbol_coverage'] });
       qc.invalidateQueries({ queryKey: ['price_coverage'] });
       onDone?.();
@@ -155,10 +163,21 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (feeInvalid) return;
     await mut.mutateAsync();
   }
 
-  const notional = Number(price) * Number(shares);
+  const rawNotional = Number(price) * Number(shares);
+  const parsedFee = feesUsd.trim() === '' ? 0 : Number(feesUsd);
+  const feeInvalid = !Number.isFinite(parsedFee)
+    || parsedFee < 0
+    || (side === 'sell' && Number.isFinite(rawNotional) && rawNotional > 0 && parsedFee >= rawNotional);
+  const cashAmount = transactionCashAmount({
+    side,
+    price: Number(price),
+    shares: Number(shares),
+    fees_usd: parsedFee,
+  });
 
   return (
     <form onSubmit={submit} className="space-y-4">
@@ -213,7 +232,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="space-y-1.5 min-w-0">
           <Label htmlFor="price">成交价 (USD)</Label>
           <Input
@@ -254,6 +273,25 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
             </p>
           )}
         </div>
+        <div className="space-y-1.5 min-w-0">
+          <Label htmlFor="fees-usd">手续费 (USD，可选)</Label>
+          <Input
+            id="fees-usd"
+            type="number"
+            min="0"
+            step="0.01"
+            inputMode="decimal"
+            value={feesUsd}
+            onChange={(e) => setFeesUsd(e.target.value)}
+            placeholder="0.00"
+            aria-invalid={feeInvalid}
+          />
+          {feeInvalid && (
+            <p className="text-[11px] text-loss">
+              {!Number.isFinite(parsedFee) || parsedFee < 0 ? '手续费必须为非负数。' : '卖出手续费必须小于成交额。'}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="space-y-1.5 min-w-0">
@@ -261,10 +299,10 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
         <Input id="note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="例：换仓 / Q4 大额" />
       </div>
 
-      {Number.isFinite(notional) && notional > 0 && (
+      {Number.isFinite(cashAmount) && cashAmount > 0 && (
         <div className="flex items-center justify-between rounded-lg border border-border bg-surface-elevated px-3 py-2 text-xs tnum">
-          <span className="text-muted-foreground">成交金额</span>
-          <span className="font-medium">${notional.toFixed(2)}</span>
+          <span className="text-muted-foreground">{side === 'buy' ? '买入总支出' : '卖出净收入'}</span>
+          <span className="font-medium">${cashAmount.toFixed(2)}</span>
         </div>
       )}
 
@@ -272,7 +310,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={() => onDone?.()}>取消</Button>
-        <Button type="submit" disabled={mut.isPending || sellOverflow}>
+        <Button type="submit" disabled={mut.isPending || sellOverflow || feeInvalid}>
           {mut.isPending ? '保存中…' : isEdit ? '保存' : '添加交易'}
         </Button>
       </div>

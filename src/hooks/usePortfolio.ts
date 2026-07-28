@@ -4,6 +4,8 @@ import type { Database, PerformanceHistory, PortfolioHistory, SharedHistory } fr
 import { aggregatePositions } from '@/lib/calc/position';
 import { normalizeSymbol } from '@/lib/symbols';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { transactionCashAmount } from '@/lib/calc/transactionAmounts';
+import { summarizeCashflows } from '@/lib/calc/cashflows';
 import {
   localCashflows,
   localPortfolioHistory,
@@ -159,8 +161,7 @@ export function usePositions() {
 
 export function useTotalInvested() {
   const cashflows = useCashflows();
-  const total =
-    cashflows.data?.reduce((s, c) => s + (Number(c.usd_amount) || 0), 0) ?? 0;
+  const total = summarizeCashflows(cashflows.data ?? []).totalUsdActual;
   return { ...cashflows, total };
 }
 
@@ -169,18 +170,18 @@ export function useTotalInvested() {
  * deployed into stock yet. Must be included in NAV so XIRR / charts don't
  * report a fake loss when you've deposited more than you've bought.
  *
- *   cash = Σ cashflow.usd_amount − Σ buy_notional + Σ sell_notional
+ *   cash = Σ cashflow.usd_amount − Σ buy_total_cost + Σ sell_net_proceeds
  */
 export function useCashBalance() {
   const cashflows = useCashflows();
   const txns = useTransactions();
-  const depositedUsd = cashflows.data?.reduce((s, c) => s + (Number(c.usd_amount) || 0), 0) ?? 0;
+  const depositedUsd = summarizeCashflows(cashflows.data ?? []).totalUsdActual;
   let buyUsd = 0;
   let sellUsd = 0;
   for (const t of txns.data ?? []) {
-    const notional = Number(t.shares) * Number(t.price);
-    if (t.side === 'buy') buyUsd += notional;
-    else sellUsd += notional;
+    const cashAmount = transactionCashAmount(t);
+    if (t.side === 'buy') buyUsd += cashAmount;
+    else sellUsd += cashAmount;
   }
   const cash = depositedUsd - buyUsd + sellUsd;
   return { cash, depositedUsd, buyUsd, sellUsd, isLoading: cashflows.isLoading || txns.isLoading };
@@ -188,29 +189,9 @@ export function useCashBalance() {
 
 export function useExchangeLoss() {
   const cashflows = useCashflows();
-  let totalLoss = 0;
-  let totalCny = 0;
-  let totalUsdActual = 0;
-  let totalUsdIdeal = 0;
-  for (const c of cashflows.data ?? []) {
-    const cny = Number(c.cny_amount) || 0;
-    const feesCny = Number(c.fees_cny) || 0;
-    const usd = Number(c.usd_amount) || 0;
-    const rate = Number(c.target_rate) || 0;
-    if (rate > 0) {
-      const ideal = (cny + feesCny) / rate;
-      totalUsdIdeal += ideal;
-      totalLoss += ideal - usd;
-    }
-    totalCny += cny + feesCny;
-    totalUsdActual += usd;
-  }
+  const summary = summarizeCashflows(cashflows.data ?? []);
   return {
     ...cashflows,
-    totalLoss,
-    totalCny,
-    totalUsdActual,
-    totalUsdIdeal,
-    lossPct: totalUsdIdeal > 0 ? totalLoss / totalUsdIdeal : 0,
+    ...summary,
   };
 }

@@ -25,6 +25,7 @@ export function CashflowsPage() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<CashRow | null>(null);
   const [deleting, setDeleting] = useState<CashRow | null>(null);
+  const fxTransferCount = rows.filter((row) => row.cashflow_kind === 'fx_transfer').length;
 
   const del = useMutation({
     mutationFn: async (id: string) => {
@@ -48,7 +49,7 @@ export function CashflowsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Kicker en="Cash Flow" zh="资金流水" />
-          <p className="mt-1.5 text-[11px] text-muted-foreground">每笔 CNY → USD 转账单独记一行，自动汇总汇兑损耗。</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">汇总手工换汇与嘉信导入入金；汇兑损耗仅计算 CNY → USD 记录。</p>
         </div>
         <Dialog open={adding} onOpenChange={setAdding}>
           <DialogTrigger asChild>
@@ -62,21 +63,21 @@ export function CashflowsPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="累计 USD 到账" value={usd.format(stats.totalUsdActual)} sub={`${rows.length} 笔转账`} />
+        <StatCard label="累计 USD 到账" value={usd.format(stats.totalUsdActual)} sub={`${rows.length} 笔入金`} />
         <StatCard
           label="累计损耗"
           value={signedUsd(-stats.totalLoss)}
           sub={signedPct(-stats.lossPct)}
           className={changeColor(-stats.totalLoss)}
         />
-        <StatCard label="累计 CNY 出账" value={cny.format(stats.totalCny)} sub="入金前 CNY 端" />
+        <StatCard label="累计 CNY 出账" value={cny.format(stats.totalCny)} sub={`${fxTransferCount} 笔手工换汇`} />
       </div>
 
       {rows.length === 0 ? (
         <EmptyState
           icon={Plus}
           title="还没有资金流水"
-          description="第一笔 CNY → USD 转账录进来后，汇兑损耗、XIRR 年化和基准曲线都会自动开始计算。"
+          description="添加手工换汇，或从交易页导入嘉信入金后，现金余额与 XIRR 会自动更新。"
           action={
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus className="h-3.5 w-3.5" /> 添加第一笔
@@ -87,12 +88,14 @@ export function CashflowsPage() {
         <Card className="overflow-hidden p-0">
           <AnimatePresence initial={false}>
             {rows.map((c, i) => {
+              const isBrokerDeposit = c.cashflow_kind === 'broker_deposit';
               const cnyAmt = Number(c.cny_amount);
               const feesCny = Number(c.fees_cny) || 0;
               const usdAmt = Number(c.usd_amount ?? 0);
               const rate = Number(c.target_rate);
               const ideal = rate > 0 ? (cnyAmt + feesCny) / rate : 0;
               const loss = ideal - usdAmt;
+              const displayDate = c.usd_in_date ?? c.cny_out_date;
               return (
                 <motion.div
                   key={c.id}
@@ -105,23 +108,37 @@ export function CashflowsPage() {
                 >
                   {/* Desktop: horizontal row */}
                   <div className="hidden items-center gap-3 md:flex">
-                    <div className="w-14 shrink-0 text-xs text-muted-foreground tnum">{shortDate(c.cny_out_date)}</div>
+                    <div className="w-14 shrink-0 text-xs text-muted-foreground tnum">{shortDate(displayDate)}</div>
                     <div className="min-w-[180px] flex-1">
-                      <div className="font-medium tnum">
-                        {cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground tnum">
-                        汇率 {rate.toFixed(4)} {c.note ? `· ${c.note}` : ''}
-                      </div>
+                      {isBrokerDeposit ? (
+                        <>
+                          <div className="font-medium tnum">{usd.format(usdAmt)}</div>
+                          <div className="truncate text-[11px] text-muted-foreground">
+                            嘉信入金{c.source_action ? ` · ${c.source_action}` : ''}
+                            {c.source_description ? ` · ${c.source_description}` : ''}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-medium tnum">
+                            {cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground tnum">
+                            汇率 {rate.toFixed(4)} {c.note ? `· ${c.note}` : ''}
+                          </div>
+                        </>
+                      )}
                     </div>
                     <div className={cn('w-24 shrink-0 text-right text-xs tnum', changeColor(-loss))}>
-                      {usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
+                      {isBrokerDeposit ? '—' : usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      <Button aria-label={`编辑 ${shortDate(c.cny_out_date)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button aria-label={`删除 ${shortDate(c.cny_out_date)} 资金流`} variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
+                      {!isBrokerDeposit && (
+                        <Button aria-label={`编辑 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                      <Button aria-label={`删除 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -131,23 +148,31 @@ export function CashflowsPage() {
                   <div className="flex flex-col gap-2 md:hidden">
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1 font-medium tnum truncate">
-                        {cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}
+                        {isBrokerDeposit
+                          ? usd.format(usdAmt)
+                          : <>{cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}</>}
                       </div>
                       <div className={cn('ml-2 shrink-0 text-right text-xs tnum', changeColor(-loss))}>
-                        {usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
+                        {isBrokerDeposit ? '嘉信入金' : usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground tnum min-w-0">
-                        <span>{shortDate(c.cny_out_date)}</span>
-                        <span>汇率 {rate.toFixed(4)}</span>
+                        <span>{shortDate(displayDate)}</span>
+                        {isBrokerDeposit ? (
+                          <span className="truncate">{c.source_action}{c.source_description ? ` · ${c.source_description}` : ''}</span>
+                        ) : (
+                          <span>汇率 {rate.toFixed(4)}</span>
+                        )}
                         {c.note && <span className="truncate">· {c.note}</span>}
                       </div>
                       <div className="ml-2 flex shrink-0 gap-1">
-                        <Button aria-label={`编辑 ${shortDate(c.cny_out_date)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button aria-label={`删除 ${shortDate(c.cny_out_date)} 资金流`} variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
+                        {!isBrokerDeposit && (
+                          <Button aria-label={`编辑 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <Button aria-label={`删除 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
@@ -175,7 +200,11 @@ export function CashflowsPage() {
           <DialogHeader>
             <DialogTitle>确认删除？</DialogTitle>
             <DialogDescription>
-              {deleting && `${deleting.cny_out_date} · ${cny.format(Number(deleting.cny_amount))}`}
+              {deleting && (
+                deleting.cashflow_kind === 'broker_deposit'
+                  ? `${deleting.usd_in_date ?? deleting.cny_out_date} · ${usd.format(Number(deleting.usd_amount))} · 嘉信入金`
+                  : `${deleting.cny_out_date} · ${cny.format(Number(deleting.cny_amount))}`
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">

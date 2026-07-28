@@ -1,0 +1,8 @@
+﻿Synthetic Schwab transaction export for UI verification
+Date	Action	Symbol	Description	Quantity	Price	Fees & Comm	Amount
+04/18/2025	Buy	VGT	SYNTHETIC TECHNOLOGY ETF	0.25	$200.00		-$50.00
+04/17/2025	Wire Received		SYNTHETIC TEST DEPOSIT				$125.40
+04/17/2025	Buy	ACME	SYNTHETIC COMMON STOCK	0.1	$100.00		-$10.00
+04/16/2025	Reinvest Shares	VGT	SYNTHETIC TECHNOLOGY ETF	0.01	$200.00		-$2.00
+04/15/2025 as of 04/14/2025	MoneyLink Transfer		SYNTHETIC LINKED BANK				$25.00
+04/15/2025 as of 04/14/2025	Sell	SGOV	SYNTHETIC TREASURY ETF	0.5	$100.00		$50.00

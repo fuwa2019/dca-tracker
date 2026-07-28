@@ -57,6 +57,25 @@ assert.match(cashflow, /rateTouched/, 'cashflow form tracks touched FX field');
 const txn = readFileSync(new URL('../src/components/TxnForm.tsx', import.meta.url), 'utf8');
 assert.match(txn, /useQuotes\(\[normalizedTicker\]\)/, 'transaction form fetches current symbol quote');
 assert.match(txn, /priceTouched/, 'transaction form tracks touched price field');
+assert.match(txn, /手续费 \(USD，可选\)/, 'transaction form supports optional USD fees');
+assert.match(txn, /买入总支出/, 'transaction form shows fee-aware buy total');
+assert.match(txn, /卖出净收入/, 'transaction form shows fee-aware sell proceeds');
+
+const transactionTools = readFileSync(new URL('../src/components/SchwabTransactionTools.tsx', import.meta.url), 'utf8');
+assert.match(transactionTools, /新增导入/, 'Schwab import supports append mode');
+assert.match(transactionTools, /重置 ETF 后导入/, 'Schwab import supports ETF reset mode');
+assert.match(transactionTools, /className="sr-only"/, 'Schwab file input uses the custom accessible picker');
+assert.match(transactionTools, /确认覆盖全部 ETF 与入金历史/, 'reset requires a visible full-history confirmation');
+assert.match(transactionTools, /parsed\.deposits/, 'Schwab import previews broker deposits');
+assert.match(transactionTools, /p_cashflows/, 'Schwab import sends deposits through the atomic RPC');
+assert.match(transactionTools, /resetCoverageConfirmed[\s\S]*border-warn\/50 bg-warn-soft/, 'ETF reset confirmation has a selected state');
+assert.match(transactionTools, /先全部删除，再按文件重建/, 'ETF reset is explicitly a strict rebuild');
+assert.match(transactionTools, /旧记录的类型、备注和批次也不会保留/, 'strict reset does not preserve transaction metadata');
+assert.match(transactionTools, /确认重置并导入/, 'ETF reset has a second confirmation');
+assert.match(transactionTools, /打开数据健康/, 'successful import points to price coverage health');
+assert.match(transactionTools, /exportSchwabTransactions/, 'transaction tools expose Schwab-format export');
+assert.match(transactionTools, /exportSchwabTransactions\([\s\S]*?exportDeposits/, 'Schwab export includes deposits');
+assert.match(transactionTools, /Schwab_Transactions_/, 'combined export uses a transaction-history filename');
 
 const quote = readFileSync(new URL('../src/lib/quote.ts', import.meta.url), 'utf8');
 assert.match(quote, /limitedFetchJson<\{ quotes: Quote\[\] \}>\('quote'/, 'quote requests pass through the unified rate limiter');

@@ -24,12 +24,17 @@ export interface CashflowRow {
   user_id: string;
   batch_id: string | null;
   cny_out_date: string;
-  cny_amount: number;
+  cny_amount: number | null;
   usd_in_date: string | null;
   usd_amount: number | null;
-  target_rate: number;
+  target_rate: number | null;
   fees_cny: number;
   fees_usd: number;
+  cashflow_kind: 'fx_transfer' | 'broker_deposit';
+  source_action: string | null;
+  source_description: string | null;
+  import_source: string | null;
+  import_key: string | null;
   note: string | null;
   created_at: string;
 }
@@ -38,12 +43,17 @@ export interface CashflowInsert {
   user_id: string;
   batch_id?: string | null;
   cny_out_date: string;
-  cny_amount: number;
+  cny_amount?: number | null;
   usd_in_date?: string | null;
   usd_amount?: number | null;
-  target_rate: number;
+  target_rate?: number | null;
   fees_cny?: number;
   fees_usd?: number;
+  cashflow_kind?: 'fx_transfer' | 'broker_deposit';
+  source_action?: string | null;
+  source_description?: string | null;
+  import_source?: string | null;
+  import_key?: string | null;
   note?: string | null;
   created_at?: string;
 }
@@ -58,8 +68,12 @@ export interface TransactionRow {
   side: 'buy' | 'sell';
   price: number;
   shares: number;
+  fees_usd: number;
   kind: 'dca' | 'lumpsum';
   note: string | null;
+  source_description: string | null;
+  import_source: string | null;
+  import_key: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -72,8 +86,12 @@ export interface TransactionInsert {
   side: 'buy' | 'sell';
   price: number;
   shares: number;
+  fees_usd?: number;
   kind: 'dca' | 'lumpsum';
   note?: string | null;
+  source_description?: string | null;
+  import_source?: string | null;
+  import_key?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -237,6 +255,7 @@ export type PortfolioHistory = {
       ticker: string;
       shares: number;
       price: number;
+      fees_usd?: number;
       kind: 'dca' | 'lumpsum';
     }>;
   }>;
@@ -256,6 +275,19 @@ export type PortfolioHistory = {
 };
 
 export type PerformanceHistory = SharedHistory;
+
+export type SchwabTransactionImportResult = {
+  added: number;
+  unchanged: number;
+  removed: number;
+  transactions_added: number;
+  transactions_unchanged: number;
+  transactions_removed: number;
+  cashflows_added: number;
+  cashflows_unchanged: number;
+  cashflows_removed: number;
+  errors: number;
+};
 
 export type HistoryCacheRefresh = {
   ok: true;
@@ -371,6 +403,34 @@ export interface Database {
           p_first_trade_date?: string | null;
         };
         Returns: TrackedSymbolRow;
+      };
+      import_schwab_transactions: {
+        Args: {
+          p_rows: Array<{
+            source_index: number;
+            trade_date: string;
+            side: 'buy' | 'sell';
+            ticker: string;
+            source_description: string;
+            shares: number;
+            price: number;
+            fees_usd: number;
+            amount: number;
+            duplicate_ordinal: number;
+            kind: 'dca' | 'lumpsum';
+          }>;
+          p_cashflows: Array<{
+            source_index: number;
+            deposit_date: string;
+            source_action: string;
+            source_description: string;
+            amount: number;
+            duplicate_ordinal: number;
+          }>;
+          p_etf_symbols: string[];
+          p_mode: 'append' | 'reset_etf';
+        };
+        Returns: SchwabTransactionImportResult;
       };
       tracked_symbol_coverage: {
         Args: { p_benchmark?: string | null };

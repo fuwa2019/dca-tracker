@@ -1,5 +1,6 @@
 import type { Database } from '../database.types';
-import { normalizeSymbol } from '@/lib/symbols';
+import { normalizeSymbol } from '../symbols.ts';
+import { transactionCashAmount, transactionFee } from './transactionAmounts.ts';
 
 export type TxnRow = Database['public']['Tables']['transactions']['Row'];
 
@@ -44,7 +45,7 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
     let avgCostTotal = 0; // sum of (shares × price) for current avg-cost basis
 
     // FIFO tracking
-    const fifoQueue: Array<{ shares: number; price: number }> = [];
+    const fifoQueue: Array<{ shares: number; unitCost: number }> = [];
 
     let realizedUsd = 0;
     let totalBoughtUsd = 0;
@@ -53,14 +54,16 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
     for (const tx of sorted) {
       const sh = Number(tx.shares);
       const px = Number(tx.price);
+      const fee = transactionFee(tx);
 
       if (tx.side === 'buy') {
+        const buyCost = transactionCashAmount(tx);
         // avg
-        avgCostTotal += sh * px;
+        avgCostTotal += buyCost;
         avgShares += sh;
         // fifo
-        fifoQueue.push({ shares: sh, price: px });
-        totalBoughtUsd += sh * px;
+        fifoQueue.push({ shares: sh, unitCost: buyCost / sh });
+        totalBoughtUsd += buyCost;
         buyCount += 1;
       } else {
         // sell — drain fifo queue, accumulate realized P/L.
@@ -70,11 +73,12 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
         while (remaining > 1e-9 && fifoQueue.length > 0) {
           const lot = fifoQueue[0];
           const take = Math.min(remaining, lot.shares);
-          realizedUsd += take * (px - lot.price);
+          realizedUsd += take * (px - lot.unitCost);
           lot.shares -= take;
           remaining -= take;
           if (lot.shares <= 1e-9) fifoQueue.shift();
         }
+        realizedUsd -= fee;
         // avg-cost: keep per-share basis, subtract proportional cost
         if (avgShares > 1e-9) {
           const avgBasis = avgCostTotal / avgShares;
@@ -89,7 +93,7 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
     }
 
     const fifoShares = fifoQueue.reduce((acc, l) => acc + l.shares, 0);
-    const fifoCostTotal = fifoQueue.reduce((acc, l) => acc + l.shares * l.price, 0);
+    const fifoCostTotal = fifoQueue.reduce((acc, l) => acc + l.shares * l.unitCost, 0);
 
     // Use FIFO shares as the source of truth for shares (= avgShares within float tolerance)
     const shares = fifoShares;

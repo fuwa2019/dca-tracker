@@ -1,6 +1,7 @@
 import type { TransactionRow, CashflowRow } from '@/lib/database.types';
 import type { PriceMap } from '@/hooks/useDailyPrices';
-import { isoDateInNewYork } from '@/lib/nyse-calendar';
+import { isoDateInNewYork } from '../nyse-calendar.ts';
+import { transactionCashAmount } from './transactionAmounts.ts';
 
 export const BENCHMARK_TICKER = 'SPY';
 
@@ -18,7 +19,14 @@ export interface HistoryPoint {
   pnlUser: number;           // navUser - invested
   pnlSpy: number;
   /** Transactions that landed on this date (for marker rendering). */
-  txns: Array<{ side: 'buy' | 'sell'; ticker: string; shares: number; price: number; kind: 'dca' | 'lumpsum' }>;
+  txns: Array<{
+    side: 'buy' | 'sell';
+    ticker: string;
+    shares: number;
+    price: number;
+    fees_usd?: number;
+    kind: 'dca' | 'lumpsum';
+  }>;
 }
 
 export interface BuildHistoryInput {
@@ -85,13 +93,13 @@ export function buildAccountValueHistory(input: BuildHistoryInput): HistoryPoint
     for (const txn of dayTxns) {
       const quantity = Number(txn.shares) || 0;
       const price = Number(txn.price) || 0;
-      const notional = quantity * price;
       if (!(quantity > 0) || !(price > 0)) continue;
+      const cashAmount = transactionCashAmount(txn);
       const delta = txn.side === 'buy' ? quantity : -quantity;
       shares.set(txn.ticker, (shares.get(txn.ticker) ?? 0) + delta);
       lastTradePrice.set(txn.ticker, price);
-      cash += txn.side === 'buy' ? -notional : notional;
-      costBasis += txn.side === 'buy' ? notional : -notional;
+      cash += txn.side === 'buy' ? -cashAmount : cashAmount;
+      costBasis += txn.side === 'buy' ? cashAmount : -cashAmount;
     }
 
     let stockValue = 0;
@@ -118,6 +126,7 @@ export function buildAccountValueHistory(input: BuildHistoryInput): HistoryPoint
         ticker: txn.ticker,
         shares: Number(txn.shares),
         price: Number(txn.price),
+        fees_usd: Number(txn.fees_usd) || 0,
         kind: txn.kind,
       })),
     });
@@ -171,6 +180,7 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       ticker: t.ticker,
       shares: Number(t.shares),
       price: Number(t.price),
+      fees_usd: Number(t.fees_usd) || 0,
       kind: t.kind,
     });
     txnsByDate.set(t.trade_date, list);
@@ -221,7 +231,8 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       const delta = t.side === 'buy' ? t.shares : -t.shares;
       netShares.set(t.ticker, (netShares.get(t.ticker) ?? 0) + delta);
       lastTradePrice.set(t.ticker, t.price);
-      costBasis += t.side === 'buy' ? t.shares * t.price : -t.shares * t.price;
+      const cashAmount = transactionCashAmount(t);
+      costBasis += t.side === 'buy' ? cashAmount : -cashAmount;
     }
 
     // 3) Compute end-of-day NAV (stock holdings + cash generated/reused by trades)
@@ -298,19 +309,19 @@ function inferTradeFundingFlows(transactions: TransactionRow[]): Map<string, num
   );
 
   for (const t of ordered) {
-    const notional = Number(t.shares) * Number(t.price);
-    if (!Number.isFinite(notional) || notional <= 0) continue;
+    const cashAmount = transactionCashAmount(t);
+    if (!Number.isFinite(cashAmount) || cashAmount <= 0) continue;
 
     if (t.side === 'sell') {
-      cash += notional;
+      cash += cashAmount;
       continue;
     }
 
-    const flow = Math.max(notional - cash, 0);
+    const flow = Math.max(cashAmount - cash, 0);
     if (flow > 0) {
       out.set(t.trade_date, (out.get(t.trade_date) ?? 0) + flow);
     }
-    cash = Math.max(cash - notional, 0);
+    cash = Math.max(cash - cashAmount, 0);
   }
 
   return out;
@@ -382,9 +393,9 @@ export function aggregateMarkers(
       hasLumpsum: false,
     };
     for (const t of p.txns) {
-      const notional = t.shares * t.price;
-      if (t.side === 'buy') existing.totalBuyUsd += notional;
-      else existing.totalSellUsd += notional;
+      const cashAmount = transactionCashAmount(t);
+      if (t.side === 'buy') existing.totalBuyUsd += cashAmount;
+      else existing.totalSellUsd += cashAmount;
       existing.count += 1;
       if (t.kind === 'lumpsum') existing.hasLumpsum = true;
     }

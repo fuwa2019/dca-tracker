@@ -11,6 +11,7 @@ import { usd, shortDate, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
 import type { Database } from '@/lib/database.types';
+import { transactionCashAmount, transactionCashEffect, transactionFee } from '@/lib/calc/transactionAmounts';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
 
@@ -54,7 +55,8 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
       <Card className="overflow-hidden p-0">
         <AnimatePresence initial={false}>
           {rows.map((t, i) => {
-            const notional = Number(t.shares) * Number(t.price);
+            const cashEffect = transactionCashEffect(t);
+            const fee = transactionFee(t);
             const isLump = t.kind === 'lumpsum';
             const isSell = t.side === 'sell';
             return (
@@ -93,9 +95,10 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                   </div>
                   <div className="flex-1 text-right text-xs tnum text-muted-foreground">
                     {Number(t.shares).toFixed(4)} × {usd.format(Number(t.price))}
+                    {fee > 0 && <span> · 费 {usd.format(fee)}</span>}
                   </div>
-                  <div className={cn('w-24 shrink-0 text-right font-medium tnum', changeColor(isSell ? notional : -notional))}>
-                    {usd.format(notional)}
+                  <div className={cn('w-24 shrink-0 text-right font-medium tnum', changeColor(cashEffect))}>
+                    {usd.format(cashEffect)}
                   </div>
                   <div className="flex shrink-0 gap-1">
                     <Button aria-label={`编辑 ${t.ticker} 交易`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(t)}>
@@ -121,8 +124,8 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                         {isSell ? '卖出' : '买入'}
                       </span>
                     </div>
-                    <div className={cn('text-base font-medium tnum', changeColor(isSell ? notional : -notional))}>
-                      {usd.format(notional)}
+                    <div className={cn('text-base font-medium tnum', changeColor(cashEffect))}>
+                      {usd.format(cashEffect)}
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
@@ -130,6 +133,7 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                       <span>{shortDate(t.trade_date)}</span>
                       <span>{Number(t.shares).toFixed(4)} 股</span>
                       <span>@ {usd.format(Number(t.price))}</span>
+                      {fee > 0 && <span>费 {usd.format(fee)}</span>}
                       <span
                         className={cn(
                           'inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-medium',
@@ -170,7 +174,7 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
           <DialogHeader>
             <DialogTitle>确认删除？</DialogTitle>
             <DialogDescription>
-              {deleting && `${deleting.trade_date} · ${deleting.ticker} · ${Number(deleting.shares).toFixed(4)} 股 @ ${usd.format(Number(deleting.price))}`}
+              {deleting && `${deleting.trade_date} · ${deleting.ticker} · ${Number(deleting.shares).toFixed(4)} 股 · ${deleting.side === 'buy' ? '总支出' : '净收入'} ${usd.format(transactionCashAmount(deleting))}`}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
