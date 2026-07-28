@@ -4,7 +4,7 @@ Updated: 2026-07-28
 
 ## Current Goal
 
-Finish and deploy the corrected full-reset import semantics.
+No active unfinished task.
 
 ## Current Status
 
@@ -12,7 +12,8 @@ Finish and deploy the corrected full-reset import semantics.
 - Branch: `master`
 - Current revision: inspect with `git rev-parse --short HEAD`; this file does
   not cache live Git state.
-- The implementation is committed as `1400798` and pushed to `master`.
+- The original import/export implementation is committed as `1400798` and
+  pushed to `master`.
 - Synthetic browser verification passed on the local transaction page:
   the custom file picker is visually consistent, the reset confirmation is
   clearly visible and clickable, and the second confirmation reports the
@@ -54,28 +55,34 @@ Finish and deploy the corrected full-reset import semantics.
   frontend preview and append-only migration
   `0044_full_reset_schwab_import.sql`. The old `reset_etf` mode remains only for
   rolling-deploy compatibility with the already-live frontend.
+- The full-reset correction is committed as `a459e9f` and pushed to `master`.
 - Corrected full-reset verification passed on 2026-07-28:
   `test:csv-import`, `test:finance`, `test:ui`,
   `test:migration-numbering`, `test:email-reminder`, `test:quote-status`,
   `typecheck`, `build`, and `git diff --check`.
-- A production read-only metadata query confirmed the `0044` prerequisite:
-  `public.import_schwab_transactions(jsonb, jsonb, text[], text)` exists and is
-  security-invoker. No migration SQL or business-data query was executed.
-- A second production read-only metadata query confirmed that `transactions`,
-  `cashflows`, and `funding_batches` all have RLS enabled and owner-delete
-  policies using `auth.uid() = user_id`; only transactions and cashflows
-  reference funding batches.
+- Migration `0044_full_reset_schwab_import.sql` was applied to production
+  project `igwacbeojogblacektxr` as migration version `20260728103203`.
+- Post-migration metadata checks confirmed that the public wrapper and private
+  helper are security-invoker functions, `reset_all` is present, anonymous and
+  `PUBLIC` execution is denied, and only `authenticated` can use the private
+  helper schema. No business data was read or changed during verification.
+- Supabase Advisors reported no errors related to the migration. Existing
+  warnings on older functions, RLS initialization plans, indexes, and password
+  protection remain outside this task.
+- Cloudflare Pages production deployment
+  `03cc20da-8558-4ead-a8b8-5f31a80c738c` completed from commit `a459e9f`.
+  The canonical site serves `index-C86Or5YJ.js`, which contains `reset_all` and
+  the full-reset UI without the missing-Supabase-config warning. `/`,
+  `/login`, and `/transactions` return HTTP 200.
 - Working tree: inspect with `git status`; this file does not cache live Git
   state.
-- Deployment status: `0043` and the original frontend remain live;
-  `0044` and the full-reset frontend are not deployed.
+- Deployment status: `0044` and the full-reset frontend are live in production.
 
 ## Next Steps
 
-1. Review and commit the full-reset fix.
-2. With explicit authorization, apply `0044` and deploy the frontend.
-3. Re-run reset import and confirm only current-file ETF trades and deposits
-   remain.
+No required implementation or deployment step remains. A real reset import is
+an intentionally destructive, user-controlled operation and was not executed
+during verification.
 
 ## Related Files
 
@@ -88,8 +95,6 @@ Finish and deploy the corrected full-reset import semantics.
 
 ## Risks and Blockers
 
-- The fix is not yet applied to production; the live reset still preserves
-  out-of-scope manual and stock data.
 - Full reset is destructive: individual-stock transactions, manual cashflows,
   and funding batches are deleted and are not rebuilt unless represented by
   supported rows in the current import file.

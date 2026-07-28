@@ -67,5 +67,10 @@
 - A direct upload or Git build without the required public `VITE_*` variables
   is not a valid production release even when its routes return HTTP 200.
 - No real Schwab export was read or imported during deployment.
-- `0044_full_reset_schwab_import.sql` changes reset into a complete replacement
-  of portfolio input data. It has not been applied to production or deployed.
+- Migration `0044_full_reset_schwab_import.sql` was applied to production as
+  version `20260728103203`. Metadata checks confirmed the security-invoker
+  wrapper/helper contract and authenticated-only execution.
+- Full-reset commit `a459e9f` is on `master`. Production deployment
+  `03cc20da-8558-4ead-a8b8-5f31a80c738c` serves `index-C86Or5YJ.js` from the
+  canonical site with `reset_all`, the full-reset UI, and the required
+  Supabase build configuration.
