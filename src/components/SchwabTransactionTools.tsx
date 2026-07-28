@@ -38,7 +38,7 @@ import type {
 } from '@/lib/database.types';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
-type ImportMode = 'append' | 'reset_etf';
+type ImportMode = 'append' | 'reset_all';
 
 interface Props {
   transactions: TxnRow[];
@@ -119,9 +119,8 @@ export function SchwabTransactionTools({ transactions }: Props) {
   const diff = useMemo(() => buildSchwabImportDiff(
     selectedRows,
     transactions,
-    confirmedEtfSymbols,
     mode,
-  ), [confirmedEtfSymbols, mode, selectedRows, transactions]);
+  ), [mode, selectedRows, transactions]);
   const depositDiff = useMemo(() => buildSchwabDepositImportDiff(
     parsed?.deposits ?? [],
     cashflows,
@@ -382,7 +381,6 @@ export function SchwabTransactionTools({ transactions }: Props) {
               transactionAdded={diff.added.length}
               transactionRemoved={diff.removed.length}
               cashflowAdded={depositDiff.added.length}
-              cashflowUnchanged={depositDiff.unchanged.length}
               cashflowRemoved={depositDiff.removed.length}
               importing={importing}
               error={error}
@@ -452,11 +450,11 @@ export function SchwabTransactionTools({ transactions }: Props) {
                             setResetCoverageConfirmed(false);
                           }}
                           name="schwab-import-mode"
-                          ariaLabel="新增导入或重置 ETF 后导入"
+                          ariaLabel="新增导入或清空全部后导入"
                           className="w-full sm:w-auto"
                           options={[
                             { value: 'append', label: '新增导入' },
-                            { value: 'reset_etf', label: '重置 ETF 后导入' },
+                            { value: 'reset_all', label: '清空全部后导入' },
                           ]}
                         />
                       </div>
@@ -469,13 +467,13 @@ export function SchwabTransactionTools({ transactions }: Props) {
                           label="交易 / 入金未变"
                           value={`${diff.unchanged.length} / ${depositDiff.unchanged.length}`}
                         />
-                        <DiffMetric label={mode === 'reset_etf' ? '交易 + / −' : '交易新增'} value={
-                          mode === 'reset_etf'
+                        <DiffMetric label={mode === 'reset_all' ? '交易 + / −' : '交易新增'} value={
+                          mode === 'reset_all'
                             ? `${diff.added.length} / ${diff.removed.length}`
                             : diff.added.length
                         } />
-                        <DiffMetric label={mode === 'reset_etf' ? '入金 + / −' : '入金新增'} value={
-                          mode === 'reset_etf'
+                        <DiffMetric label={mode === 'reset_all' ? '入金 + / −' : '入金新增'} value={
+                          mode === 'reset_all'
                             ? `${depositDiff.added.length} / ${depositDiff.removed.length}`
                             : depositDiff.added.length
                         } />
@@ -508,7 +506,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
                         />
                       )}
 
-                      {mode === 'reset_etf' && (
+                      {mode === 'reset_all' && (
                         <label
                           className={cn(
                             'group flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 text-sm transition-colors',
@@ -536,10 +534,10 @@ export function SchwabTransactionTools({ transactions }: Props) {
                           </span>
                           <span className="min-w-0">
                             <span className="block font-medium">
-                              {resetCoverageConfirmed ? '已确认覆盖全部 ETF 与入金历史' : '确认覆盖全部 ETF 与入金历史'}
+                              {resetCoverageConfirmed ? '已确认清空全部组合数据' : '确认清空全部组合数据'}
                             </span>
                             <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                              现有 ETF 交易和嘉信导入入金将先全部删除，再按文件重建；个股与手工现金流不受影响。
+                              全部交易、全部现金流和资金批次将先清除，再按文件重建已确认的 ETF 交易与正向入金。
                             </span>
                           </span>
                         </label>
@@ -569,11 +567,11 @@ export function SchwabTransactionTools({ transactions }: Props) {
                       type="button"
                       disabled={!canImport}
                       onClick={() => {
-                        if (mode === 'reset_etf') setConfirmingReset(true);
+                        if (mode === 'reset_all') setConfirmingReset(true);
                         else void runImport();
                       }}
                     >
-                      {classifying ? '识别 ETF 中…' : mode === 'reset_etf' ? '继续确认' : '导入新增记录'}
+                      {classifying ? '识别 ETF 中…' : mode === 'reset_all' ? '继续确认' : '导入新增记录'}
                     </Button>
                   </div>
                 </div>
@@ -728,7 +726,6 @@ function ResetConfirmation({
   transactionAdded,
   transactionRemoved,
   cashflowAdded,
-  cashflowUnchanged,
   cashflowRemoved,
   importing,
   error,
@@ -738,7 +735,6 @@ function ResetConfirmation({
   transactionAdded: number;
   transactionRemoved: number;
   cashflowAdded: number;
-  cashflowUnchanged: number;
   cashflowRemoved: number;
   importing: boolean;
   error: string | null;
@@ -748,23 +744,22 @@ function ResetConfirmation({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>确认重置 ETF 交易与嘉信入金</DialogTitle>
+        <DialogTitle>确认清空全部组合数据并导入</DialogTitle>
         <DialogDescription>
-          ETF 交易将删除 {transactionRemoved} 笔并重建 {transactionAdded} 笔；
-          嘉信入金将删除 {cashflowRemoved} 笔并重建 {cashflowAdded} 笔。
-          {cashflowUnchanged > 0 ? `另有 ${cashflowUnchanged} 笔手工现金流按日期和金额匹配并保留。` : ''}
+          全部交易将删除 {transactionRemoved} 笔，并从文件重建 {transactionAdded} 笔已确认的 ETF 交易；
+          全部现金流将删除 {cashflowRemoved} 笔，并从文件重建 {cashflowAdded} 笔正向入金。
         </DialogDescription>
       </DialogHeader>
       <div className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-3 text-sm">
-        这是严格重建：即使交易完全匹配，旧记录的类型、备注和批次也不会保留。
-        个股与手工现金流始终保留；任何错误都会回滚整批写入。
+        个股交易、手工现金流和资金批次也会删除。设置、分享链接、行情与日线价格不受影响；
+        任何错误都会回滚整批清空和写入。
       </div>
       {error && <p className="text-xs text-loss">{error}</p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" disabled={importing} onClick={onBack}>返回检查</Button>
         <Button type="button" variant="destructive" disabled={importing} onClick={onConfirm}>
           <RotateCcw className="h-4 w-4" />
-          {importing ? '正在重置…' : '确认重置并导入'}
+          {importing ? '正在清空并导入…' : '确认清空并导入'}
         </Button>
       </div>
     </>
@@ -780,13 +775,14 @@ function ImportResult({
 }) {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-5">
         <DiffMetric label="交易 新 / 留 / 移" value={
           `${result.transactions_added} / ${result.transactions_unchanged} / ${result.transactions_removed}`
         } />
         <DiffMetric label="入金 新 / 留 / 移" value={
           `${result.cashflows_added} / ${result.cashflows_unchanged} / ${result.cashflows_removed}`
         } />
+        <DiffMetric label="批次移除" value={result.funding_batches_removed} />
         <DiffMetric label="合计变化" value={result.added + result.removed} />
         <DiffMetric label="错误" value={result.errors} />
       </div>

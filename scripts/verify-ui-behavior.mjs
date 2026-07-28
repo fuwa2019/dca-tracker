@@ -63,15 +63,15 @@ assert.match(txn, /卖出净收入/, 'transaction form shows fee-aware sell proc
 
 const transactionTools = readFileSync(new URL('../src/components/SchwabTransactionTools.tsx', import.meta.url), 'utf8');
 assert.match(transactionTools, /新增导入/, 'Schwab import supports append mode');
-assert.match(transactionTools, /重置 ETF 后导入/, 'Schwab import supports ETF reset mode');
+assert.match(transactionTools, /清空全部后导入/, 'Schwab import supports full reset mode');
 assert.match(transactionTools, /className="sr-only"/, 'Schwab file input uses the custom accessible picker');
-assert.match(transactionTools, /确认覆盖全部 ETF 与入金历史/, 'reset requires a visible full-history confirmation');
+assert.match(transactionTools, /确认清空全部组合数据/, 'reset requires a visible full-reset confirmation');
 assert.match(transactionTools, /parsed\.deposits/, 'Schwab import previews broker deposits');
 assert.match(transactionTools, /p_cashflows/, 'Schwab import sends deposits through the atomic RPC');
 assert.match(transactionTools, /resetCoverageConfirmed[\s\S]*border-warn\/50 bg-warn-soft/, 'ETF reset confirmation has a selected state');
-assert.match(transactionTools, /先全部删除，再按文件重建/, 'ETF reset is explicitly a strict rebuild');
-assert.match(transactionTools, /旧记录的类型、备注和批次也不会保留/, 'strict reset does not preserve transaction metadata');
-assert.match(transactionTools, /确认重置并导入/, 'ETF reset has a second confirmation');
+assert.match(transactionTools, /全部交易、全部现金流和资金批次将先清除/, 'reset explicitly clears all portfolio input data');
+assert.match(transactionTools, /个股交易、手工现金流和资金批次也会删除/, 'strict reset does not preserve manual portfolio data');
+assert.match(transactionTools, /确认清空并导入/, 'full reset has a second confirmation');
 assert.match(transactionTools, /打开数据健康/, 'successful import points to price coverage health');
 assert.match(transactionTools, /exportSchwabTransactions/, 'transaction tools expose Schwab-format export');
 assert.match(transactionTools, /exportSchwabTransactions\([\s\S]*?exportDeposits/, 'Schwab export includes deposits');

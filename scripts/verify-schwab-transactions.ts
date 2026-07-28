@@ -113,7 +113,7 @@ const existing = [{
   price: duplicate.rows[0].price,
   fees_usd: duplicate.rows[0].fees_usd,
 }];
-const appendDiff = buildSchwabImportDiff(duplicate.rows, existing, new Set(['SMH']), 'append');
+const appendDiff = buildSchwabImportDiff(duplicate.rows, existing, 'append');
 assert.equal(appendDiff.unchanged.length, 1);
 assert.equal(appendDiff.added.length, 1);
 assert.equal(appendDiff.removed.length, 0);
@@ -141,13 +141,14 @@ const resetDiff = buildSchwabImportDiff(
       fees_usd: 0,
     },
   ],
-  new Set(['SMH']),
-  'reset_etf',
+  'reset_all',
 );
 assert.equal(resetDiff.unchanged.length, 0);
 assert.equal(resetDiff.added.length, 1);
-assert.deepEqual(resetDiff.removed.map((row) => row.id), ['existing-1', 'old-etf-row']);
-assert.ok(!resetDiff.removed.some((row) => row.id === 'stock-row'), 'ETF reset preserves stocks');
+assert.deepEqual(
+  resetDiff.removed.map((row) => row.id),
+  ['existing-1', 'old-etf-row', 'stock-row'],
+);
 
 const existingCashflows = [
   {
@@ -188,14 +189,14 @@ const resetDepositDiff = buildSchwabDepositImportDiff(
       import_key: duplicateDeposits.deposits[0].import_key,
     },
   ],
-  'reset_etf',
+  'reset_all',
 );
-assert.equal(resetDepositDiff.unchanged[0].existingId, 'manual-fx');
+assert.equal(resetDepositDiff.unchanged.length, 0);
+assert.equal(resetDepositDiff.added.length, 1);
 assert.deepEqual(
   resetDepositDiff.removed.map((row) => row.id),
-  ['old-schwab-deposit', 'matching-schwab-deposit'],
+  ['manual-fx', 'old-schwab-deposit', 'matching-schwab-deposit'],
 );
-assert.ok(!resetDepositDiff.removed.some((row) => row.id === 'manual-fx'), 'reset preserves manual cashflows');
 
 const exported = exportSchwabTransactions([
   {
@@ -264,6 +265,10 @@ const migration = readFileSync(
   new URL('../supabase/migrations/0043_schwab_transaction_import.sql', import.meta.url),
   'utf8',
 );
+const fullResetMigration = readFileSync(
+  new URL('../supabase/migrations/0044_full_reset_schwab_import.sql', import.meta.url),
+  'utf8',
+);
 assert.match(migration, /security invoker/, 'import RPC uses caller privileges');
 assert.match(migration, /v_user_id uuid := auth\.uid\(\)/, 'import RPC derives the current user');
 assert.doesNotMatch(
@@ -322,6 +327,57 @@ assert.ok(
 assert.ok(
   deleteOldBuysAt >= 0 && deleteOldBuysAt < insertNewRowsAt,
   'strict reset removes old buys before inserting replacements',
+);
+assert.match(
+  fullResetMigration,
+  /set schema dca_private[\s\S]*?rename to _import_schwab_transactions_v1/,
+  'full reset wrapper moves the applied implementation behind a private helper',
+);
+assert.match(
+  fullResetMigration,
+  /p_mode not in \('append', 'reset_all', 'reset_etf'\)/,
+  'RPC exposes a distinct full-reset mode while retaining rolling-deploy compatibility',
+);
+assert.match(
+  fullResetMigration,
+  /select count\(\*\)::integer[\s\S]*?from public\.transactions transaction[\s\S]*?where transaction\.user_id = v_user_id/,
+  'full reset counts every existing user transaction',
+);
+assert.match(
+  fullResetMigration,
+  /delete from public\.cashflows cashflow\s+where cashflow\.user_id = v_user_id/,
+  'full reset deletes every user cashflow',
+);
+assert.match(
+  fullResetMigration,
+  /delete from public\.funding_batches batch\s+where batch\.user_id = v_user_id/,
+  'full reset deletes every user funding batch',
+);
+assert.match(
+  fullResetMigration,
+  /dca_private\._import_schwab_transactions_v1\([\s\S]*?'append'[\s\S]*?\)/,
+  'full reset rebuilds from the validated append path after clearing data',
+);
+assert.match(
+  fullResetMigration,
+  /'funding_batches_removed', v_funding_batches_removed/,
+  'RPC reports removed funding batches',
+);
+assert.match(fullResetMigration, /security invoker/, 'full reset wrapper keeps caller privileges');
+assert.match(
+  fullResetMigration,
+  /revoke all on schema dca_private from public, anon, authenticated/,
+  'the helper schema is not exposed by default role privileges',
+);
+assert.match(
+  fullResetMigration,
+  /grant execute on function dca_private\._import_schwab_transactions_v1\(jsonb, jsonb, text\[\], text\)\s+to authenticated/,
+  'the security-invoker wrapper can execute its private implementation',
+);
+assert.match(
+  fullResetMigration,
+  /grant execute on function public\.import_schwab_transactions\(jsonb, jsonb, text\[\], text\)\s+to authenticated/,
+  'authenticated users retain access to the corrected RPC',
 );
 
 console.log('Schwab transaction import/export checks passed');

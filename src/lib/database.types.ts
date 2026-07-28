@@ -286,6 +286,7 @@ export type SchwabTransactionImportResult = {
   cashflows_added: number;
   cashflows_unchanged: number;
   cashflows_removed: number;
+  funding_batches_removed: number;
   errors: number;
 };
 
@@ -428,7 +429,7 @@ export interface Database {
             duplicate_ordinal: number;
           }>;
           p_etf_symbols: string[];
-          p_mode: 'append' | 'reset_etf';
+          p_mode: 'append' | 'reset_all';
         };
         Returns: SchwabTransactionImportResult;
       };

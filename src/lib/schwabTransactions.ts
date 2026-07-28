@@ -340,15 +340,13 @@ export function classifySchwabSymbol(input: {
 export function buildSchwabImportDiff(
   incoming: SchwabImportRow[],
   existing: ExistingTransactionLike[],
-  resetEtfSymbols: ReadonlySet<string>,
-  mode: 'append' | 'reset_etf',
+  mode: 'append' | 'reset_all',
 ): SchwabImportDiff {
-  if (mode === 'reset_etf') {
+  if (mode === 'reset_all') {
     return {
       added: incoming,
       unchanged: [],
-      removed: existing.filter((transaction) =>
-        resetEtfSymbols.has(normalizeTicker(transaction.ticker))),
+      removed: existing,
     };
   }
 
@@ -383,16 +381,19 @@ export function buildSchwabImportDiff(
 export function buildSchwabDepositImportDiff(
   incoming: SchwabDepositImportRow[],
   existing: ExistingCashflowLike[],
-  mode: 'append' | 'reset_etf',
+  mode: 'append' | 'reset_all',
 ): SchwabDepositImportDiff {
+  if (mode === 'reset_all') {
+    return {
+      added: incoming,
+      unchanged: [],
+      removed: existing,
+    };
+  }
+
   const existingByImportKey = new Map<string, ExistingCashflowLike[]>();
   const existingByIdentity = new Map<string, ExistingCashflowLike[]>();
   for (const cashflow of existing) {
-    const isResetRemovedDeposit = mode === 'reset_etf'
-      && cashflow.cashflow_kind === 'broker_deposit'
-      && cashflow.import_source === 'schwab';
-    if (isResetRemovedDeposit) continue;
-
     if (cashflow.import_source === 'schwab' && cashflow.import_key) {
       const keyed = existingByImportKey.get(cashflow.import_key) ?? [];
       keyed.push(cashflow);
@@ -425,12 +426,7 @@ export function buildSchwabDepositImportDiff(
     }
   }
 
-  const removed = mode === 'reset_etf'
-    ? existing.filter((cashflow) =>
-        cashflow.cashflow_kind === 'broker_deposit'
-        && cashflow.import_source === 'schwab')
-    : [];
-  return { added, unchanged, removed };
+  return { added, unchanged, removed: [] };
 }
 
 export function exportSchwabTransactions(
