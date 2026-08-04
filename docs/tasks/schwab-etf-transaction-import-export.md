@@ -9,6 +9,9 @@
 - Also accept the six-column `Symbol,Side,Qty,Fill Price,Commission,Closing
   Time` portfolio CSV format; adapt only its `Buy`/`Sell` rows to the existing
   transaction contract and ignore other `Side` values.
+- Preserve up to 10 decimal places for quantity and commission and up to 12
+  decimal places for fill price, matching the portfolio CSV producer's full
+  supported output rather than rounding imported trades.
 - Support append-only import and atomic full portfolio-input reset/import.
 - Export all stored trades in the same eight-column Schwab format.
 - Preserve application metadata for matching transactions only in append mode.
@@ -16,13 +19,15 @@
 
 ## Database Contract
 
-- Existing migrations: `0043_schwab_transaction_import.sql` and
-  `0044_full_reset_schwab_import.sql`; the zero-cash correction needs no new
-  database migration.
+- Existing migrations: `0043_schwab_transaction_import.sql`,
+  `0044_full_reset_schwab_import.sql`, and
+  `0045_transaction_numeric_precision.sql`.
 - Add transaction fee, source description, import source, and import key fields.
 - The historical broker-deposit schema remains compatible with the deployed
   RPC, but the current client always sends an empty cashflow array.
 - Enforce per-user import-key uniqueness.
+- Keep the browser and database import-key formats on the same 10/12/10
+  quantity/price/fee precision so distinct fills do not collide.
 - Expose an authenticated, security-invoker import RPC.
 - Derive ownership from `auth.uid()` and rely on transaction RLS.
 - Full reset removes every transaction, cashflow, and funding batch owned by
@@ -49,6 +54,8 @@
 
 - Schwab parsing, all-security import, ignored-transfer, strict reset, and
   trade-only round-trip export tests.
+- Synthetic high-precision portfolio rows, precision boundaries, and import-key
+  collision regression tests.
 - Fee-aware finance fixtures.
 - Migration numbering and static database contract checks.
 - UI behavior checks, typecheck, and production build.
@@ -81,3 +88,6 @@
   `c81a5b11-46d5-4180-a16f-cc6725e35ca6` serves `index-Dsy3wFOu.js` with
   all-security Buy/Sell import, ignored transfer rows, and broker cash fixed at
   zero. No database migration or production database change was required.
+- Migration `0045_transaction_numeric_precision.sql` and its matching frontend
+  precision changes are local only as of 2026-08-04. They have not been applied
+  to Supabase or deployed to Cloudflare Pages.

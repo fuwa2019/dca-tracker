@@ -60,6 +60,9 @@ assert.match(txn, /priceTouched/, 'transaction form tracks touched price field')
 assert.match(txn, /手续费 \(USD，可选\)/, 'transaction form supports optional USD fees');
 assert.match(txn, /买入总支出/, 'transaction form shows fee-aware buy total');
 assert.match(txn, /卖出净收入/, 'transaction form shows fee-aware sell proceeds');
+assert.match(txn, /id="price"[\s\S]*?step="0\.000000000001"/, 'transaction form preserves 12-decimal prices');
+assert.match(txn, /id="shares"[\s\S]*?step="0\.0000000001"/, 'transaction form preserves 10-decimal quantities');
+assert.match(txn, /id="fees-usd"[\s\S]*?step="0\.0000000001"/, 'transaction form preserves 10-decimal fees');
 
 const transactionTools = readFileSync(new URL('../src/components/SchwabTransactionTools.tsx', import.meta.url), 'utf8');
 assert.match(transactionTools, /新增导入/, 'Schwab import supports append mode');

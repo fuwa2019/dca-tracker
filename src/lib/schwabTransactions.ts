@@ -136,6 +136,9 @@ const PORTFOLIO_CSV_HEADER_SET = PORTFOLIO_CSV_HEADERS.map(normalizeHeader);
 const SYMBOL_PATTERN = /^[A-Z0-9.^-]{1,15}$/;
 const MAX_ROWS = 10_000;
 const AMOUNT_TOLERANCE_USD = 0.0200001;
+const SHARES_DECIMAL_PLACES = 10;
+const PRICE_DECIMAL_PLACES = 12;
+const FEES_DECIMAL_PLACES = 10;
 const SCHWAB_DEPOSIT_ACTIONS = new Set([
   'ach transfer',
   'cash deposit',
@@ -222,9 +225,15 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
     ) {
       rowErrors.push('卖出手续费必须小于成交额');
     }
-    if (decimalPlaces(cells[4]) > 6) rowErrors.push('股数最多支持 6 位小数');
-    if (decimalPlaces(cells[5]) > 4) rowErrors.push('成交价最多支持 4 位小数');
-    if (cells[6].trim() !== '' && decimalPlaces(cells[6]) > 2) rowErrors.push('手续费最多支持 2 位小数');
+    if (decimalPlaces(cells[4]) > SHARES_DECIMAL_PLACES) {
+      rowErrors.push(`股数最多支持 ${SHARES_DECIMAL_PLACES} 位小数`);
+    }
+    if (decimalPlaces(cells[5]) > PRICE_DECIMAL_PLACES) {
+      rowErrors.push(`成交价最多支持 ${PRICE_DECIMAL_PLACES} 位小数`);
+    }
+    if (cells[6].trim() !== '' && decimalPlaces(cells[6]) > FEES_DECIMAL_PLACES) {
+      rowErrors.push(`手续费最多支持 ${FEES_DECIMAL_PLACES} 位小数`);
+    }
 
     if (
       rowErrors.length === 0
@@ -309,10 +318,14 @@ function parsePortfolioCsvTransactions(
     if (shares >= 100_000_000) rowErrors.push('股数超出数据库精度');
     if (price >= 10_000_000_000) rowErrors.push('成交价超出数据库精度');
     if (feesUsd >= 1_000_000_000_000) rowErrors.push('手续费超出数据库精度');
-    if (decimalPlaces(cells[2]) > 6) rowErrors.push('股数最多支持 6 位小数');
-    if (decimalPlaces(cells[3]) > 4) rowErrors.push('成交价最多支持 4 位小数');
-    if (cells[4].trim() !== '' && decimalPlaces(cells[4]) > 2) {
-      rowErrors.push('手续费最多支持 2 位小数');
+    if (decimalPlaces(cells[2]) > SHARES_DECIMAL_PLACES) {
+      rowErrors.push(`股数最多支持 ${SHARES_DECIMAL_PLACES} 位小数`);
+    }
+    if (decimalPlaces(cells[3]) > PRICE_DECIMAL_PLACES) {
+      rowErrors.push(`成交价最多支持 ${PRICE_DECIMAL_PLACES} 位小数`);
+    }
+    if (cells[4].trim() !== '' && decimalPlaces(cells[4]) > FEES_DECIMAL_PLACES) {
+      rowErrors.push(`手续费最多支持 ${FEES_DECIMAL_PLACES} 位小数`);
     }
 
     const amount = side === 'buy'
@@ -528,9 +541,9 @@ export function exportSchwabTransactions(
         transaction.side === 'buy' ? 'Buy' : 'Sell',
         normalizeTicker(transaction.ticker),
         transaction.source_description?.trim() || normalizeTicker(transaction.ticker),
-        formatDecimal(shares, 6),
-        `$${formatDecimal(price, 4)}`,
-        fee > 0 ? `$${fee.toFixed(2)}` : '',
+        formatDecimal(shares, SHARES_DECIMAL_PLACES),
+        `$${formatDecimal(price, PRICE_DECIMAL_PLACES)}`,
+        fee > 0 ? `$${formatDecimal(fee, FEES_DECIMAL_PLACES)}` : '',
         formatSignedMoney(amount),
       ],
     };
@@ -578,9 +591,9 @@ export function schwabIdentity(input: {
     input.trade_date,
     input.side,
     normalizeTicker(input.ticker),
-    Number(input.price).toFixed(4),
-    Number(input.shares).toFixed(6),
-    Number(input.fees_usd ?? 0).toFixed(2),
+    Number(input.price).toFixed(PRICE_DECIMAL_PLACES),
+    Number(input.shares).toFixed(SHARES_DECIMAL_PLACES),
+    Number(input.fees_usd ?? 0).toFixed(FEES_DECIMAL_PLACES),
   ].join('|');
 }
 

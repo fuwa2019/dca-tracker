@@ -1,16 +1,29 @@
 # Current Handoff
 
-Updated: 2026-07-28
+Updated: 2026-08-04
 
 ## Current Goal
 
-No active unfinished task.
+Complete six-column Portfolio CSV precision support in code, then deploy only
+after separate authorization for the database migration and frontend release.
 
 ## Current Status
 
-- Current repository:
-  `/Users/junxihuo/.codex/worktrees/c32c/dca_system`
-- Branch: detached worktree; released commits are pushed to `master`.
+- Current repository: `/Users/junxihuo/Documents/dca_system`
+- Branch: `master`, tracking `origin/master`.
+- Local precision adaptation preserves up to 10 decimal places for quantity and
+  commission and up to 12 decimal places for fill price across parsing,
+  import identity, database storage, export, and manual editing.
+- New append-only migration `0045_transaction_numeric_precision.sql` widens the
+  transaction columns and upgrades the private security-invoker import helper.
+- Local verification passed on 2026-08-04: `test:csv-import`, `test:finance`,
+  `test:ui`, `test:migration-numbering`, `test:email-reminder`,
+  `test:quote-status`, `typecheck`, `build`, and `git diff --check`.
+- The user-provided real portfolio CSV was not read, copied, or imported.
+- Migration `0045` has not been applied and the matching frontend has not been
+  deployed. Production still serves the previously verified `0044` contract.
+- No local Supabase CLI or PostgreSQL runtime is available, so `0045` received
+  static contract verification but no database execution test.
 - Current revision: inspect with `git rev-parse --short HEAD`; this file does
   not cache live Git state.
 - The original import/export implementation is committed as `1400798` and
@@ -94,9 +107,14 @@ No active unfinished task.
 
 ## Next Steps
 
-No required implementation or deployment step remains. A real reset import is
-an intentionally destructive, user-controlled operation and was not executed
-during verification.
+1. With explicit authorization, apply `0045` to an authorized database, verify
+   column typmods/function grants with structural queries, and run a synthetic
+   high-precision import smoke test.
+2. With explicit authorization, deploy the frontend and verify the production
+   bundle before the user retries their real CSV.
+
+A real reset import remains an intentionally destructive, user-controlled
+operation and must not be executed as part of migration or deployment checks.
 
 ## Related Files
 
@@ -106,6 +124,7 @@ during verification.
 - `docs/tasks/schwab-etf-transaction-import-export.md`
 - `supabase/migrations/0043_schwab_transaction_import.sql`
 - `supabase/migrations/0044_full_reset_schwab_import.sql`
+- `supabase/migrations/0045_transaction_numeric_precision.sql`
 
 ## Risks and Blockers
 
@@ -113,5 +132,9 @@ during verification.
   are deleted. Every standard Buy/Sell in the selected file is rebuilt;
   non-trade rows and cashflows are intentionally not rebuilt.
 - No real CSV import was read or attempted during the fix.
+- Applying `0045` takes a short exclusive table lock while PostgreSQL changes
+  numeric typmods; use an authorized maintenance window and a lock timeout.
+- The high-precision frontend must not be deployed before `0045`, because the
+  currently deployed helper still rejects values beyond 6/4/2 decimal places.
 - A browser with the previous PWA bundle may need a reload while the
   auto-updating service worker activates.

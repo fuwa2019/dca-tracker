@@ -13,8 +13,9 @@ export function TargetProgressRing({ current, target, monthsToTarget, size = 220
   const progress = target > 0 ? Math.min(1, current / target) : 0;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const yrs = monthsToTarget !== null && monthsToTarget > 0 ? Math.floor(monthsToTarget / 12) : 0;
-  const mos = monthsToTarget !== null && monthsToTarget > 0 ? Math.round(monthsToTarget % 12) : 0;
+  const wholeMonths = monthsToTarget !== null && monthsToTarget > 0 ? Math.ceil(monthsToTarget) : 0;
+  const yrs = Math.floor(wholeMonths / 12);
+  const mos = wholeMonths % 12;
 
   return (
     <div className="relative flex flex-col items-center" style={{ width: size, height: size }}>

@@ -238,7 +238,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
           <Input
             id="price"
             type="number"
-            step="0.0001"
+            step="0.000000000001"
             inputMode="decimal"
             value={price}
             onChange={(e) => {
@@ -259,7 +259,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
           <Input
             id="shares"
             type="number"
-            step="0.000001"
+            step="0.0000000001"
             inputMode="decimal"
             value={shares}
             onChange={(e) => setShares(e.target.value)}
@@ -279,7 +279,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
             id="fees-usd"
             type="number"
             min="0"
-            step="0.01"
+            step="0.0000000001"
             inputMode="decimal"
             value={feesUsd}
             onChange={(e) => setFeesUsd(e.target.value)}

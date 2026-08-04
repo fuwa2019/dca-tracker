@@ -68,6 +68,28 @@ assert.equal(
   'equivalent formats share the existing import identity',
 );
 
+const precisePortfolioCsv = parseSchwabTransactions([
+  PORTFOLIO_CSV_HEADERS.join(','),
+  'NASDAQ:QQQM,Buy,0.123456789,123.123456789012,0.0000000001,2026-08-04 16:30:00',
+].join('\n'));
+assert.equal(precisePortfolioCsv.errors.length, 0);
+assert.equal(precisePortfolioCsv.rows.length, 1);
+assert.equal(precisePortfolioCsv.rows[0].shares, 0.123456789);
+assert.equal(precisePortfolioCsv.rows[0].price, 123.123456789012);
+assert.equal(precisePortfolioCsv.rows[0].fees_usd, 0.0000000001);
+
+const preciseIdentityRows = parseSchwabTransactions([
+  PORTFOLIO_CSV_HEADERS.join(','),
+  'NASDAQ:QQQM,Buy,0.123456789,100.000000000001,0.0000000001,2026-08-04 16:30:00',
+  'NASDAQ:QQQM,Buy,0.123456789,100.000000000002,0.0000000001,2026-08-04 16:31:00',
+].join('\n'));
+assert.equal(preciseIdentityRows.errors.length, 0);
+assert.notEqual(
+  preciseIdentityRows.rows[0].import_key,
+  preciseIdentityRows.rows[1].import_key,
+  'values that differ beyond the former four-decimal price precision remain distinct',
+);
+
 const commaFixture = [
   SCHWAB_HEADERS.join(','),
   '06/05/2026,Buy,QQQM,"INVESCO NASDAQ, 100 ETF",0.2202,$295.1357,,-$64.99',
@@ -92,10 +114,19 @@ assert.match(invalid.errors[0].message, /金额与成交明细不一致/);
 
 const excessivePrecision = parseSchwabTransactions([
   SCHWAB_HEADERS.join('\t'),
-  '06/05/2026\tBuy\tSMH\tVANECK SEMICONDUCTOR ETF\t0.1234567\t$600\t\t-$74.07',
+  '06/05/2026\tBuy\tSMH\tVANECK SEMICONDUCTOR ETF\t0.12345678901\t$600\t\t-$74.07',
 ].join('\n'));
 assert.equal(excessivePrecision.rows.length, 0);
-assert.match(excessivePrecision.errors[0].message, /股数最多支持 6 位小数/);
+assert.match(excessivePrecision.errors[0].message, /股数最多支持 10 位小数/);
+
+const excessivePortfolioPrecision = parseSchwabTransactions([
+  PORTFOLIO_CSV_HEADERS.join(','),
+  'NASDAQ:SMH,Buy,0.1,600.1234567890123,0,2026-06-05 16:30:00',
+  'NASDAQ:SMH,Buy,0.1,600,0.00000000001,2026-06-05 16:31:00',
+].join('\n'));
+assert.equal(excessivePortfolioPrecision.rows.length, 0);
+assert.match(excessivePortfolioPrecision.errors[0].message, /成交价最多支持 12 位小数/);
+assert.match(excessivePortfolioPrecision.errors[1].message, /手续费最多支持 10 位小数/);
 
 const invalidSellFee = parseSchwabTransactions([
   SCHWAB_HEADERS.join('\t'),
@@ -177,6 +208,16 @@ assert.deepEqual(
 
 const exported = exportSchwabTransactions([
   {
+    trade_date: '2025-04-11',
+    side: 'buy',
+    ticker: 'QQQM',
+    source_description: 'SYNTHETIC HIGH PRECISION ETF',
+    shares: 0.123456789,
+    price: 123.123456789012,
+    fees_usd: 0.0000000001,
+    created_at: '2025-04-11T10:00:00Z',
+  },
+  {
     trade_date: '2025-04-10',
     side: 'buy',
     ticker: 'VGT',
@@ -198,17 +239,21 @@ const exported = exportSchwabTransactions([
 ]);
 assert.ok(exported.startsWith('\uFEFF'));
 assert.match(exported, /Date\tAction\tSymbol\tDescription\tQuantity\tPrice\tFees & Comm\tAmount/);
+assert.match(exported, /0\.123456789\t\$123\.123456789012\t\$0\.0000000001/);
 assert.match(exported, /-\$50\.01/);
 assert.match(exported, /\t\$50\.00\r\n$/);
 assert.doesNotMatch(exported, /Wire Received|MoneyLink Transfer/);
 
 const roundTrip = parseSchwabTransactions(exported);
 assert.equal(roundTrip.errors.length, 0);
-assert.equal(roundTrip.rows.length, 2);
+assert.equal(roundTrip.rows.length, 3);
 assert.equal(roundTrip.deposits.length, 0);
-assert.equal(roundTrip.rows[0].fees_usd, 0.01);
-assert.equal(roundTrip.rows[0].source_description, 'SYNTHETIC\t"TECH" ETF');
-assert.equal(roundTrip.rows[1].source_description, 'SGOV');
+assert.equal(roundTrip.rows[0].shares, 0.123456789);
+assert.equal(roundTrip.rows[0].price, 123.123456789012);
+assert.equal(roundTrip.rows[0].fees_usd, 0.0000000001);
+assert.equal(roundTrip.rows[1].fees_usd, 0.01);
+assert.equal(roundTrip.rows[1].source_description, 'SYNTHETIC\t"TECH" ETF');
+assert.equal(roundTrip.rows[2].source_description, 'SGOV');
 
 const inferredFundingRows = [
   syntheticTransaction('funding-1', '2026-07-01', 'VOO', 10, 100),
@@ -227,6 +272,10 @@ const migration = readFileSync(
 );
 const fullResetMigration = readFileSync(
   new URL('../supabase/migrations/0044_full_reset_schwab_import.sql', import.meta.url),
+  'utf8',
+);
+const precisionMigration = readFileSync(
+  new URL('../supabase/migrations/0045_transaction_numeric_precision.sql', import.meta.url),
   'utf8',
 );
 assert.match(migration, /security invoker/, 'import RPC uses caller privileges');
@@ -338,6 +387,50 @@ assert.match(
   fullResetMigration,
   /grant execute on function public\.import_schwab_transactions\(jsonb, jsonb, text\[\], text\)\s+to authenticated/,
   'authenticated users retain access to the corrected RPC',
+);
+assert.match(
+  precisionMigration,
+  /alter column shares type numeric\(18, 10\)[\s\S]*?alter column price type numeric\(22, 12\)[\s\S]*?alter column fees_usd type numeric\(22, 10\)/,
+  'the transaction table preserves Portfolio CSV quantity, price, and commission precision',
+);
+for (const sourcePattern of [
+  "to_char(row_data.price, 'FM999999999999990.0000')",
+  "to_char(row_data.shares, 'FM999999999999990.000000')",
+  "to_char(coalesce(row_data.fees_usd, 0), 'FM999999999999990.00')",
+  'shares <> round(shares, 6)',
+  'price <> round(price, 4)',
+  'fees_usd <> round(fees_usd, 2)',
+]) {
+  assert.ok(
+    migration.includes(sourcePattern),
+    `the applied helper still contains the expected precision patch source: ${sourcePattern}`,
+  );
+}
+assert.match(
+  precisionMigration,
+  /pg_get_functiondef\([\s\S]*?dca_private\._import_schwab_transactions_v1/,
+  'the precision migration upgrades the private helper moved by migration 0044',
+);
+assert.match(precisionMigration, /round\(shares, 10\)/);
+assert.match(precisionMigration, /round\(price, 12\)/);
+assert.match(precisionMigration, /round\(fees_usd, 10\)/);
+assert.match(precisionMigration, /FM999999999999990\.000000000000/);
+assert.match(precisionMigration, /FM999999999999990\.0000000000/);
+assert.match(
+  precisionMigration,
+  /alter function dca_private\._import_schwab_transactions_v1\(jsonb, jsonb, text\[\], text\)\s+security invoker/,
+  'the upgraded private helper remains security-invoker',
+);
+assert.doesNotMatch(precisionMigration, /security definer/i);
+assert.match(
+  precisionMigration,
+  /revoke all on function dca_private\._import_schwab_transactions_v1\(jsonb, jsonb, text\[\], text\)\s+from public, anon, authenticated/,
+  'the upgraded helper is not exposed to public or anonymous roles',
+);
+assert.match(
+  precisionMigration,
+  /grant execute on function dca_private\._import_schwab_transactions_v1\(jsonb, jsonb, text\[\], text\)\s+to authenticated/,
+  'the authenticated security-invoker wrapper can still execute the upgraded helper',
 );
 
 function syntheticTransaction(
