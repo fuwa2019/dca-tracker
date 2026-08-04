@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Database, PerformanceHistory, PortfolioHistory, SharedHistory } from '@/lib/database.types';
 import { aggregatePositions } from '@/lib/calc/position';
-import { assumedBrokerCashBalance } from '@/lib/calc/cashBalance';
+import { calculateBrokerCashBalance } from '@/lib/calc/cashBalance';
 import { totalTradeFunding } from '@/lib/calc/history';
 import { normalizeSymbol } from '@/lib/symbols';
 import { LOCAL_MODE } from '@/lib/localMode';
@@ -161,17 +161,37 @@ export function usePositions() {
 }
 
 export function useTotalInvested() {
+  const cashflows = useCashflows();
   const txns = useTransactions();
-  const total = totalTradeFunding(txns.data ?? []);
-  return { ...txns, total };
+  const brokerDeposits = (cashflows.data ?? []).filter((row) => row.cashflow_kind === 'broker_deposit');
+  const total = brokerDeposits.length > 0
+    ? summarizeCashflows(brokerDeposits).totalUsdActual
+    : totalTradeFunding(txns.data ?? []);
+  return {
+    ...txns,
+    total,
+    isLoading: txns.isLoading || cashflows.isLoading,
+    isError: txns.isError || cashflows.isError,
+  };
 }
 
 /**
- * This account is intentionally modeled with zero idle cash. Schwab transfer
- * rows are not complete enough to reconcile a trustworthy historical balance.
+ * Only adjusted broker deposits participate in account cash. Manual FX rows
+ * remain available for exchange-loss reporting without being counted twice.
  */
 export function useCashBalance() {
-  return { cash: assumedBrokerCashBalance(), isLoading: false };
+  const cashflows = useCashflows();
+  const txns = useTransactions();
+  const brokerDeposits = (cashflows.data ?? []).filter((row) => row.cashflow_kind === 'broker_deposit');
+  const cash = brokerDeposits.length > 0
+    ? calculateBrokerCashBalance(brokerDeposits, txns.data ?? [])
+    : 0;
+  return {
+    cash,
+    depositedUsd: summarizeCashflows(brokerDeposits).totalUsdActual,
+    isLoading: cashflows.isLoading || txns.isLoading,
+    isError: cashflows.isError || txns.isError,
+  };
 }
 
 export function useExchangeLoss() {

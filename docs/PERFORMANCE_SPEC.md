@@ -9,6 +9,11 @@ sanitized performance cache.
 
 - NAV on dashboard cards is current holdings market value plus uninvested cash.
 - Cash is deposits minus buys plus sells.
+- Imported broker deposits are first reduced by the net funding required by
+  excluded individual-stock trades. Only the retained ETF sleeve and its cash
+  are included in private account NAV and XIRR.
+- Imported broker deposits replace manual FX rows as XIRR funding events.
+  Accounts without imported deposits retain the legacy manual-FX fallback.
 - Cost basis defaults to average cost in product UI.
 - Performance chart uses daily-linked TWR.
 - Performance chart uses the trading-performance view: it starts on the first
@@ -75,6 +80,11 @@ Trade-funding flows are inferred from transactions, not deposit rows. Sell
 proceeds fund later buys first; only the unfunded portion of a buy is treated
 as a new external flow. This keeps the curve focused on trading performance and
 prevents an early deposit with no trade from starting the SPY clock.
+
+This chart contract is intentionally separate from account cash. Adjusted
+broker deposits affect private NAV and XIRR, while the dashboard and public
+share performance curve continues to use the same transaction-derived TWR
+cache and does not expose cashflow amounts.
 
 This is closer to total-return reporting for ETFs such as SPY/QQQ than raw
 close-only curves. It is still a proxy, not a broker statement: true IBKR

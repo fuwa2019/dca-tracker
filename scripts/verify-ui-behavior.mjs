@@ -69,15 +69,18 @@ assert.match(transactionTools, /新增导入/, 'Schwab import supports append mo
 assert.match(transactionTools, /清空全部后导入/, 'Schwab import supports full reset mode');
 assert.match(transactionTools, /className="sr-only"/, 'Schwab file input uses the custom accessible picker');
 assert.match(transactionTools, /确认清空全部组合数据/, 'reset requires a visible full-reset confirmation');
-assert.match(transactionTools, /p_cashflows:\s*\[\]/, 'Schwab import intentionally excludes transfer rows');
-assert.match(transactionTools, /selectedRows[\s\S]*parsed\?\.rows[\s\S]*\.map/, 'Schwab import keeps every standard Buy/Sell row');
+assert.match(transactionTools, /p_cashflows:\s*cashPlan\.deposits\.map/, 'Schwab import sends adjusted deposits');
+assert.match(transactionTools, /selectedRows[\s\S]*confirmedEtfSymbols\.has/, 'Schwab import keeps confirmed ETF trades only');
+assert.match(transactionTools, /excludedStockRows[\s\S]*confirmedStockSymbols\.has/, 'individual-stock trades are explicitly excluded');
+assert.match(transactionTools, /buildSchwabEtfCashPlan/, 'the import preview uses the retained-ETF cash ledger');
+assert.match(transactionTools, /含个股或存款的文件必须清空全部后导入/, 'stock/deposit reconstruction blocks append mode');
 assert.match(transactionTools, /resetCoverageConfirmed[\s\S]*border-warn\/50 bg-warn-soft/, 'ETF reset confirmation has a selected state');
 assert.match(transactionTools, /全部交易、全部现金流和资金批次将先清除/, 'reset explicitly clears all portfolio input data');
 assert.match(transactionTools, /手工交易、手工现金流和资金批次也会删除/, 'strict reset does not preserve manual portfolio data');
 assert.match(transactionTools, /确认清空并导入/, 'full reset has a second confirmation');
 assert.match(transactionTools, /打开数据健康/, 'successful import points to price coverage health');
 assert.match(transactionTools, /exportSchwabTransactions/, 'transaction tools expose Schwab-format export');
-assert.match(transactionTools, /exportSchwabTransactions\(exportRows\)/, 'Schwab export contains trade rows only');
+assert.match(transactionTools, /exportSchwabTransactions\([\s\S]*?exportRows,[\s\S]*?exportDeposits\.map/, 'Schwab export contains ETF trades and adjusted deposits');
 assert.match(transactionTools, /Schwab_Transactions_/, 'combined export uses a transaction-history filename');
 
 const quote = readFileSync(new URL('../src/lib/quote.ts', import.meta.url), 'utf8');

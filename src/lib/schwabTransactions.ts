@@ -71,6 +71,16 @@ export interface SchwabParseResult {
   errors: SchwabParseError[];
 }
 
+export interface SchwabEtfCashPlan {
+  deposits: SchwabDepositImportRow[];
+  grossDeposits: number;
+  excludedStockFunding: number;
+  adjustedDeposits: number;
+  endingCash: number;
+  minimumCash: number;
+  errors: SchwabParseError[];
+}
+
 export interface ExistingTransactionLike {
   id: string;
   trade_date: string;
@@ -139,6 +149,8 @@ const AMOUNT_TOLERANCE_USD = 0.0200001;
 const SHARES_DECIMAL_PLACES = 10;
 const PRICE_DECIMAL_PLACES = 12;
 const FEES_DECIMAL_PLACES = 10;
+const CASH_DECIMAL_PLACES = 10;
+const CASH_TOLERANCE_USD = 0.00000001;
 const SCHWAB_DEPOSIT_ACTIONS = new Set([
   'ach transfer',
   'cash deposit',
@@ -187,6 +199,40 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
     const action = cells[1].trim();
     const side = parseSide(action);
     if (!side) {
+      if (isSchwabDepositAction(action)) {
+        const depositDate = parseSchwabDate(cells[0]);
+        const amount = parseMoneyNumber(cells[7]);
+        const rowErrors: string[] = [];
+        if (!depositDate) rowErrors.push('日期无效');
+        if (!Number.isFinite(amount)) rowErrors.push('入金金额无效');
+        if (amount >= 1_000_000_000_000) rowErrors.push('入金金额超出数据库精度');
+        if (decimalPlaces(cells[7]) > CASH_DECIMAL_PLACES) {
+          rowErrors.push(`入金金额最多支持 ${CASH_DECIMAL_PLACES} 位小数`);
+        }
+
+        if (Number.isFinite(amount) && amount <= 0) {
+          ignored.push({
+            sourceIndex,
+            action,
+            symbol: normalizeTicker(cells[2]),
+            description: cells[3].trim(),
+            reason: 'unsupported_action',
+          });
+          continue;
+        }
+        if (rowErrors.length > 0 || !depositDate) {
+          errors.push({ sourceIndex, message: `第 ${sourceIndex} 行：${rowErrors.join('；')}` });
+          continue;
+        }
+        validDeposits.push({
+          source_index: sourceIndex,
+          deposit_date: depositDate,
+          source_action: action,
+          source_description: cells[3].trim(),
+          amount,
+        });
+        continue;
+      }
       ignored.push({
         sourceIndex,
         action,
@@ -279,6 +325,7 @@ function parsePortfolioCsvTransactions(
 ): SchwabParseResult {
   const ignored: SchwabIgnoredRow[] = [];
   const validRows: Omit<SchwabImportRow, 'duplicate_ordinal' | 'import_key'>[] = [];
+  const validDeposits: Omit<SchwabDepositImportRow, 'duplicate_ordinal' | 'import_key'>[] = [];
   const body = parsed.data.slice(parsed.headerIndex + 1);
 
   if (body.length > MAX_ROWS) {
@@ -293,6 +340,29 @@ function parsePortfolioCsvTransactions(
     const action = cells[1].trim();
     const side = parseSide(action);
     if (!side) {
+      if (normalizeAction(action) === 'deposit') {
+        const depositDate = parsePortfolioCsvDate(cells[5]);
+        const amount = parseMoneyNumber(cells[2]);
+        const rowErrors: string[] = [];
+        if (!depositDate) rowErrors.push('日期无效');
+        if (!isPositiveFinite(amount)) rowErrors.push('存款金额必须为正数');
+        if (amount >= 1_000_000_000_000) rowErrors.push('存款金额超出数据库精度');
+        if (decimalPlaces(cells[2]) > CASH_DECIMAL_PLACES) {
+          rowErrors.push(`存款金额最多支持 ${CASH_DECIMAL_PLACES} 位小数`);
+        }
+        if (rowErrors.length > 0 || !depositDate) {
+          errors.push({ sourceIndex, message: `第 ${sourceIndex} 行：${rowErrors.join('；')}` });
+          continue;
+        }
+        validDeposits.push({
+          source_index: sourceIndex,
+          deposit_date: depositDate,
+          source_action: 'Deposit',
+          source_description: '',
+          amount,
+        });
+        continue;
+      }
       ignored.push({
         sourceIndex,
         action,
@@ -355,7 +425,7 @@ function parsePortfolioCsvTransactions(
     });
   }
 
-  return finalizeParseResult(parsed, errors, ignored, validRows, []);
+  return finalizeParseResult(parsed, errors, ignored, validRows, validDeposits);
 }
 
 function finalizeParseResult(
@@ -376,17 +446,7 @@ function finalizeParseResult(
       import_key: schwabImportKey(row, duplicateOrdinal),
     };
   });
-  const depositDuplicateCounts = new Map<string, number>();
-  const deposits = validDeposits.map((row) => {
-    const identity = schwabDepositIdentity(row);
-    const duplicateOrdinal = (depositDuplicateCounts.get(identity) ?? 0) + 1;
-    depositDuplicateCounts.set(identity, duplicateOrdinal);
-    return {
-      ...row,
-      duplicate_ordinal: duplicateOrdinal,
-      import_key: schwabDepositImportKey(row, duplicateOrdinal),
-    };
-  });
+  const deposits = finalizeDepositRows(validDeposits);
 
   return {
     delimiter: parsed.delimiter,
@@ -426,6 +486,133 @@ export function classifySchwabSymbol(input: {
     return 'stock';
   }
   return 'unknown';
+}
+
+/**
+ * Rebuild the external deposits for the retained ETF sleeve. Stock sale
+ * proceeds fund later stock buys first; only the remaining stock buy cost is
+ * removed from the latest deposit available on or before that buy date.
+ */
+export function buildSchwabEtfCashPlan(input: {
+  deposits: SchwabDepositImportRow[];
+  etfRows: SchwabImportRow[];
+  stockRows: SchwabImportRow[];
+}): SchwabEtfCashPlan {
+  if (input.deposits.length === 0 && input.stockRows.length === 0) {
+    return {
+      deposits: [],
+      grossDeposits: 0,
+      excludedStockFunding: 0,
+      adjustedDeposits: 0,
+      endingCash: 0,
+      minimumCash: 0,
+      errors: [],
+    };
+  }
+
+  const grossDeposits = sumCash(input.deposits.map((row) => row.amount));
+  const stockByDate = new Map<string, { buys: number; sells: number }>();
+  for (const row of input.stockRows) {
+    const totals = stockByDate.get(row.trade_date) ?? { buys: 0, sells: 0 };
+    const amount = transactionCashAmount(row);
+    if (row.side === 'buy') totals.buys = roundCash(totals.buys + amount);
+    else totals.sells = roundCash(totals.sells + amount);
+    stockByDate.set(row.trade_date, totals);
+  }
+  const stockDates = [...stockByDate.keys()].sort();
+  const stockFundingByDate = new Map<string, number>();
+  let stockCash = 0;
+
+  for (const date of stockDates) {
+    const totals = stockByDate.get(date)!;
+    stockCash = roundCash(stockCash + totals.sells);
+    const funding = roundCash(Math.max(totals.buys - stockCash, 0));
+    stockCash = roundCash(Math.max(stockCash - totals.buys, 0));
+    if (funding > CASH_TOLERANCE_USD) stockFundingByDate.set(date, funding);
+  }
+  const excludedStockFunding = sumCash([...stockFundingByDate.values()]);
+
+  const remainingDeposits = input.deposits.map((row) => ({
+    row,
+    amount: roundCash(row.amount),
+  }));
+  const errors: SchwabParseError[] = [];
+
+  for (const [date, required] of stockFundingByDate) {
+    let pending = required;
+    const eligible = remainingDeposits
+      .filter((item) => item.row.deposit_date <= date && item.amount > CASH_TOLERANCE_USD)
+      .sort((left, right) =>
+        right.row.deposit_date.localeCompare(left.row.deposit_date)
+        || right.row.source_index - left.row.source_index);
+
+    for (const item of eligible) {
+      if (pending <= CASH_TOLERANCE_USD) break;
+      const deduction = Math.min(item.amount, pending);
+      item.amount = roundCash(item.amount - deduction);
+      pending = roundCash(pending - deduction);
+    }
+
+    if (pending > CASH_TOLERANCE_USD) {
+      errors.push({
+        message: `${date} 的个股净投入缺少 ${formatCash(pending)} 可扣减存款，无法重建 ETF 现金。`,
+      });
+    }
+  }
+
+  const deposits = finalizeDepositRows(remainingDeposits
+    .filter((item) => item.amount > CASH_TOLERANCE_USD)
+    .map((item) => ({
+      ...item.row,
+      amount: item.amount,
+      source_description: roundCash(item.row.amount - item.amount) > CASH_TOLERANCE_USD
+        ? (item.row.source_description.trim()
+            ? `${item.row.source_description.trim()} · 已扣除个股净投入`
+            : '已扣除个股净投入')
+        : item.row.source_description,
+    })));
+  const adjustedDeposits = sumCash(deposits.map((row) => row.amount));
+
+  const depositByDate = new Map<string, number>();
+  for (const row of deposits) {
+    depositByDate.set(row.deposit_date, roundCash((depositByDate.get(row.deposit_date) ?? 0) + row.amount));
+  }
+  const etfByDate = new Map<string, { buys: number; sells: number }>();
+  for (const row of input.etfRows) {
+    const totals = etfByDate.get(row.trade_date) ?? { buys: 0, sells: 0 };
+    const amount = transactionCashAmount(row);
+    if (row.side === 'buy') totals.buys = roundCash(totals.buys + amount);
+    else totals.sells = roundCash(totals.sells + amount);
+    etfByDate.set(row.trade_date, totals);
+  }
+
+  const ledgerDates = [...new Set([
+    ...depositByDate.keys(),
+    ...etfByDate.keys(),
+  ])].sort();
+  let cash = 0;
+  let minimumCash = 0;
+  for (const date of ledgerDates) {
+    const trades = etfByDate.get(date) ?? { buys: 0, sells: 0 };
+    cash = roundCash(cash + (depositByDate.get(date) ?? 0) + trades.sells - trades.buys);
+    minimumCash = Math.min(minimumCash, cash);
+    if (cash < -CASH_TOLERANCE_USD) {
+      errors.push({
+        message: `${date} 扣除个股投入后现金为 ${formatCash(cash)}，文件中的存款不足以覆盖 ETF 交易。`,
+      });
+      break;
+    }
+  }
+
+  return {
+    deposits,
+    grossDeposits,
+    excludedStockFunding,
+    adjustedDeposits,
+    endingCash: cash,
+    minimumCash,
+    errors,
+  };
 }
 
 export function buildSchwabImportDiff(
@@ -561,7 +748,7 @@ export function exportSchwabTransactions(
       '',
       '',
       '',
-      formatSignedMoney(Number(deposit.usd_amount)),
+      formatSignedMoney(Number(deposit.usd_amount), CASH_DECIMAL_PLACES),
     ],
   }));
   const body = [...transactionRows, ...depositRows]
@@ -614,7 +801,7 @@ export function schwabDepositIdentity(input: {
     input.deposit_date,
     normalizeAction(input.source_action),
     (input.source_description ?? '').trim(),
-    Number(input.amount).toFixed(2),
+    Number(input.amount).toFixed(CASH_DECIMAL_PLACES),
   ].join('|');
 }
 
@@ -754,18 +941,54 @@ function formatDecimal(value: number, maximumFractionDigits: number): string {
   return value.toFixed(maximumFractionDigits).replace(/\.?0+$/, '');
 }
 
-function formatSignedMoney(value: number): string {
-  const absolute = `$${Math.abs(value).toFixed(2)}`;
+function formatSignedMoney(value: number, maximumFractionDigits = 2): string {
+  const absolute = maximumFractionDigits === 2
+    ? `$${Math.abs(value).toFixed(2)}`
+    : `$${formatDecimal(Math.abs(value), maximumFractionDigits)}`;
   return value < 0 ? `-${absolute}` : absolute;
+}
+
+function formatCash(value: number): string {
+  return formatSignedMoney(value, CASH_DECIMAL_PLACES);
+}
+
+function roundCash(value: number): number {
+  return Number(value.toFixed(CASH_DECIMAL_PLACES));
+}
+
+function sumCash(values: number[]): number {
+  return roundCash(values.reduce((sum, value) => sum + value, 0));
+}
+
+function transactionCashAmount(row: Pick<SchwabImportRow, 'side' | 'shares' | 'price' | 'fees_usd'>): number {
+  const notional = row.shares * row.price;
+  return roundCash(row.side === 'buy' ? notional + row.fees_usd : notional - row.fees_usd);
+}
+
+function finalizeDepositRows(
+  rows: Array<Omit<SchwabDepositImportRow, 'duplicate_ordinal' | 'import_key'>
+    | SchwabDepositImportRow>,
+): SchwabDepositImportRow[] {
+  const duplicateCounts = new Map<string, number>();
+  return rows.map((row) => {
+    const identity = schwabDepositIdentity(row);
+    const duplicateOrdinal = (duplicateCounts.get(identity) ?? 0) + 1;
+    duplicateCounts.set(identity, duplicateOrdinal);
+    return {
+      ...row,
+      duplicate_ordinal: duplicateOrdinal,
+      import_key: schwabDepositImportKey(row, duplicateOrdinal),
+    };
+  });
 }
 
 function schwabDepositAmountIdentity(input: {
   deposit_date: string;
   amount: number | string;
 }): string {
-  return `${input.deposit_date}|${Number(input.amount).toFixed(2)}`;
+  return `${input.deposit_date}|${Number(input.amount).toFixed(CASH_DECIMAL_PLACES)}`;
 }
 
 function existingDepositIdentity(input: ExistingCashflowLike): string {
-  return `${input.usd_in_date}|${Number(input.usd_amount).toFixed(2)}`;
+  return `${input.usd_in_date}|${Number(input.usd_amount).toFixed(CASH_DECIMAL_PLACES)}`;
 }

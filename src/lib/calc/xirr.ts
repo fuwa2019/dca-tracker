@@ -36,12 +36,21 @@ export function computeXirr(events: CashEvent[]): number | null {
  *   - Plus a final "virtual redemption" = current marketValue on today's date (positive)
  */
 export function buildXirrEvents(args: {
-  cashflows: Array<{ usd_in_date: string | null; usd_amount: number | null }>;
+  cashflows: Array<{
+    usd_in_date: string | null;
+    usd_amount: number | null;
+    cashflow_kind?: 'fx_transfer' | 'broker_deposit';
+  }>;
   currentMarketValueUsd: number;
   asOf?: Date;
 }): CashEvent[] {
   const events: CashEvent[] = [];
-  for (const c of args.cashflows) {
+  const importedDeposits = args.cashflows.filter((cashflow) =>
+    cashflow.cashflow_kind === 'broker_deposit');
+  const fundingCashflows = importedDeposits.length > 0
+    ? importedDeposits
+    : args.cashflows;
+  for (const c of fundingCashflows) {
     if (!c.usd_in_date || !c.usd_amount) continue;
     events.push({ amount: -Number(c.usd_amount), when: new Date(c.usd_in_date + 'T00:00:00Z') });
   }

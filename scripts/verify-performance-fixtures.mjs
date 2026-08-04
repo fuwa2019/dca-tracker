@@ -6,7 +6,8 @@ import {
   transactionCashEffect,
 } from '../src/lib/calc/transactionAmounts.ts';
 import { summarizeCashflows } from '../src/lib/calc/cashflows.ts';
-import { assumedBrokerCashBalance } from '../src/lib/calc/cashBalance.ts';
+import { calculateBrokerCashBalance } from '../src/lib/calc/cashBalance.ts';
+import { buildXirrEvents } from '../src/lib/calc/xirr.ts';
 
 function dailyLinkedTwr(rows) {
   let cumulative = 1;
@@ -87,12 +88,30 @@ approx(importedDepositSummary.totalCny, 720);
 approx(importedDepositSummary.totalUsdIdeal, 100);
 approx(importedDepositSummary.totalLoss, 1);
 approx(importedDepositSummary.lossPct, 0.01);
-assert.equal(
-  assumedBrokerCashBalance(),
-  0,
-  'broker cash is intentionally assumed to be zero instead of inferred from transfers',
-);
 
+const authoritativeDepositEvents = buildXirrEvents({
+  cashflows: [
+    { usd_in_date: '2026-01-01', usd_amount: 1000, cashflow_kind: 'fx_transfer' },
+    { usd_in_date: '2026-01-02', usd_amount: 650, cashflow_kind: 'broker_deposit' },
+  ],
+  currentMarketValueUsd: 700,
+  asOf: new Date('2026-02-01T00:00:00Z'),
+});
+assert.deepEqual(
+  authoritativeDepositEvents.map((event) => event.amount),
+  [-650, 700],
+  'imported broker deposits replace manual FX rows as the XIRR funding source',
+);
+const legacyFxEvents = buildXirrEvents({
+  cashflows: [{ usd_in_date: '2026-01-01', usd_amount: 1000, cashflow_kind: 'fx_transfer' }],
+  currentMarketValueUsd: 1100,
+  asOf: new Date('2026-02-01T00:00:00Z'),
+});
+assert.deepEqual(
+  legacyFxEvents.map((event) => event.amount),
+  [-1000, 1100],
+  'manual FX rows remain the legacy XIRR fallback when no broker deposit exists',
+);
 const buyWithFee = transaction({
   id: 'buy-fee',
   trade_date: '2026-01-02',
@@ -118,6 +137,10 @@ assert.equal(
   transactionCashEffect(buyWithFee) + transactionCashEffect(sellWithFee),
   -52,
   'cash balance uses buy total cost and sell net proceeds',
+);
+approx(
+  calculateBrokerCashBalance([{ usd_amount: 224.4 }], [buyWithFee, sellWithFee]),
+  172.4,
 );
 
 const [feePosition] = aggregatePositions([buyWithFee, sellWithFee]);

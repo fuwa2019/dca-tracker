@@ -3,17 +3,22 @@
 ## Scope
 
 - Add browser-only parsing for Schwab transaction CSV/TSV exports.
-- Import every standard `Buy`/`Sell` row, including ETFs and individual stocks.
-- Ignore deposits, withdrawals, dividends, reinvestments, taxes, and other
-  non-trade rows; partial transfer history is not used to infer broker cash.
+- Classify every standard `Buy`/`Sell` symbol and import confirmed ETFs only.
+- Exclude individual-stock trades and deduct their net required funding from
+  recognized positive deposits. Stock sale proceeds fund later stock buys
+  before another deposit deduction is required.
+- Parse positive recognized Schwab deposits and six-column Portfolio CSV
+  `Deposit` rows. Continue to ignore withdrawals, dividends, taxes, and other
+  unsupported cash events.
 - Also accept the six-column `Symbol,Side,Qty,Fill Price,Commission,Closing
-  Time` portfolio CSV format; adapt only its `Buy`/`Sell` rows to the existing
-  transaction contract and ignore other `Side` values.
+  Time` portfolio CSV format; adapt its `Buy`/`Sell` rows and `Deposit` cash
+  rows to the existing transaction and broker-deposit contracts.
 - Preserve up to 10 decimal places for quantity and commission and up to 12
   decimal places for fill price, matching the portfolio CSV producer's full
   supported output rather than rounding imported trades.
 - Support append-only import and atomic full portfolio-input reset/import.
-- Export all stored trades in the same eight-column Schwab format.
+- Export stored ETF trades and adjusted deposits in the same eight-column
+  Schwab format.
 - Preserve application metadata for matching transactions only in append mode.
 - Include transaction fees in private portfolio calculations.
 
@@ -21,20 +26,23 @@
 
 - Existing migrations: `0043_schwab_transaction_import.sql`,
   `0044_full_reset_schwab_import.sql`, and
-  `0045_transaction_numeric_precision.sql`.
+  `0045_transaction_numeric_precision.sql`. Migration
+  `0046_adjusted_deposit_precision.sql` widens imported USD cash to ten decimal
+  places and upgrades the private helper's deposit identity and validation.
 - Add transaction fee, source description, import source, and import key fields.
-- The historical broker-deposit schema remains compatible with the deployed
-  RPC, but the current client always sends an empty cashflow array.
+- The client sends only adjusted positive broker deposits through the existing
+  authenticated RPC cashflow array.
 - Enforce per-user import-key uniqueness.
 - Keep the browser and database import-key formats on the same 10/12/10
   quantity/price/fee precision so distinct fills do not collide.
 - Expose an authenticated, security-invoker import RPC.
 - Derive ownership from `auth.uid()` and rely on transaction RLS.
 - Full reset removes every transaction, cashflow, and funding batch owned by
-  the current user, then rebuilds every standard Buy/Sell row from the current
-  file without rebuilding cashflows.
-- Broker cash is intentionally fixed at zero. Total invested capital is inferred
-  from trade funding so a reset without cashflows does not corrupt total P/L.
+  the current user, then rebuilds confirmed ETF trades and adjusted deposits.
+- Files containing individual stocks or deposits cannot use append mode because
+  append cannot remove existing stocks or replace the account cash basis.
+- Broker cash is adjusted deposits minus ETF buys plus ETF sells. Trade-only
+  files without deposits keep the zero-cash and inferred-funding fallback.
 - Settings, share links, quotes, daily prices, caches owned by system workflows,
   and other users' rows remain outside the reset scope.
 - Keep all public-share responses unchanged.
@@ -45,15 +53,15 @@
 - Use synthetic fixtures in tests.
 - Do not apply the migration or deploy without separate authorization.
 - Full reset intentionally deletes all transactions, manual cashflows, imported
-  deposits, and funding batches.
-- The confirmation must state that all standard trades will be rebuilt,
-  cashflows will not be rebuilt, and broker cash is treated as zero.
+  deposits, and funding batches before rebuilding ETF trades and adjusted cash.
+- The confirmation must state how many ETF trades and adjusted deposits will be
+  rebuilt and that individual-stock trades will not be imported.
 - Any validation, oversell, or write failure must roll back the full import.
 
 ## Verification
 
-- Schwab parsing, all-security import, ignored-transfer, strict reset, and
-  trade-only round-trip export tests.
+- Schwab/Portfolio parsing, symbol classification, ETF-only selection, adjusted
+  deposit ledger, strict reset, and trade-plus-deposit round-trip export tests.
 - Synthetic high-precision portfolio rows, precision boundaries, and import-key
   collision regression tests.
 - Fee-aware finance fixtures.
@@ -100,3 +108,6 @@
   `a11de78f-534a-4bf6-884e-06d88b500fbc` completed from that commit. The
   canonical site and fresh browser checks serve the production-configured
   bundle without the missing-Supabase-config warning.
+- Migration `0046_adjusted_deposit_precision.sql` and the ETF-only adjusted-cash
+  frontend are local changes only as of 2026-08-04. They have not been applied,
+  committed, pushed, or deployed.

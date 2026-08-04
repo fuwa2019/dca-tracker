@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { assumedBrokerCashBalance } from '../src/lib/calc/cashBalance.ts';
+import { calculateBrokerCashBalance } from '../src/lib/calc/cashBalance.ts';
 import { totalTradeFunding } from '../src/lib/calc/history.ts';
 import {
   buildSchwabImportDiff,
+  buildSchwabEtfCashPlan,
   classifySchwabSymbol,
   exportSchwabTransactions,
   parseSchwabTransactions,
@@ -26,16 +27,16 @@ const tabFixture = [
 const parsedTab = parseSchwabTransactions(`\uFEFF${tabFixture}`);
 assert.equal(parsedTab.delimiter, '\t');
 assert.equal(parsedTab.headerRow, 2);
-assert.equal(parsedTab.rows.length, 3, 'all standard Buy/Sell rows are imported, including stocks');
-assert.equal(parsedTab.deposits.length, 0, 'brokerage transfer rows are intentionally not imported');
-assert.equal(parsedTab.ignored.length, 4);
+assert.equal(parsedTab.rows.length, 3, 'all standard Buy/Sell rows are parsed before classification');
+assert.equal(parsedTab.deposits.length, 2, 'positive recognized deposits are parsed');
+assert.equal(parsedTab.ignored.length, 2);
 assert.equal(parsedTab.errors.length, 0);
 assert.equal(parsedTab.rows[2].trade_date, '2025-04-14', '`as of` date is effective');
 assert.equal(parsedTab.rows[0].fees_usd, 0, 'blank fee becomes zero');
 assert.equal(parsedTab.rows[1].ticker, 'LITE');
 assert.ok(
-  parsedTab.ignored.some((row) => row.action === 'MoneyLink Transfer'),
-  'brokerage transfers are ignored regardless of direction',
+  parsedTab.ignored.some((row) => row.action === 'MoneyLink Transfer' && row.description.includes('OUTBOUND')),
+  'negative transfer rows remain ignored',
 );
 
 const portfolioCsvFixture = [
@@ -43,7 +44,7 @@ const portfolioCsvFixture = [
   'NASDAQ:VGT,Buy,0.25,200,0.01,2026-08-04 16:30:00',
   'NYSEARCA:SGOV,Sell,0.5,100,0.50,2026-08-03 15:45:00',
   'NASDAQ:ACME,Buy,1,10,0,2026-08-02 09:00:00',
-  'USD:USD,Deposit,,,,2026-08-01 00:00:00',
+  'USD:USD,Deposit,125.4012345678,,,2026-08-01 00:00:00',
   'NASDAQ:VGT,Dividend,,,,2026-08-01 00:00:00',
   'NASDAQ:VGT,Taxes and fees,,,,2026-08-01 00:00:00',
 ].join('\n');
@@ -51,8 +52,9 @@ const parsedPortfolioCsv = parseSchwabTransactions(`\uFEFF${portfolioCsvFixture}
 assert.equal(parsedPortfolioCsv.delimiter, ',');
 assert.equal(parsedPortfolioCsv.headerRow, 1);
 assert.equal(parsedPortfolioCsv.rows.length, 3);
-assert.equal(parsedPortfolioCsv.deposits.length, 0, 'portfolio CSV non-trade rows remain ignored');
-assert.equal(parsedPortfolioCsv.ignored.length, 3);
+assert.equal(parsedPortfolioCsv.deposits.length, 1, 'portfolio CSV Deposit Qty is parsed as cash');
+assert.equal(parsedPortfolioCsv.deposits[0].amount, 125.4012345678);
+assert.equal(parsedPortfolioCsv.ignored.length, 2);
 assert.equal(parsedPortfolioCsv.errors.length, 0);
 assert.equal(parsedPortfolioCsv.rows[0].trade_date, '2026-08-04');
 assert.equal(parsedPortfolioCsv.rows[0].fees_usd, 0.01);
@@ -137,11 +139,11 @@ assert.match(invalidSellFee.errors[0].message, /卖出金额必须为正数|卖�
 
 const invalidDeposit = parseSchwabTransactions([
   SCHWAB_HEADERS.join('\t'),
-  '04/10/2025\tWire Received\t\tSYNTHETIC TEST DEPOSIT\t\t\t\t$125.401',
+  '04/10/2025\tWire Received\t\tSYNTHETIC TEST DEPOSIT\t\t\t\t$125.12345678901',
 ].join('\n'));
 assert.equal(invalidDeposit.deposits.length, 0);
-assert.equal(invalidDeposit.errors.length, 0, 'ignored transfer rows do not block trade import');
-assert.equal(invalidDeposit.ignored.length, 1);
+assert.equal(invalidDeposit.errors.length, 1);
+assert.match(invalidDeposit.errors[0].message, /入金金额最多支持 10 位小数/);
 
 const duplicate = parseSchwabTransactions([
   SCHWAB_HEADERS.join('\t'),
@@ -159,6 +161,52 @@ assert.equal(classifySchwabSymbol({ ticker: 'QQQM', knownEtfSymbols: known }), '
 assert.equal(classifySchwabSymbol({ ticker: 'IWM', providerType: 'ETF' }), 'etf');
 assert.equal(classifySchwabSymbol({ ticker: 'LITE', providerType: 'EQUITY' }), 'stock');
 assert.equal(classifySchwabSymbol({ ticker: 'MYSTERY' }), 'unknown');
+
+const cashPlanParsed = parseSchwabTransactions([
+  PORTFOLIO_CSV_HEADERS.join(','),
+  'USD:USD,Deposit,1000,,,2026-01-01 09:00:00',
+  'AMEX:VGT,Buy,6,100,0,2026-01-02 09:00:00',
+  'NASDAQ:LITE,Buy,3,100,0,2026-01-02 09:01:00',
+  'NASDAQ:LITE,Sell,1,100,0,2026-01-03 09:00:00',
+  'NASDAQ:LITE,Buy,1.5,100,0,2026-01-04 09:00:00',
+].join('\n'));
+const etfRows = cashPlanParsed.rows.filter((row) => row.ticker === 'VGT');
+const stockRows = cashPlanParsed.rows.filter((row) => row.ticker === 'LITE');
+const tradeOnlyPlan = buildSchwabEtfCashPlan({ deposits: [], etfRows, stockRows: [] });
+assert.equal(tradeOnlyPlan.errors.length, 0);
+assert.equal(tradeOnlyPlan.endingCash, 0, 'trade-only imports retain the legacy zero-cash fallback');
+const cashPlan = buildSchwabEtfCashPlan({
+  deposits: cashPlanParsed.deposits,
+  etfRows,
+  stockRows,
+});
+assert.equal(cashPlan.errors.length, 0);
+assert.equal(cashPlan.grossDeposits, 1000);
+assert.equal(cashPlan.excludedStockFunding, 350, 'stock sale proceeds fund later stock buys first');
+assert.equal(cashPlan.adjustedDeposits, 650);
+assert.equal(cashPlan.endingCash, 50);
+assert.equal(cashPlan.deposits.length, 1);
+assert.equal(cashPlan.deposits[0].amount, 650);
+assert.match(cashPlan.deposits[0].source_description, /已扣除个股净投入/);
+assert.equal(
+  calculateBrokerCashBalance(
+    cashPlan.deposits.map((row) => ({ usd_amount: row.amount })),
+    etfRows,
+  ),
+  50,
+  'imported adjusted deposits reconstruct retained ETF cash',
+);
+
+const insufficientCashPlan = buildSchwabEtfCashPlan({
+  deposits: cashPlanParsed.deposits.map((row) => ({ ...row, amount: 900 })),
+  etfRows,
+  stockRows,
+});
+assert.match(
+  insufficientCashPlan.errors[0]?.message ?? '',
+  /存款不足以覆盖 ETF 交易/,
+  'the retained ETF ledger cannot go negative at any historical date',
+);
 
 const existing = [{
   id: 'existing-1',
@@ -236,18 +284,26 @@ const exported = exportSchwabTransactions([
     fees_usd: 0,
     created_at: '2025-04-09T10:00:00Z',
   },
-]);
+], [{
+  usd_in_date: '2025-04-12',
+  usd_amount: 650.123456789,
+  source_action: 'Deposit',
+  source_description: 'SYNTHETIC ADJUSTED DEPOSIT',
+  created_at: '2025-04-12T10:00:00Z',
+}]);
 assert.ok(exported.startsWith('\uFEFF'));
 assert.match(exported, /Date\tAction\tSymbol\tDescription\tQuantity\tPrice\tFees & Comm\tAmount/);
 assert.match(exported, /0\.123456789\t\$123\.123456789012\t\$0\.0000000001/);
 assert.match(exported, /-\$50\.01/);
+assert.match(exported, /Deposit\t\tSYNTHETIC ADJUSTED DEPOSIT\t\t\t\t\$650\.123456789/);
 assert.match(exported, /\t\$50\.00\r\n$/);
 assert.doesNotMatch(exported, /Wire Received|MoneyLink Transfer/);
 
 const roundTrip = parseSchwabTransactions(exported);
 assert.equal(roundTrip.errors.length, 0);
 assert.equal(roundTrip.rows.length, 3);
-assert.equal(roundTrip.deposits.length, 0);
+assert.equal(roundTrip.deposits.length, 1);
+assert.equal(roundTrip.deposits[0].amount, 650.123456789);
 assert.equal(roundTrip.rows[0].shares, 0.123456789);
 assert.equal(roundTrip.rows[0].price, 123.123456789012);
 assert.equal(roundTrip.rows[0].fees_usd, 0.0000000001);
@@ -260,11 +316,6 @@ const inferredFundingRows = [
   syntheticTransaction('funding-2', '2026-07-02', 'QQQ', 1, 477),
 ];
 assert.equal(totalTradeFunding(inferredFundingRows), 1477);
-assert.equal(
-  assumedBrokerCashBalance(),
-  0,
-  'a partial transfer history never creates synthetic idle cash',
-);
 
 const migration = readFileSync(
   new URL('../supabase/migrations/0043_schwab_transaction_import.sql', import.meta.url),
@@ -276,6 +327,10 @@ const fullResetMigration = readFileSync(
 );
 const precisionMigration = readFileSync(
   new URL('../supabase/migrations/0045_transaction_numeric_precision.sql', import.meta.url),
+  'utf8',
+);
+const adjustedDepositMigration = readFileSync(
+  new URL('../supabase/migrations/0046_adjusted_deposit_precision.sql', import.meta.url),
   'utf8',
 );
 assert.match(migration, /security invoker/, 'import RPC uses caller privileges');
@@ -431,6 +486,34 @@ assert.match(
   precisionMigration,
   /grant execute on function dca_private\._import_schwab_transactions_v1\(jsonb, jsonb, text\[\], text\)\s+to authenticated/,
   'the authenticated security-invoker wrapper can still execute the upgraded helper',
+);
+assert.match(
+  adjustedDepositMigration,
+  /alter column usd_amount type numeric\(22, 10\)/,
+  'adjusted deposits preserve ten decimal places',
+);
+assert.match(
+  adjustedDepositMigration,
+  /drop trigger if exists cashflows_clear_import_identity[\s\S]*?create trigger cashflows_clear_import_identity/,
+  'the cashflow identity trigger is recreated around the type change',
+);
+assert.match(adjustedDepositMigration, /round\(amount, 10\)/);
+assert.match(adjustedDepositMigration, /FM999999999999990\.0000000000/);
+assert.match(
+  adjustedDepositMigration,
+  /alter function dca_private\._import_schwab_transactions_v1\(jsonb, jsonb, text\[\], text\)\s+security invoker/,
+  'the deposit precision patch preserves security-invoker behavior',
+);
+assert.doesNotMatch(adjustedDepositMigration, /security definer/i);
+assert.match(
+  adjustedDepositMigration,
+  /revoke all on function dca_private\._import_schwab_transactions_v1\(jsonb, jsonb, text\[\], text\)\s+from public, anon, authenticated/,
+  'the private helper remains unavailable to public and anonymous roles',
+);
+assert.match(
+  adjustedDepositMigration,
+  /grant execute on function dca_private\._import_schwab_transactions_v1\(jsonb, jsonb, text\[\], text\)\s+to authenticated/,
+  'the authenticated wrapper can execute the deposit precision helper',
 );
 
 function syntheticTransaction(

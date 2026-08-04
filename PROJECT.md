@@ -189,13 +189,19 @@ for the production application.
 
 ## Financial Contracts
 
-- Account NAV is holdings market value because tracked broker cash is assumed
-  to be zero.
-- The tracked Schwab account assumes zero idle broker cash; account NAV is the
-  holdings market value and must not infer cash from partial transfer history.
-- Manual cashflows remain available for FX-loss and XIRR workflows, but Schwab
-  import ignores transfer rows and infers required investment funding from
-  standard Buy/Sell history.
+- Account NAV is holdings market value plus cash reconstructed from imported
+  broker deposits. Trade-only imports without broker deposits retain the
+  legacy zero-cash behavior.
+- Portfolio CSV imports keep confirmed ETF trades, exclude individual-stock
+  trades, and deduct the stock sleeve's net required funding from recognized
+  `Deposit` rows before importing them as broker cash.
+- Stock sale proceeds fund later stock buys before any additional stock funding
+  is deducted. The retained ETF cash ledger must never be negative on a source
+  date; incomplete deposit history blocks the cash import instead of inventing
+  a balancing deposit.
+- Manual cashflows remain available for FX-loss reporting. Imported adjusted
+  broker deposits drive account cash, invested capital, and XIRR; when none
+  exist, XIRR falls back to the legacy manual cashflows.
 - The performance chart is daily-linked TWR using inferred trade-funding flows;
   XIRR is a separate money-weighted metric and never draws the curve.
 - A flow on day `t` enters the next sub-period's starting NAV.

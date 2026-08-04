@@ -4,13 +4,44 @@ Updated: 2026-08-04
 
 ## Current Goal
 
-Complete six-column Portfolio CSV precision support and release it to
-production. A real portfolio import remains user-controlled.
+Adapt the brokerage CSV importer to keep ETF trades, exclude individual-stock
+trades, and import deposits after deducting the net cash used by those excluded
+stocks. The implementation is complete locally; database migration, frontend
+deployment, and any real reset import remain explicitly user-controlled.
 
 ## Current Status
 
 - Current repository: `/Users/junxihuo/Documents/dca_system`
 - Branch: `master`, tracking `origin/master`.
+- The local importer now classifies each traded symbol as ETF or individual
+  stock. Known ETFs are resolved locally, symbol search is used as a fallback,
+  and unresolved symbols require an explicit user choice before import.
+- Only confirmed ETF Buy/Sell rows are imported. Individual-stock rows are
+  excluded, while same-day and earlier stock-sale proceeds are applied before
+  deducting the remaining stock-buy funding from eligible deposits.
+- Positive Schwab deposit actions and six-column Portfolio `Deposit` rows are
+  parsed. Adjusted deposits retain up to 10 decimal places and become imported
+  broker cashflows; imports are blocked if the retained ETF cash ledger would
+  go negative on any source date.
+- Imported broker deposits are authoritative for account cash, invested
+  capital, and XIRR. Manual FX rows remain available for exchange-loss reporting
+  and serve as the legacy XIRR fallback only when no imported deposit exists.
+- The preview reports ETF trade count, excluded stock count, gross deposits,
+  stock deduction, adjusted deposits, and ending cash. Files containing stocks
+  or deposits require `reset_all`; append mode cannot replace the existing cash
+  basis and is therefore blocked.
+- New append-only migration `0046_adjusted_deposit_precision.sql` widens
+  `cashflows.usd_amount` to `numeric(22,10)` and updates the authenticated-only,
+  security-invoker import helper. It has not been applied to any database.
+- Synthetic browser verification passed on desktop and 390px mobile. A fixture
+  with a $1,000 deposit, $350 net individual-stock funding, and a $600 ETF buy
+  previewed a $650 adjusted deposit and $50 ending cash. The second destructive
+  confirmation was inspected, but the final import action was not executed.
+- Local verification passed on 2026-08-04: `test:csv-import`, `test:finance`,
+  `test:ui`, `test:migration-numbering`, `test:email-reminder`,
+  `test:quote-status`, `typecheck`, `build`, and `git diff --check`.
+- The user-provided real portfolio CSV was not read, copied, or imported.
+- This work is not committed, pushed, deployed, or applied to production.
 - Local precision adaptation preserves up to 10 decimal places for quantity and
   commission and up to 12 decimal places for fill price across parsing,
   import identity, database storage, export, and manual editing.
@@ -121,10 +152,13 @@ production. A real portfolio import remains user-controlled.
 
 ## Next Steps
 
-1. The user can retry the six-column Portfolio CSV with the high-precision
-   importer now live.
-2. Keep full reset as an explicitly confirmed, user-controlled operation; do
-   not read or import a real brokerage export during maintenance checks.
+1. After explicit authorization, apply
+   `0046_adjusted_deposit_precision.sql` to the intended Supabase project and
+   verify its column type, trigger, helper body, and execution grants.
+2. Commit and deploy the frontend only after the migration is confirmed.
+3. Let the user review the real-file preview and execute the separately
+   confirmed `reset_all` import; maintenance or deployment checks must not
+   perform that destructive action.
 
 A real reset import remains an intentionally destructive, user-controlled
 operation and must not be executed as part of migration or deployment checks.
@@ -138,12 +172,20 @@ operation and must not be executed as part of migration or deployment checks.
 - `supabase/migrations/0043_schwab_transaction_import.sql`
 - `supabase/migrations/0044_full_reset_schwab_import.sql`
 - `supabase/migrations/0045_transaction_numeric_precision.sql`
+- `supabase/migrations/0046_adjusted_deposit_precision.sql`
 
 ## Risks and Blockers
 
 - Full reset is destructive: all transactions, cashflows, and funding batches
-  are deleted. Every standard Buy/Sell in the selected file is rebuilt;
-  non-trade rows and cashflows are intentionally not rebuilt.
+  are deleted. Only confirmed ETF Buy/Sell rows and adjusted deposits from the
+  selected file are rebuilt; individual stocks and unsupported cash events are
+  intentionally not rebuilt.
+- Migration `0046` must be applied before deploying this frontend; otherwise
+  adjusted deposits with more than two decimal places cannot preserve their
+  import identity and stored precision end to end.
+- Dividends, withdrawals, taxes, and other unsupported cash events remain
+  ignored. The preview blocks import when eligible deposits cannot fund the
+  retained ETF ledger after the individual-stock deduction.
 - No real CSV import was read or attempted during the fix.
 - A browser with the previous PWA bundle may need a reload while the
   auto-updating service worker activates.
