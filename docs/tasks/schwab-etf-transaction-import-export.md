@@ -6,6 +6,9 @@
 - Import every standard `Buy`/`Sell` row, including ETFs and individual stocks.
 - Ignore deposits, withdrawals, dividends, reinvestments, taxes, and other
   non-trade rows; partial transfer history is not used to infer broker cash.
+- Also accept the six-column `Symbol,Side,Qty,Fill Price,Commission,Closing
+  Time` portfolio CSV format; adapt only its `Buy`/`Sell` rows to the existing
+  transaction contract and ignore other `Side` values.
 - Support append-only import and atomic full portfolio-input reset/import.
 - Export all stored trades in the same eight-column Schwab format.
 - Preserve application metadata for matching transactions only in append mode.

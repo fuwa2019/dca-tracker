@@ -11,6 +11,15 @@ export const SCHWAB_HEADERS = [
   'Amount',
 ] as const;
 
+export const PORTFOLIO_CSV_HEADERS = [
+  'Symbol',
+  'Side',
+  'Qty',
+  'Fill Price',
+  'Commission',
+  'Closing Time',
+] as const;
+
 export type SchwabDelimiter = '\t' | ',';
 export type SchwabImportKind = 'dca' | 'lumpsum';
 export type SchwabSymbolClassification = 'etf' | 'stock' | 'unknown';
@@ -119,9 +128,11 @@ type ParsedTable = {
   data: string[][];
   errors: Papa.ParseError[];
   headerIndex: number;
+  format: 'schwab' | 'portfolio_csv';
 };
 
 const HEADER_SET = SCHWAB_HEADERS.map(normalizeHeader);
+const PORTFOLIO_CSV_HEADER_SET = PORTFOLIO_CSV_HEADERS.map(normalizeHeader);
 const SYMBOL_PATTERN = /^[A-Z0-9.^-]{1,15}$/;
 const MAX_ROWS = 10_000;
 const AMOUNT_TOLERANCE_USD = 0.0200001;
@@ -147,16 +158,15 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
       rows: [],
       deposits: [],
       ignored: [],
-      errors: [{ message: '未找到嘉信交易文件的八列表头。' }],
+      errors: [{ message: '未找到支持的交易文件表头。' }],
     };
   }
 
-  const errors: SchwabParseError[] = parsed.errors
-    .filter((error) => error.type === 'Quotes')
-    .map((error) => ({
-      sourceIndex: typeof error.row === 'number' ? error.row + 1 : undefined,
-      message: `CSV 引号格式错误：${error.message}`,
-    }));
+  const errors = parseTableErrors(parsed);
+  if (parsed.format === 'portfolio_csv') {
+    return parsePortfolioCsvTransactions(parsed, errors);
+  }
+
   const ignored: SchwabIgnoredRow[] = [];
   const validRows: Omit<SchwabImportRow, 'duplicate_ordinal' | 'import_key'>[] = [];
   const validDeposits: Omit<SchwabDepositImportRow, 'duplicate_ordinal' | 'import_key'>[] = [];
@@ -168,7 +178,7 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
 
   for (let index = 0; index < Math.min(body.length, MAX_ROWS); index += 1) {
     const sourceIndex = parsed.headerIndex + index + 2;
-    const cells = padRow(body[index]);
+    const cells = padRow(body[index], SCHWAB_HEADERS.length);
     if (cells.every((cell) => cell.trim() === '')) continue;
 
     const action = cells[1].trim();
@@ -251,6 +261,97 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
     });
   }
 
+  return finalizeParseResult(parsed, errors, ignored, validRows, validDeposits);
+}
+
+function parsePortfolioCsvTransactions(
+  parsed: ParsedTable,
+  errors: SchwabParseError[],
+): SchwabParseResult {
+  const ignored: SchwabIgnoredRow[] = [];
+  const validRows: Omit<SchwabImportRow, 'duplicate_ordinal' | 'import_key'>[] = [];
+  const body = parsed.data.slice(parsed.headerIndex + 1);
+
+  if (body.length > MAX_ROWS) {
+    errors.push({ message: `文件超过 ${MAX_ROWS} 行上限。` });
+  }
+
+  for (let index = 0; index < Math.min(body.length, MAX_ROWS); index += 1) {
+    const sourceIndex = parsed.headerIndex + index + 2;
+    const cells = padRow(body[index], PORTFOLIO_CSV_HEADERS.length);
+    if (cells.every((cell) => cell.trim() === '')) continue;
+
+    const action = cells[1].trim();
+    const side = parseSide(action);
+    if (!side) {
+      ignored.push({
+        sourceIndex,
+        action,
+        symbol: normalizeTicker(cells[0]),
+        description: '',
+        reason: 'unsupported_action',
+      });
+      continue;
+    }
+
+    const rowErrors: string[] = [];
+    const tradeDate = parsePortfolioCsvDate(cells[5]);
+    const ticker = normalizeTicker(cells[0]);
+    const shares = parseMoneyNumber(cells[2]);
+    const price = parseMoneyNumber(cells[3]);
+    const feesUsd = cells[4].trim() === '' ? 0 : parseMoneyNumber(cells[4]);
+
+    if (!tradeDate) rowErrors.push('日期无效');
+    if (!SYMBOL_PATTERN.test(ticker)) rowErrors.push('证券代码无效');
+    if (!isPositiveFinite(shares)) rowErrors.push('股数必须为正数');
+    if (!isPositiveFinite(price)) rowErrors.push('成交价必须为正数');
+    if (!Number.isFinite(feesUsd) || feesUsd < 0) rowErrors.push('手续费不能为负数');
+    if (shares >= 100_000_000) rowErrors.push('股数超出数据库精度');
+    if (price >= 10_000_000_000) rowErrors.push('成交价超出数据库精度');
+    if (feesUsd >= 1_000_000_000_000) rowErrors.push('手续费超出数据库精度');
+    if (decimalPlaces(cells[2]) > 6) rowErrors.push('股数最多支持 6 位小数');
+    if (decimalPlaces(cells[3]) > 4) rowErrors.push('成交价最多支持 4 位小数');
+    if (cells[4].trim() !== '' && decimalPlaces(cells[4]) > 2) {
+      rowErrors.push('手续费最多支持 2 位小数');
+    }
+
+    const amount = side === 'buy'
+      ? -(shares * price + feesUsd)
+      : shares * price - feesUsd;
+    if (!Number.isFinite(amount)) rowErrors.push('金额无效');
+    if (side === 'sell' && Number.isFinite(feesUsd) && feesUsd >= shares * price) {
+      rowErrors.push('卖出手续费必须小于成交额');
+    }
+
+    if (rowErrors.length > 0 || !tradeDate) {
+      errors.push({ sourceIndex, message: `第 ${sourceIndex} 行：${rowErrors.join('；')}` });
+      continue;
+    }
+
+    validRows.push({
+      source_index: sourceIndex,
+      trade_date: tradeDate,
+      side,
+      ticker,
+      source_description: '',
+      shares,
+      price,
+      fees_usd: feesUsd,
+      amount,
+      kind: 'dca',
+    });
+  }
+
+  return finalizeParseResult(parsed, errors, ignored, validRows, []);
+}
+
+function finalizeParseResult(
+  parsed: ParsedTable,
+  errors: SchwabParseError[],
+  ignored: SchwabIgnoredRow[],
+  validRows: Omit<SchwabImportRow, 'duplicate_ordinal' | 'import_key'>[],
+  validDeposits: Omit<SchwabDepositImportRow, 'duplicate_ordinal' | 'import_key'>[],
+): SchwabParseResult {
   const duplicateCounts = new Map<string, number>();
   const rows = validRows.map((row) => {
     const identity = schwabIdentity(row);
@@ -282,6 +383,15 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
     ignored,
     errors,
   };
+}
+
+function parseTableErrors(parsed: ParsedTable): SchwabParseError[] {
+  return parsed.errors
+    .filter((error) => error.type === 'Quotes')
+    .map((error) => ({
+      sourceIndex: typeof error.row === 'number' ? error.row + 1 : undefined,
+      message: `CSV 引号格式错误：${error.message}`,
+    }));
 }
 
 export function classifySchwabSymbol(input: {
@@ -514,25 +624,43 @@ function chooseParsedTable(text: string): ParsedTable | null {
       skipEmptyLines: false,
     });
     const data = result.data.map((row) => row.map((cell) => String(cell ?? '')));
-    const headerIndex = data.findIndex(isSchwabHeader);
-    if (headerIndex >= 0) {
-      candidates.push({ delimiter, data, errors: result.errors, headerIndex });
+    const headerIndex = data.findIndex((row) => getHeaderFormat(row) !== null);
+    const format = headerIndex >= 0 ? getHeaderFormat(data[headerIndex]) : null;
+    if (format) {
+      candidates.push({
+        delimiter,
+        data,
+        errors: result.errors,
+        headerIndex,
+        format,
+      });
     }
   }
   return candidates.sort((left, right) => left.headerIndex - right.headerIndex)[0] ?? null;
 }
 
-function isSchwabHeader(row: string[]): boolean {
-  if (row.length < SCHWAB_HEADERS.length) return false;
-  return HEADER_SET.every((header, index) => normalizeHeader(row[index]) === header);
+function getHeaderFormat(row: string[]): ParsedTable['format'] | null {
+  if (
+    row.length >= SCHWAB_HEADERS.length
+    && HEADER_SET.every((header, index) => normalizeHeader(row[index]) === header)
+  ) {
+    return 'schwab';
+  }
+  if (
+    row.length >= PORTFOLIO_CSV_HEADERS.length
+    && PORTFOLIO_CSV_HEADER_SET.every((header, index) => normalizeHeader(row[index]) === header)
+  ) {
+    return 'portfolio_csv';
+  }
+  return null;
 }
 
 function normalizeHeader(value: string): string {
   return value.replace(/^\uFEFF/, '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
-function padRow(row: string[]): string[] {
-  return Array.from({ length: SCHWAB_HEADERS.length }, (_, index) => String(row[index] ?? ''));
+function padRow(row: string[], length: number): string[] {
+  return Array.from({ length }, (_, index) => String(row[index] ?? ''));
 }
 
 function parseSide(action: string): 'buy' | 'sell' | null {
@@ -576,6 +704,16 @@ function parseSchwabDate(value: string): string | null {
   const rawDate = asOf?.[1] ?? trimmed.match(/^(\d{1,2}\/\d{1,2}\/\d{4})/)?.[1];
   if (!rawDate) return null;
   const [month, day, year] = rawDate.split('/').map(Number);
+  return formatValidatedDate(year, month, day);
+}
+
+function parsePortfolioCsvDate(value: string): string | null {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  return formatValidatedDate(Number(match[1]), Number(match[2]), Number(match[3]));
+}
+
+function formatValidatedDate(year: number, month: number, day: number): string | null {
   const date = new Date(Date.UTC(year, month - 1, day));
   if (
     date.getUTCFullYear() !== year

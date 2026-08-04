@@ -7,6 +7,7 @@ import {
   classifySchwabSymbol,
   exportSchwabTransactions,
   parseSchwabTransactions,
+  PORTFOLIO_CSV_HEADERS,
   SCHWAB_HEADERS,
 } from '../src/lib/schwabTransactions.ts';
 
@@ -35,6 +36,36 @@ assert.equal(parsedTab.rows[1].ticker, 'LITE');
 assert.ok(
   parsedTab.ignored.some((row) => row.action === 'MoneyLink Transfer'),
   'brokerage transfers are ignored regardless of direction',
+);
+
+const portfolioCsvFixture = [
+  PORTFOLIO_CSV_HEADERS.join(','),
+  'VGT,Buy,0.25,200,0.01,2026-08-04 16:30:00',
+  'SGOV,Sell,0.5,100,0.50,2026-08-03 15:45:00',
+  'ACME,Buy,1,10,0,2026-08-02 09:00:00',
+  'USD,Deposit,,,,2026-08-01 00:00:00',
+  'VGT,Dividend,,,,2026-08-01 00:00:00',
+  'VGT,Taxes and fees,,,,2026-08-01 00:00:00',
+].join('\n');
+const parsedPortfolioCsv = parseSchwabTransactions(`\uFEFF${portfolioCsvFixture}`);
+assert.equal(parsedPortfolioCsv.delimiter, ',');
+assert.equal(parsedPortfolioCsv.headerRow, 1);
+assert.equal(parsedPortfolioCsv.rows.length, 3);
+assert.equal(parsedPortfolioCsv.deposits.length, 0, 'portfolio CSV non-trade rows remain ignored');
+assert.equal(parsedPortfolioCsv.ignored.length, 3);
+assert.equal(parsedPortfolioCsv.errors.length, 0);
+assert.equal(parsedPortfolioCsv.rows[0].trade_date, '2026-08-04');
+assert.equal(parsedPortfolioCsv.rows[0].fees_usd, 0.01);
+assert.equal(parsedPortfolioCsv.rows[0].amount, -50.01);
+assert.equal(parsedPortfolioCsv.rows[1].amount, 49.5);
+assert.equal(parsedPortfolioCsv.rows[0].source_description, '');
+assert.equal(
+  parsedPortfolioCsv.rows[0].import_key,
+  parseSchwabTransactions([
+    SCHWAB_HEADERS.join('\t'),
+    '08/04/2026\tBuy\tVGT\t\t0.25\t$200.00\t$0.01\t-$50.01',
+  ].join('\n')).rows[0].import_key,
+  'equivalent formats share the existing import identity',
 );
 
 const commaFixture = [

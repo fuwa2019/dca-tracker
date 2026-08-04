@@ -209,7 +209,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            title="导入嘉信交易文件"
+            title="导入交易文件"
             onClick={() => {
               setOpen(true);
               setNotice(null);
@@ -276,7 +276,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
               ) : (
                 <div className="min-w-0 space-y-5">
                   <div className="min-w-0 space-y-2">
-                    <Label htmlFor="schwab-file">嘉信交易文件</Label>
+                    <Label htmlFor="schwab-file">交易 CSV 文件</Label>
                     <input
                       ref={inputRef}
                       id="schwab-file"
@@ -295,12 +295,12 @@ export function SchwabTransactionTools({ transactions }: Props) {
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">
-                          {fileInfo?.name ?? '选择嘉信交易文件'}
+                          {fileInfo?.name ?? '选择交易文件'}
                         </span>
                         <span id="schwab-file-help" className="mt-0.5 block truncate text-xs text-muted-foreground">
                           {fileInfo
                             ? `${formatBytes(fileInfo.size)} · ${parsed?.delimiter === '\t' ? 'Tab 分隔' : parsed?.delimiter === ',' ? '逗号分隔' : '正在识别格式'}`
-                            : '支持 CSV 或 Tab 分隔文件，最大 5 MB'}
+                            : '支持嘉信 CSV/Tab 与 Symbol/Side/Qty 六列 CSV，最大 5 MB'}
                         </span>
                       </span>
                       <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-primary">
