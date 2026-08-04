@@ -174,6 +174,7 @@ const etfRows = cashPlanParsed.rows.filter((row) => row.ticker === 'VGT');
 const stockRows = cashPlanParsed.rows.filter((row) => row.ticker === 'LITE');
 const tradeOnlyPlan = buildSchwabEtfCashPlan({ deposits: [], etfRows, stockRows: [] });
 assert.equal(tradeOnlyPlan.errors.length, 0);
+assert.equal(tradeOnlyPlan.warnings.length, 0);
 assert.equal(tradeOnlyPlan.endingCash, 0, 'trade-only imports retain the legacy zero-cash fallback');
 const cashPlan = buildSchwabEtfCashPlan({
   deposits: cashPlanParsed.deposits,
@@ -181,6 +182,7 @@ const cashPlan = buildSchwabEtfCashPlan({
   stockRows,
 });
 assert.equal(cashPlan.errors.length, 0);
+assert.equal(cashPlan.warnings.length, 0);
 assert.equal(cashPlan.grossDeposits, 1000);
 assert.equal(cashPlan.excludedStockFunding, 350, 'stock sale proceeds fund later stock buys first');
 assert.equal(cashPlan.adjustedDeposits, 650);
@@ -202,10 +204,36 @@ const insufficientCashPlan = buildSchwabEtfCashPlan({
   etfRows,
   stockRows,
 });
+assert.equal(insufficientCashPlan.errors.length, 0);
+assert.equal(insufficientCashPlan.endingCash, -50);
 assert.match(
-  insufficientCashPlan.errors[0]?.message ?? '',
-  /存款不足以覆盖 ETF 交易/,
-  'the retained ETF ledger cannot go negative at any historical date',
+  insufficientCashPlan.warnings[0]?.message ?? '',
+  /现金最低为 -\$50.*不阻止导入/,
+  'an incomplete cash timeline warns without blocking the adjusted import',
+);
+
+const subCentCashGapPlan = buildSchwabEtfCashPlan({
+  deposits: cashPlanParsed.deposits.map((row) => ({ ...row, amount: 949.9997985 })),
+  etfRows,
+  stockRows,
+});
+assert.equal(subCentCashGapPlan.errors.length, 0);
+assert.equal(subCentCashGapPlan.minimumCash, -0.0002015);
+assert.match(
+  subCentCashGapPlan.warnings[0]?.message ?? '',
+  /现金最低为 -\$0\.0002015.*不阻止导入/,
+  'a fractional-cent cash gap remains advisory instead of blocking import',
+);
+
+const missingStockFundingPlan = buildSchwabEtfCashPlan({
+  deposits: cashPlanParsed.deposits.map((row) => ({ ...row, amount: 300 })),
+  etfRows: [],
+  stockRows,
+});
+assert.match(
+  missingStockFundingPlan.errors[0]?.message ?? '',
+  /个股净投入缺少 \$50 可扣减存款/,
+  'stock funding that cannot be deducted from eligible deposits still blocks import',
 );
 
 const existing = [{

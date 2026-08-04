@@ -14,6 +14,10 @@ sanitized performance cache.
   are included in private account NAV and XIRR.
 - Imported broker deposits replace manual FX rows as XIRR funding events.
   Accounts without imported deposits retain the legacy manual-FX fallback.
+- A negative point in the reconstructed ETF cash timeline is advisory rather
+  than fatal because unsupported dividends, interest, and other cash events are
+  absent from imported cash. The preview still reports the minimum and ending
+  cash without fabricating a balancing deposit.
 - Cost basis defaults to average cost in product UI.
 - Performance chart uses daily-linked TWR.
 - Performance chart uses the trading-performance view: it starts on the first

@@ -73,6 +73,8 @@ assert.match(transactionTools, /p_cashflows:\s*cashPlan\.deposits\.map/, 'Schwab
 assert.match(transactionTools, /selectedRows[\s\S]*confirmedEtfSymbols\.has/, 'Schwab import keeps confirmed ETF trades only');
 assert.match(transactionTools, /excludedStockRows[\s\S]*confirmedStockSymbols\.has/, 'individual-stock trades are explicitly excluded');
 assert.match(transactionTools, /buildSchwabEtfCashPlan/, 'the import preview uses the retained-ETF cash ledger');
+assert.match(transactionTools, /cashPlan\.warnings/, 'temporary cash gaps are presented separately from blocking errors');
+assert.match(transactionTools, /现金历史存在暂时缺口，不阻止导入/, 'temporary cash gaps remain explicitly non-blocking');
 assert.match(transactionTools, /含个股或存款的文件必须清空全部后导入/, 'stock/deposit reconstruction blocks append mode');
 assert.match(transactionTools, /resetCoverageConfirmed[\s\S]*border-warn\/50 bg-warn-soft/, 'ETF reset confirmation has a selected state');
 assert.match(transactionTools, /全部交易、全部现金流和资金批次将先清除/, 'reset explicitly clears all portfolio input data');

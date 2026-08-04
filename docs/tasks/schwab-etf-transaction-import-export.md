@@ -43,6 +43,10 @@
   append cannot remove existing stocks or replace the account cash basis.
 - Broker cash is adjusted deposits minus ETF buys plus ETF sells. Trade-only
   files without deposits keep the zero-cash and inferred-funding fallback.
+- Failure to deduct the stock sleeve's required funding from eligible deposits
+  blocks import. A temporary negative ETF cash timeline is shown as a warning,
+  not an error, because ignored dividends, interest, or other non-Deposit events
+  can legitimately explain the gap.
 - Settings, share links, quotes, daily prices, caches owned by system workflows,
   and other users' rows remain outside the reset scope.
 - Keep all public-share responses unchanged.
@@ -57,6 +61,7 @@
 - The confirmation must state how many ETF trades and adjusted deposits will be
   rebuilt and that individual-stock trades will not be imported.
 - Any validation, oversell, or write failure must roll back the full import.
+- Do not invent balancing deposits to silence a temporary cash warning.
 
 ## Verification
 

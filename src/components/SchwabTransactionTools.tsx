@@ -540,6 +540,14 @@ export function SchwabTransactionTools({ transactions }: Props) {
                           ))}
                         </div>
                       )}
+                      {cashPlan.warnings.length > 0 && (
+                        <div className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn">
+                          <p className="font-medium">现金历史存在暂时缺口，不阻止导入</p>
+                          {cashPlan.warnings.slice(0, 6).map((planWarning, index) => (
+                            <p key={`cash-plan-warning-${index}`} className="mt-1">{planWarning.message}</p>
+                          ))}
+                        </div>
+                      )}
                       {unresolvedSymbols.length > 0 && !classifying && (
                         <p className="text-xs text-warn">
                           仍有 {unresolvedSymbols.length} 个证券代码待确认为 ETF 或个股。

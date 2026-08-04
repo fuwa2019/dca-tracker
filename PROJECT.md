@@ -196,9 +196,11 @@ for the production application.
   trades, and deduct the stock sleeve's net required funding from recognized
   `Deposit` rows before importing them as broker cash.
 - Stock sale proceeds fund later stock buys before any additional stock funding
-  is deducted. The retained ETF cash ledger must never be negative on a source
-  date; incomplete deposit history blocks the cash import instead of inventing
-  a balancing deposit.
+  is deducted. Stock funding that cannot be deducted from eligible deposits
+  blocks import. A temporary negative retained-ETF cash timeline is a
+  non-blocking warning because dividends, interest, and other non-Deposit cash
+  events are intentionally omitted; the importer never invents a balancing
+  deposit.
 - Manual cashflows remain available for FX-loss reporting. Imported adjusted
   broker deposits drive account cash, invested capital, and XIRR; when none
   exist, XIRR falls back to the legacy manual cashflows.

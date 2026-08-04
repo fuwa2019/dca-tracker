@@ -4,15 +4,23 @@ Updated: 2026-08-05
 
 ## Current Goal
 
-Adapt the brokerage CSV importer to keep ETF trades, exclude individual-stock
-trades, and import deposits after deducting the net cash used by those excluded
-stocks. The database migration and frontend are live; any real reset import
-remains explicitly user-controlled.
+Remove the overly strict historical ETF cash gate from the live brokerage CSV
+importer. The adjusted-deposit feature is already live; the current local fix
+keeps real stock-funding failures blocking while turning temporary ETF cash
+gaps caused by omitted cash events into non-blocking warnings.
 
 ## Current Status
 
 - Current repository: `/Users/junxihuo/Documents/dca_system`
 - Branch: `master`, tracking `origin/master`.
+- A real-file preview reported a temporary `-$56.1975727` ETF cash point on
+  2026-05-14 after individual-stock funding was removed. The file also contains
+  excluded non-Deposit cash events, so the previous per-date solvency gate made
+  a stronger claim than the supported input data can prove.
+- The local fix now completes the full cash timeline, reports its minimum as a
+  warning, and keeps import enabled. It still blocks when individual-stock
+  funding itself cannot be deducted from eligible deposits. No database change
+  is required.
 - The local importer now classifies each traded symbol as ETF or individual
   stock. Known ETFs are resolved locally, symbol search is used as a fallback,
   and unresolved symbols require an explicit user choice before import.
@@ -21,8 +29,9 @@ remains explicitly user-controlled.
   deducting the remaining stock-buy funding from eligible deposits.
 - Positive Schwab deposit actions and six-column Portfolio `Deposit` rows are
   parsed. Adjusted deposits retain up to 10 decimal places and become imported
-  broker cashflows; imports are blocked if the retained ETF cash ledger would
-  go negative on any source date.
+  broker cashflows. A temporary negative retained-ETF cash point is advisory;
+  import remains blocked only when required stock funding cannot be deducted
+  from eligible deposits.
 - Imported broker deposits are authoritative for account cash, invested
   capital, and XIRR. Manual FX rows remain available for exchange-loss reporting
   and serve as the legacy XIRR fallback only when no imported deposit exists.
@@ -38,6 +47,15 @@ remains explicitly user-controlled.
   with a $1,000 deposit, $350 net individual-stock funding, and a $600 ETF buy
   previewed a $650 adjusted deposit and $50 ending cash. The second destructive
   confirmation was inspected, but the final import action was not executed.
+- The current warning regression was reproduced exactly with synthetic data:
+  2026-05-14 reached `-$56.1975727`, 12 rows were excluded, the yellow warning
+  rendered without overlap on desktop and 390px mobile, and the checked
+  “continue” action remained enabled. The final import action was not executed.
+- Hotfix verification passed on 2026-08-05: `test:csv-import`, `test:finance`,
+  `test:ui`, `test:migration-numbering`, `test:email-reminder`,
+  `test:quote-status`, `typecheck`, `build`, and `git diff --check`.
+- The hotfix is local and uncommitted. It has not been pushed or deployed; no
+  migration or production database change is needed.
 - Local verification passed on 2026-08-05: `test:csv-import`, `test:finance`,
   `test:ui`, `test:migration-numbering`, `test:email-reminder`,
   `test:quote-status`, `typecheck`, `build`, and `git diff --check`.
@@ -159,10 +177,11 @@ remains explicitly user-controlled.
 
 ## Next Steps
 
-1. The user can review the real-file preview on the live transaction page.
-2. Execute the separately confirmed `reset_all` import only after reviewing
-   the adjusted ETF/deposit counts; maintenance and deployment checks must not
-   perform that destructive action.
+1. After explicit authorization, commit and push the frontend-only hotfix so
+   the Git-triggered Cloudflare Pages deployment can complete.
+2. Verify the canonical bundle and the real-file preview, then let the user
+   execute the separately confirmed `reset_all` import after reviewing the
+   adjusted ETF/deposit counts.
 
 A real reset import remains an intentionally destructive, user-controlled
 operation and must not be executed as part of migration or deployment checks.
@@ -185,8 +204,9 @@ operation and must not be executed as part of migration or deployment checks.
   selected file are rebuilt; individual stocks and unsupported cash events are
   intentionally not rebuilt.
 - Dividends, withdrawals, taxes, and other unsupported cash events remain
-  ignored. The preview blocks import when eligible deposits cannot fund the
-  retained ETF ledger after the individual-stock deduction.
+  ignored. They can produce a temporary negative cash warning; the preview
+  still blocks when eligible deposits cannot absorb the individual-stock
+  funding deduction itself.
 - No real CSV import was read or attempted during the fix.
 - A browser with the previous PWA bundle may need a reload while the
   auto-updating service worker activates.

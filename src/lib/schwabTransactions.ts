@@ -79,6 +79,7 @@ export interface SchwabEtfCashPlan {
   endingCash: number;
   minimumCash: number;
   errors: SchwabParseError[];
+  warnings: SchwabParseError[];
 }
 
 export interface ExistingTransactionLike {
@@ -507,6 +508,7 @@ export function buildSchwabEtfCashPlan(input: {
       endingCash: 0,
       minimumCash: 0,
       errors: [],
+      warnings: [],
     };
   }
 
@@ -537,6 +539,7 @@ export function buildSchwabEtfCashPlan(input: {
     amount: roundCash(row.amount),
   }));
   const errors: SchwabParseError[] = [];
+  const warnings: SchwabParseError[] = [];
 
   for (const [date, required] of stockFundingByDate) {
     let pending = required;
@@ -592,16 +595,20 @@ export function buildSchwabEtfCashPlan(input: {
   ])].sort();
   let cash = 0;
   let minimumCash = 0;
+  let minimumCashDate: string | null = null;
   for (const date of ledgerDates) {
     const trades = etfByDate.get(date) ?? { buys: 0, sells: 0 };
     cash = roundCash(cash + (depositByDate.get(date) ?? 0) + trades.sells - trades.buys);
-    minimumCash = Math.min(minimumCash, cash);
-    if (cash < -CASH_TOLERANCE_USD) {
-      errors.push({
-        message: `${date} 扣除个股投入后现金为 ${formatCash(cash)}，文件中的存款不足以覆盖 ETF 交易。`,
-      });
-      break;
+    if (cash < minimumCash) {
+      minimumCash = cash;
+      minimumCashDate = date;
     }
+  }
+  if (minimumCash < -CASH_TOLERANCE_USD && minimumCashDate) {
+    warnings.push({
+      message: `${minimumCashDate} 扣除个股投入后的可重建现金最低为 ${formatCash(minimumCash)}。`
+        + '文件只把 Deposit 作为现金，未计入的股息、利息等事件可能造成暂时缺口；该提示不阻止导入。',
+    });
   }
 
   return {
@@ -612,6 +619,7 @@ export function buildSchwabEtfCashPlan(input: {
     endingCash: cash,
     minimumCash,
     errors,
+    warnings,
   };
 }
 
