@@ -88,6 +88,15 @@
   `c81a5b11-46d5-4180-a16f-cc6725e35ca6` serves `index-Dsy3wFOu.js` with
   all-security Buy/Sell import, ignored transfer rows, and broker cash fixed at
   zero. No database migration or production database change was required.
-- Migration `0045_transaction_numeric_precision.sql` and its matching frontend
-  precision changes are local only as of 2026-08-04. They have not been applied
-  to Supabase or deployed to Cloudflare Pages.
+- Migration `0045_transaction_numeric_precision.sql` was applied to production
+  project `igwacbeojogblacektxr` as version `20260804144149`. Because the
+  existing `UPDATE OF` import-identity trigger depended on the affected
+  columns, the migration drops and recreates that trigger around the numeric
+  type changes. Structural checks confirmed `numeric(18,10)`, `numeric(22,12)`,
+  and `numeric(22,10)` storage, widened helper validation/import keys, and
+  authenticated-only security-invoker execution.
+- Commit `cdeba76` contains the matching target-projection and precision-aware
+  frontend changes. Cloudflare Pages deployment
+  `a11de78f-534a-4bf6-884e-06d88b500fbc` completed from that commit. The
+  canonical site and fresh browser checks serve the production-configured
+  bundle without the missing-Supabase-config warning.

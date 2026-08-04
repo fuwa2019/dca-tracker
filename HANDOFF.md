@@ -4,8 +4,8 @@ Updated: 2026-08-04
 
 ## Current Goal
 
-Complete six-column Portfolio CSV precision support in code, then deploy only
-after separate authorization for the database migration and frontend release.
+Complete six-column Portfolio CSV precision support and release it to
+production. A real portfolio import remains user-controlled.
 
 ## Current Status
 
@@ -20,12 +20,26 @@ after separate authorization for the database migration and frontend release.
   `test:ui`, `test:migration-numbering`, `test:email-reminder`,
   `test:quote-status`, `typecheck`, `build`, and `git diff --check`.
 - The user-provided real portfolio CSV was not read, copied, or imported.
-- Migration `0045` has not been applied and the matching frontend has not been
-  deployed. Production still serves the previously verified `0044` contract.
-- No local Supabase CLI or PostgreSQL runtime is available, so `0045` received
-  static contract verification but no database execution test.
-- Current revision: inspect with `git rev-parse --short HEAD`; this file does
-  not cache live Git state.
+- Migration `0045` was applied to production project
+  `igwacbeojogblacektxr` as version `20260804144149`.
+- Production structural verification confirmed `shares numeric(18,10)`,
+  `price numeric(22,12)`, `fees_usd numeric(22,10)`, the restored import-identity
+  trigger, widened helper validation/import keys, security-invoker behavior,
+  and authenticated-only helper execution.
+- The migration had to drop and recreate the `UPDATE OF` import-identity
+  trigger around the type changes because PostgreSQL tracks its column list as
+  a dependency.
+- Current revision: `cdeba76`, pushed to `origin/master`.
+- Cloudflare Pages deployment `a11de78f-534a-4bf6-884e-06d88b500fbc` completed
+  from `cdeba76`; it serves `index-BcOwsWFB.js` through the canonical
+  `dca-tracker-git.pages.dev` domain.
+- Fresh HTTP and browser checks confirmed `/`, `/login`, and `/transactions`
+  return HTTP 200, the unauthenticated app renders the login page, the bundle
+  contains production Supabase/Quote configuration and target projection code,
+  and no missing-Supabase-config warning is present.
+- Quote Worker health and `/api/quote?symbols=VOO` both returned HTTP 200.
+- Supabase Advisors still report only existing warnings/information items; no
+  new error was introduced by this migration.
 - The original import/export implementation is committed as `1400798` and
   pushed to `master`.
 - Synthetic browser verification passed on the local transaction page:
@@ -102,16 +116,15 @@ after separate authorization for the database migration and frontend release.
   zero-cash correction.
 - Working tree: inspect with `git status`; this file does not cache live Git
   state.
-- Deployment status: `0044` and the zero-cash full-reset frontend are live in
-  production.
+- Deployment status: `0045` and the high-precision target-projection frontend
+  are live in production.
 
 ## Next Steps
 
-1. With explicit authorization, apply `0045` to an authorized database, verify
-   column typmods/function grants with structural queries, and run a synthetic
-   high-precision import smoke test.
-2. With explicit authorization, deploy the frontend and verify the production
-   bundle before the user retries their real CSV.
+1. The user can retry the six-column Portfolio CSV with the high-precision
+   importer now live.
+2. Keep full reset as an explicitly confirmed, user-controlled operation; do
+   not read or import a real brokerage export during maintenance checks.
 
 A real reset import remains an intentionally destructive, user-controlled
 operation and must not be executed as part of migration or deployment checks.
@@ -132,9 +145,5 @@ operation and must not be executed as part of migration or deployment checks.
   are deleted. Every standard Buy/Sell in the selected file is rebuilt;
   non-trade rows and cashflows are intentionally not rebuilt.
 - No real CSV import was read or attempted during the fix.
-- Applying `0045` takes a short exclusive table lock while PostgreSQL changes
-  numeric typmods; use an authorized maintenance window and a lock timeout.
-- The high-precision frontend must not be deployed before `0045`, because the
-  currently deployed helper still rejects values beyond 6/4/2 decimal places.
 - A browser with the previous PWA bundle may need a reload while the
   auto-updating service worker activates.
