@@ -40,12 +40,12 @@ assert.ok(
 
 const portfolioCsvFixture = [
   PORTFOLIO_CSV_HEADERS.join(','),
-  'VGT,Buy,0.25,200,0.01,2026-08-04 16:30:00',
-  'SGOV,Sell,0.5,100,0.50,2026-08-03 15:45:00',
-  'ACME,Buy,1,10,0,2026-08-02 09:00:00',
-  'USD,Deposit,,,,2026-08-01 00:00:00',
-  'VGT,Dividend,,,,2026-08-01 00:00:00',
-  'VGT,Taxes and fees,,,,2026-08-01 00:00:00',
+  'NASDAQ:VGT,Buy,0.25,200,0.01,2026-08-04 16:30:00',
+  'NYSEARCA:SGOV,Sell,0.5,100,0.50,2026-08-03 15:45:00',
+  'NASDAQ:ACME,Buy,1,10,0,2026-08-02 09:00:00',
+  'USD:USD,Deposit,,,,2026-08-01 00:00:00',
+  'NASDAQ:VGT,Dividend,,,,2026-08-01 00:00:00',
+  'NASDAQ:VGT,Taxes and fees,,,,2026-08-01 00:00:00',
 ].join('\n');
 const parsedPortfolioCsv = parseSchwabTransactions(`\uFEFF${portfolioCsvFixture}`);
 assert.equal(parsedPortfolioCsv.delimiter, ',');

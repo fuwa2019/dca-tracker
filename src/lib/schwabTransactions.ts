@@ -287,7 +287,7 @@ function parsePortfolioCsvTransactions(
       ignored.push({
         sourceIndex,
         action,
-        symbol: normalizeTicker(cells[0]),
+        symbol: normalizePortfolioTicker(cells[0]),
         description: '',
         reason: 'unsupported_action',
       });
@@ -296,7 +296,7 @@ function parsePortfolioCsvTransactions(
 
     const rowErrors: string[] = [];
     const tradeDate = parsePortfolioCsvDate(cells[5]);
-    const ticker = normalizeTicker(cells[0]);
+    const ticker = normalizePortfolioTicker(cells[0]);
     const shares = parseMoneyNumber(cells[2]);
     const price = parseMoneyNumber(cells[3]);
     const feesUsd = cells[4].trim() === '' ? 0 : parseMoneyNumber(cells[4]);
@@ -676,6 +676,11 @@ function normalizeAction(value: string): string {
 
 function normalizeTicker(value: string): string {
   return value.trim().toUpperCase();
+}
+
+function normalizePortfolioTicker(value: string): string {
+  const normalized = normalizeTicker(value);
+  return normalized.match(/^[A-Z][A-Z0-9._-]*:([A-Z0-9.^-]{1,15})$/)?.[1] ?? normalized;
 }
 
 function parseMoneyNumber(value: string): number {
