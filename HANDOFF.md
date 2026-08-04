@@ -54,8 +54,15 @@ gaps caused by omitted cash events into non-blocking warnings.
 - Hotfix verification passed on 2026-08-05: `test:csv-import`, `test:finance`,
   `test:ui`, `test:migration-numbering`, `test:email-reminder`,
   `test:quote-status`, `typecheck`, `build`, and `git diff --check`.
-- The hotfix is local and uncommitted. It has not been pushed or deployed; no
-  migration or production database change is needed.
+- The exact `-$0.0002015` fractional-cent regression is covered by the
+  synthetic CSV-import check; no migration or production database change is
+  needed.
+- Commit `56a068a` was pushed to `origin/master`. Pages deployment
+  `baccc88d-6d1d-4abc-bc95-89ff7e4e4f73` is Active for production from that
+  commit. Canonical `/`, `/login`, and `/transactions` plus the deployment URL
+  returned HTTP 200; the served bundle contains the non-blocking cash warning,
+  production Supabase and quote configuration markers, and no missing-config
+  fallback marker.
 - Local verification passed on 2026-08-05: `test:csv-import`, `test:finance`,
   `test:ui`, `test:migration-numbering`, `test:email-reminder`,
   `test:quote-status`, `typecheck`, `build`, and `git diff --check`.
@@ -177,11 +184,8 @@ gaps caused by omitted cash events into non-blocking warnings.
 
 ## Next Steps
 
-1. After explicit authorization, commit and push the frontend-only hotfix so
-   the Git-triggered Cloudflare Pages deployment can complete.
-2. Verify the canonical bundle and the real-file preview, then let the user
-   execute the separately confirmed `reset_all` import after reviewing the
-   adjusted ETF/deposit counts.
+1. Let the user review the live preview and execute the separately confirmed
+   `reset_all` import after reviewing the adjusted ETF/deposit counts.
 
 A real reset import remains an intentionally destructive, user-controlled
 operation and must not be executed as part of migration or deployment checks.
