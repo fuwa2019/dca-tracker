@@ -105,7 +105,7 @@ More detail:
   and scheduled cache refresh.
 - `workers/email-cron/`: NYSE-calendar reminder scheduling and email delivery.
 - `supabase/migrations/`: append-only schema and RPC history, currently through
-  `0045_transaction_numeric_precision.sql`.
+  `0046_adjusted_deposit_precision.sql`.
 - `scripts/`: regression checks, local dataset generation, operational market
   data helpers, and X content tooling.
 - `tests/fixtures/`: finance and long-horizon regression fixtures.

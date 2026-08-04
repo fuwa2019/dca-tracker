@@ -1,13 +1,13 @@
 # Current Handoff
 
-Updated: 2026-08-04
+Updated: 2026-08-05
 
 ## Current Goal
 
 Adapt the brokerage CSV importer to keep ETF trades, exclude individual-stock
 trades, and import deposits after deducting the net cash used by those excluded
-stocks. The implementation is complete locally; database migration, frontend
-deployment, and any real reset import remain explicitly user-controlled.
+stocks. The database migration and frontend are live; any real reset import
+remains explicitly user-controlled.
 
 ## Current Status
 
@@ -32,16 +32,22 @@ deployment, and any real reset import remain explicitly user-controlled.
   basis and is therefore blocked.
 - New append-only migration `0046_adjusted_deposit_precision.sql` widens
   `cashflows.usd_amount` to `numeric(22,10)` and updates the authenticated-only,
-  security-invoker import helper. It has not been applied to any database.
+  security-invoker import helper. It was applied to production project
+  `igwacbeojogblacektxr` as migration version `20260804162313`.
 - Synthetic browser verification passed on desktop and 390px mobile. A fixture
   with a $1,000 deposit, $350 net individual-stock funding, and a $600 ETF buy
   previewed a $650 adjusted deposit and $50 ending cash. The second destructive
   confirmation was inspected, but the final import action was not executed.
-- Local verification passed on 2026-08-04: `test:csv-import`, `test:finance`,
+- Local verification passed on 2026-08-05: `test:csv-import`, `test:finance`,
   `test:ui`, `test:migration-numbering`, `test:email-reminder`,
   `test:quote-status`, `typecheck`, `build`, and `git diff --check`.
 - The user-provided real portfolio CSV was not read, copied, or imported.
-- This work is not committed, pushed, deployed, or applied to production.
+- Commit `48b93cf` is pushed to `origin/master`. Pages deployment
+  `98eabdeb-bae6-4096-b121-de2ecc2a0a4c` serves the canonical production bundle
+  from that commit; fresh browser checks confirmed `/login` renders and
+  `/transactions` redirects unauthenticated users to login.
+- Canonical bundle verification found the ETF-only adjusted-cash UI markers
+  (`ETF 交易与现金`, `个股净投入`, `调整后存款`, and `reset_all`).
 - Local precision adaptation preserves up to 10 decimal places for quantity and
   commission and up to 12 decimal places for fill price across parsing,
   import identity, database storage, export, and manual editing.
@@ -152,12 +158,9 @@ deployment, and any real reset import remain explicitly user-controlled.
 
 ## Next Steps
 
-1. After explicit authorization, apply
-   `0046_adjusted_deposit_precision.sql` to the intended Supabase project and
-   verify its column type, trigger, helper body, and execution grants.
-2. Commit and deploy the frontend only after the migration is confirmed.
-3. Let the user review the real-file preview and execute the separately
-   confirmed `reset_all` import; maintenance or deployment checks must not
+1. The user can review the real-file preview on the live transaction page.
+2. Execute the separately confirmed `reset_all` import only after reviewing
+   the adjusted ETF/deposit counts; maintenance and deployment checks must not
    perform that destructive action.
 
 A real reset import remains an intentionally destructive, user-controlled
@@ -180,9 +183,6 @@ operation and must not be executed as part of migration or deployment checks.
   are deleted. Only confirmed ETF Buy/Sell rows and adjusted deposits from the
   selected file are rebuilt; individual stocks and unsupported cash events are
   intentionally not rebuilt.
-- Migration `0046` must be applied before deploying this frontend; otherwise
-  adjusted deposits with more than two decimal places cannot preserve their
-  import identity and stored precision end to end.
 - Dividends, withdrawals, taxes, and other unsupported cash events remain
   ignored. The preview blocks import when eligible deposits cannot fund the
   retained ETF ledger after the individual-stock deduction.
