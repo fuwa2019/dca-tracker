@@ -42,10 +42,11 @@ remains explicitly user-controlled.
   `test:ui`, `test:migration-numbering`, `test:email-reminder`,
   `test:quote-status`, `typecheck`, `build`, and `git diff --check`.
 - The user-provided real portfolio CSV was not read, copied, or imported.
-- Commit `48b93cf` is pushed to `origin/master`. Pages deployment
-  `98eabdeb-bae6-4096-b121-de2ecc2a0a4c` serves the canonical production bundle
-  from that commit; fresh browser checks confirmed `/login` renders and
-  `/transactions` redirects unauthenticated users to login.
+- Commit `48b93cf` and the follow-up documentation commit `959a5ce` are pushed
+  to `origin/master`. Git-triggered Pages production deployments completed
+  from both commits; the canonical site serves the latest bundle. Fresh browser
+  checks confirmed `/login` renders and `/transactions` redirects
+  unauthenticated users to login.
 - Canonical bundle verification found the ETF-only adjusted-cash UI markers
   (`ETF 交易与现金`, `个股净投入`, `调整后存款`, and `reset_all`).
 - Local precision adaptation preserves up to 10 decimal places for quantity and

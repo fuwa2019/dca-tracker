@@ -113,7 +113,8 @@
   confirmed `cashflows.usd_amount numeric(22,10)`, the rebuilt trigger, and
   authenticated-only security-invoker helper execution.
 - Commit `48b93cf` contains the ETF-only adjusted-cash frontend and is pushed to
-  `master`. Pages deployment `98eabdeb-bae6-4096-b121-de2ecc2a0a4c` serves the
-  canonical bundle, whose fresh browser verification confirmed the login page,
-  route guard, and adjusted-cash import markers.
+  `master`; the follow-up documentation commit `959a5ce` is also pushed. The
+  Git-triggered Pages production deployments serve the canonical bundle, whose
+  fresh browser verification confirmed the login page, route guard, and
+  adjusted-cash import markers.
 - No real Schwab export was read or imported during migration or deployment.
