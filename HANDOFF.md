@@ -20,9 +20,14 @@ database, Quote Worker, and Pages changes are now live.
   authenticated `POST /api/etf-holdings/refresh` and weekly Sunday refresh.
   UTC 04:10 and 05:10 daily runs use one equivalent comma-list Cron expression
   to stay within the account's five-trigger limit without dropping a run.
-- Pages preview `https://b4191fc1.dca-tracker-git.pages.dev` is deployed. A
-  cache-bypassed canonical request returned `index-DUyizA3l.js` containing the
-  refresh UI, dynamic holdings read, and static-fallback markers.
+- Git-backed Pages deployment `e175d135-addb-4b93-b5c4-de407b1b58a1` is live
+  from `b31d3e9`. The canonical bundle `index-BE4-C0D2.js` contains the Pages
+  Supabase configuration and refresh UI, without the localhost stub.
+- The preceding direct upload `b4191fc1` was built locally without public
+  `VITE_` variables and briefly broke login with `Failed to fetch`. The Git
+  deployment replaced it; production login now renders without the missing
+  Supabase configuration warning. Do not direct-upload an unconfigured local
+  `dist/`; follow `docs/runbooks/deployment.md`.
 - Root-cause fix commit `395400e` is pushed to `origin/master` and deployed.
 - Schwab transaction `Amount` is parsed as before and now persists in nullable
   `transactions.settled_amount_usd`. Private cash, cost basis, realized proceeds,
@@ -68,8 +73,8 @@ database, Quote Worker, and Pages changes are now live.
   `0049_restrict_etf_holding_table_privileges.sql`.
 - Quote Worker version `23f51a7b-cc60-416d-9c3d-a95fe4a34671` serves health 200,
   valid refresh-route CORS preflight 200, and unauthenticated refresh 401.
-- Cloudflare Pages deployment `b4191fc1` is live; the canonical bundle is
-  `index-DUyizA3l.js` after cache bypass.
+- Cloudflare Pages deployment `e175d135-addb-4b93-b5c4-de407b1b58a1` is live;
+  the canonical bundle is `index-BE4-C0D2.js` and has configured Supabase Auth.
 - No real CSV, financial import, authenticated holdings, or user data was read
   or changed during deployment verification.
 
