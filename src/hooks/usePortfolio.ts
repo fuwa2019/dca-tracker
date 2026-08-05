@@ -164,8 +164,10 @@ export function useTotalInvested() {
   const cashflows = useCashflows();
   const txns = useTransactions();
   const brokerDeposits = (cashflows.data ?? []).filter((row) => row.cashflow_kind === 'broker_deposit');
+  const brokerCashEvents = (cashflows.data ?? []).filter((row) =>
+    row.cashflow_kind === 'broker_deposit' || row.cashflow_kind === 'stock_allocation');
   const total = brokerDeposits.length > 0
-    ? summarizeCashflows(brokerDeposits).totalUsdActual
+    ? summarizeCashflows(brokerCashEvents).totalUsdActual
     : totalTradeFunding(txns.data ?? []);
   return {
     ...txns,
@@ -176,19 +178,21 @@ export function useTotalInvested() {
 }
 
 /**
- * Only adjusted broker deposits participate in account cash. Manual FX rows
- * remain available for exchange-loss reporting without being counted twice.
+ * Broker deposits and dated stock allocations participate in account cash.
+ * Manual FX rows remain available for exchange-loss reporting without being counted twice.
  */
 export function useCashBalance() {
   const cashflows = useCashflows();
   const txns = useTransactions();
   const brokerDeposits = (cashflows.data ?? []).filter((row) => row.cashflow_kind === 'broker_deposit');
+  const brokerCashEvents = (cashflows.data ?? []).filter((row) =>
+    row.cashflow_kind === 'broker_deposit' || row.cashflow_kind === 'stock_allocation');
   const cash = brokerDeposits.length > 0
-    ? calculateBrokerCashBalance(brokerDeposits, txns.data ?? [])
+    ? calculateBrokerCashBalance(brokerCashEvents, txns.data ?? [])
     : 0;
   return {
     cash,
-    depositedUsd: summarizeCashflows(brokerDeposits).totalUsdActual,
+    depositedUsd: summarizeCashflows(brokerCashEvents).totalUsdActual,
     isLoading: cashflows.isLoading || txns.isLoading,
     isError: cashflows.isError || txns.isError,
   };
@@ -196,7 +200,9 @@ export function useCashBalance() {
 
 export function useExchangeLoss() {
   const cashflows = useCashflows();
-  const summary = summarizeCashflows(cashflows.data ?? []);
+  const summary = summarizeCashflows(
+    (cashflows.data ?? []).filter((row) => row.cashflow_kind !== 'stock_allocation'),
+  );
   return {
     ...cashflows,
     ...summary,

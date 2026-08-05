@@ -49,6 +49,17 @@ export interface SchwabDepositImportRow {
   import_key: string;
 }
 
+export interface SchwabStockAllocationImportRow {
+  source_index: number;
+  allocation_date: string;
+  source_action: 'Stock Allocation';
+  source_description: string;
+  /** Negative USD leaves the retained ETF sleeve on the stock trade date. */
+  amount: number;
+  duplicate_ordinal: number;
+  import_key: string;
+}
+
 export interface SchwabIgnoredRow {
   sourceIndex: number;
   action: string;
@@ -67,12 +78,14 @@ export interface SchwabParseResult {
   headerRow: number | null;
   rows: SchwabImportRow[];
   deposits: SchwabDepositImportRow[];
+  allocations: SchwabStockAllocationImportRow[];
   ignored: SchwabIgnoredRow[];
   errors: SchwabParseError[];
 }
 
 export interface SchwabEtfCashPlan {
   deposits: SchwabDepositImportRow[];
+  allocations: SchwabStockAllocationImportRow[];
   grossDeposits: number;
   excludedStockFunding: number;
   adjustedDeposits: number;
@@ -102,7 +115,7 @@ export interface ExistingCashflowLike {
   id: string;
   usd_in_date: string | null;
   usd_amount: number | string | null;
-  cashflow_kind?: 'fx_transfer' | 'broker_deposit';
+  cashflow_kind?: 'fx_transfer' | 'broker_deposit' | 'stock_allocation';
   import_source?: string | null;
   import_key?: string | null;
 }
@@ -123,15 +136,17 @@ export interface SchwabExportTransaction {
   shares: number | string;
   price: number | string;
   fees_usd?: number | string | null;
+  settled_amount_usd?: number | string | null;
 }
 
-export interface SchwabExportDeposit {
+export interface SchwabExportCashflow {
   id?: string;
   created_at?: string;
   usd_in_date: string;
   usd_amount: number | string;
   source_action: string;
   source_description?: string | null;
+  cashflow_kind?: 'broker_deposit' | 'stock_allocation';
 }
 
 type ParsedTable = {
@@ -152,6 +167,7 @@ const PRICE_DECIMAL_PLACES = 12;
 const FEES_DECIMAL_PLACES = 10;
 const CASH_DECIMAL_PLACES = 10;
 const CASH_TOLERANCE_USD = 0.00000001;
+const STOCK_ALLOCATION_ACTION = 'stock allocation';
 const SCHWAB_DEPOSIT_ACTIONS = new Set([
   'ach transfer',
   'cash deposit',
@@ -173,6 +189,7 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
       headerRow: null,
       rows: [],
       deposits: [],
+      allocations: [],
       ignored: [],
       errors: [{ message: '未找到支持的交易文件表头。' }],
     };
@@ -186,6 +203,7 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
   const ignored: SchwabIgnoredRow[] = [];
   const validRows: Omit<SchwabImportRow, 'duplicate_ordinal' | 'import_key'>[] = [];
   const validDeposits: Omit<SchwabDepositImportRow, 'duplicate_ordinal' | 'import_key'>[] = [];
+  const validAllocations: Omit<SchwabStockAllocationImportRow, 'duplicate_ordinal' | 'import_key'>[] = [];
   const body = parsed.data.slice(parsed.headerIndex + 1);
 
   if (body.length > MAX_ROWS) {
@@ -200,6 +218,29 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
     const action = cells[1].trim();
     const side = parseSide(action);
     if (!side) {
+      if (normalizeAction(action) === STOCK_ALLOCATION_ACTION) {
+        const allocationDate = parseSchwabDate(cells[0]);
+        const amount = parseMoneyNumber(cells[7]);
+        const rowErrors: string[] = [];
+        if (!allocationDate) rowErrors.push('日期无效');
+        if (!Number.isFinite(amount) || amount >= 0) rowErrors.push('个股资金划转必须为负数');
+        if (Math.abs(amount) >= 1_000_000_000_000) rowErrors.push('个股资金划转金额超出数据库精度');
+        if (decimalPlaces(cells[7]) > CASH_DECIMAL_PLACES) {
+          rowErrors.push(`个股资金划转金额最多支持 ${CASH_DECIMAL_PLACES} 位小数`);
+        }
+        if (rowErrors.length > 0 || !allocationDate) {
+          errors.push({ sourceIndex, message: `第 ${sourceIndex} 行：${rowErrors.join('；')}` });
+          continue;
+        }
+        validAllocations.push({
+          source_index: sourceIndex,
+          allocation_date: allocationDate,
+          source_action: 'Stock Allocation',
+          source_description: cells[3].trim(),
+          amount,
+        });
+        continue;
+      }
       if (isSchwabDepositAction(action)) {
         const depositDate = parseSchwabDate(cells[0]);
         const amount = parseMoneyNumber(cells[7]);
@@ -261,6 +302,9 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
     if (price >= 10_000_000_000) rowErrors.push('成交价超出数据库精度');
     if (feesUsd >= 1_000_000_000_000) rowErrors.push('手续费超出数据库精度');
     if (!Number.isFinite(amount)) rowErrors.push('金额无效');
+    if (Number.isFinite(amount) && Math.abs(amount) >= 1_000_000_000_000) {
+      rowErrors.push('金额超出数据库精度');
+    }
     if (side === 'buy' && Number.isFinite(amount) && amount >= 0) rowErrors.push('买入金额必须为负数');
     if (side === 'sell' && Number.isFinite(amount) && amount <= 0) rowErrors.push('卖出金额必须为正数');
     if (
@@ -280,6 +324,9 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
     }
     if (cells[6].trim() !== '' && decimalPlaces(cells[6]) > FEES_DECIMAL_PLACES) {
       rowErrors.push(`手续费最多支持 ${FEES_DECIMAL_PLACES} 位小数`);
+    }
+    if (decimalPlaces(cells[7]) > CASH_DECIMAL_PLACES) {
+      rowErrors.push(`金额最多支持 ${CASH_DECIMAL_PLACES} 位小数`);
     }
 
     if (
@@ -317,7 +364,7 @@ export function parseSchwabTransactions(text: string): SchwabParseResult {
     });
   }
 
-  return finalizeParseResult(parsed, errors, ignored, validRows, validDeposits);
+  return finalizeParseResult(parsed, errors, ignored, validRows, validDeposits, validAllocations);
 }
 
 function parsePortfolioCsvTransactions(
@@ -399,10 +446,13 @@ function parsePortfolioCsvTransactions(
       rowErrors.push(`手续费最多支持 ${FEES_DECIMAL_PLACES} 位小数`);
     }
 
-    const amount = side === 'buy'
+    const amount = roundCash(side === 'buy'
       ? -(shares * price + feesUsd)
-      : shares * price - feesUsd;
+      : shares * price - feesUsd);
     if (!Number.isFinite(amount)) rowErrors.push('金额无效');
+    if (Number.isFinite(amount) && Math.abs(amount) >= 1_000_000_000_000) {
+      rowErrors.push('金额超出数据库精度');
+    }
     if (side === 'sell' && Number.isFinite(feesUsd) && feesUsd >= shares * price) {
       rowErrors.push('卖出手续费必须小于成交额');
     }
@@ -426,7 +476,7 @@ function parsePortfolioCsvTransactions(
     });
   }
 
-  return finalizeParseResult(parsed, errors, ignored, validRows, validDeposits);
+  return finalizeParseResult(parsed, errors, ignored, validRows, validDeposits, []);
 }
 
 function finalizeParseResult(
@@ -435,6 +485,7 @@ function finalizeParseResult(
   ignored: SchwabIgnoredRow[],
   validRows: Omit<SchwabImportRow, 'duplicate_ordinal' | 'import_key'>[],
   validDeposits: Omit<SchwabDepositImportRow, 'duplicate_ordinal' | 'import_key'>[],
+  validAllocations: Omit<SchwabStockAllocationImportRow, 'duplicate_ordinal' | 'import_key'>[],
 ): SchwabParseResult {
   const duplicateCounts = new Map<string, number>();
   const rows = validRows.map((row) => {
@@ -448,12 +499,14 @@ function finalizeParseResult(
     };
   });
   const deposits = finalizeDepositRows(validDeposits);
+  const allocations = finalizeAllocationRows(validAllocations);
 
   return {
     delimiter: parsed.delimiter,
     headerRow: parsed.headerIndex + 1,
     rows,
     deposits,
+    allocations,
     ignored,
     errors,
   };
@@ -489,19 +542,17 @@ export function classifySchwabSymbol(input: {
   return 'unknown';
 }
 
-/**
- * Rebuild the external deposits for the retained ETF sleeve. Stock sale
- * proceeds fund later stock buys first; only the remaining stock buy cost is
- * removed from the latest deposit available on or before that buy date.
- */
+/** Rebuild the retained ETF sleeve cash ledger without moving cash across dates. */
 export function buildSchwabEtfCashPlan(input: {
   deposits: SchwabDepositImportRow[];
   etfRows: SchwabImportRow[];
   stockRows: SchwabImportRow[];
+  allocations?: SchwabStockAllocationImportRow[];
 }): SchwabEtfCashPlan {
-  if (input.deposits.length === 0 && input.stockRows.length === 0) {
+  if (input.deposits.length === 0 && input.stockRows.length === 0 && !input.allocations?.length) {
     return {
       deposits: [],
+      allocations: [],
       grossDeposits: 0,
       excludedStockFunding: 0,
       adjustedDeposits: 0,
@@ -512,14 +563,25 @@ export function buildSchwabEtfCashPlan(input: {
     };
   }
 
-  const grossDeposits = sumCash(input.deposits.map((row) => row.amount));
+  const deposits = finalizeDepositRows(input.deposits);
+  const grossDeposits = sumCash(deposits.map((row) => row.amount));
+  const errors: SchwabParseError[] = [];
+  const warnings: SchwabParseError[] = [];
+  if (input.stockRows.length > 0 && input.allocations?.length) {
+    errors.push({ message: '文件同时包含个股交易和已生成的个股资金划转，无法避免重复扣款。' });
+  }
+
   const stockByDate = new Map<string, { buys: number; sells: number }>();
+  const stockSourceIndexByDate = new Map<string, number>();
   for (const row of input.stockRows) {
     const totals = stockByDate.get(row.trade_date) ?? { buys: 0, sells: 0 };
-    const amount = transactionCashAmount(row);
-    if (row.side === 'buy') totals.buys = roundCash(totals.buys + amount);
-    else totals.sells = roundCash(totals.sells + amount);
+    if (row.side === 'buy') totals.buys = roundCash(totals.buys - row.amount);
+    else totals.sells = roundCash(totals.sells + row.amount);
     stockByDate.set(row.trade_date, totals);
+    stockSourceIndexByDate.set(
+      row.trade_date,
+      Math.min(stockSourceIndexByDate.get(row.trade_date) ?? row.source_index, row.source_index),
+    );
   }
   const stockDates = [...stockByDate.keys()].sort();
   const stockFundingByDate = new Map<string, number>();
@@ -532,73 +594,69 @@ export function buildSchwabEtfCashPlan(input: {
     stockCash = roundCash(Math.max(stockCash - totals.buys, 0));
     if (funding > CASH_TOLERANCE_USD) stockFundingByDate.set(date, funding);
   }
-  const excludedStockFunding = sumCash([...stockFundingByDate.values()]);
-
-  const remainingDeposits = input.deposits.map((row) => ({
-    row,
-    amount: roundCash(row.amount),
-  }));
-  const errors: SchwabParseError[] = [];
-  const warnings: SchwabParseError[] = [];
-
-  for (const [date, required] of stockFundingByDate) {
-    let pending = required;
-    const eligible = remainingDeposits
-      .filter((item) => item.row.deposit_date <= date && item.amount > CASH_TOLERANCE_USD)
-      .sort((left, right) =>
-        right.row.deposit_date.localeCompare(left.row.deposit_date)
-        || right.row.source_index - left.row.source_index);
-
-    for (const item of eligible) {
-      if (pending <= CASH_TOLERANCE_USD) break;
-      const deduction = Math.min(item.amount, pending);
-      item.amount = roundCash(item.amount - deduction);
-      pending = roundCash(pending - deduction);
-    }
-
-    if (pending > CASH_TOLERANCE_USD) {
-      errors.push({
-        message: `${date} 的个股净投入缺少 ${formatCash(pending)} 可扣减存款，无法重建 ETF 现金。`,
-      });
-    }
-  }
-
-  const deposits = finalizeDepositRows(remainingDeposits
-    .filter((item) => item.amount > CASH_TOLERANCE_USD)
-    .map((item) => ({
-      ...item.row,
-      amount: item.amount,
-      source_description: roundCash(item.row.amount - item.amount) > CASH_TOLERANCE_USD
-        ? (item.row.source_description.trim()
-            ? `${item.row.source_description.trim()} · 已扣除个股净投入`
-            : '已扣除个股净投入')
-        : item.row.source_description,
-    })));
-  const adjustedDeposits = sumCash(deposits.map((row) => row.amount));
+  const generatedAllocations = finalizeAllocationRows([...stockFundingByDate].map(([date, funding], index) => ({
+    source_index: stockSourceIndexByDate.get(date) ?? MAX_ROWS + index + 1,
+    allocation_date: date,
+    source_action: 'Stock Allocation' as const,
+    source_description: '排除个股净投入',
+    amount: roundCash(-funding),
+  })));
+  const allocations = input.stockRows.length > 0
+    ? generatedAllocations
+    : finalizeAllocationRows(input.allocations ?? []);
+  const excludedStockFunding = roundCash(-sumCash(allocations.map((row) => row.amount)));
+  const adjustedDeposits = roundCash(grossDeposits - excludedStockFunding);
 
   const depositByDate = new Map<string, number>();
   for (const row of deposits) {
     depositByDate.set(row.deposit_date, roundCash((depositByDate.get(row.deposit_date) ?? 0) + row.amount));
   }
-  const etfByDate = new Map<string, { buys: number; sells: number }>();
+  const allocationByDate = new Map<string, number>();
+  for (const row of allocations) {
+    allocationByDate.set(
+      row.allocation_date,
+      roundCash((allocationByDate.get(row.allocation_date) ?? 0) + row.amount),
+    );
+  }
+  const validationDates = [...new Set([
+    ...depositByDate.keys(),
+    ...allocationByDate.keys(),
+  ])].sort();
+  let availableDeposits = 0;
+  for (const date of validationDates) {
+    availableDeposits = roundCash(
+      availableDeposits
+      + (depositByDate.get(date) ?? 0)
+      + (allocationByDate.get(date) ?? 0),
+    );
+    if (availableDeposits < -CASH_TOLERANCE_USD) {
+      errors.push({
+        message: `${date} 的个股净投入缺少 ${formatCash(-availableDeposits)} 已到账存款，无法重建 ETF 现金。`,
+      });
+      break;
+    }
+  }
+
+  const etfByDate = new Map<string, number>();
   for (const row of input.etfRows) {
-    const totals = etfByDate.get(row.trade_date) ?? { buys: 0, sells: 0 };
-    const amount = transactionCashAmount(row);
-    if (row.side === 'buy') totals.buys = roundCash(totals.buys + amount);
-    else totals.sells = roundCash(totals.sells + amount);
-    etfByDate.set(row.trade_date, totals);
+    etfByDate.set(row.trade_date, roundCash((etfByDate.get(row.trade_date) ?? 0) + row.amount));
   }
 
   const ledgerDates = [...new Set([
     ...depositByDate.keys(),
+    ...allocationByDate.keys(),
     ...etfByDate.keys(),
   ])].sort();
   let cash = 0;
   let minimumCash = 0;
   let minimumCashDate: string | null = null;
   for (const date of ledgerDates) {
-    const trades = etfByDate.get(date) ?? { buys: 0, sells: 0 };
-    cash = roundCash(cash + (depositByDate.get(date) ?? 0) + trades.sells - trades.buys);
+    cash = roundCash(
+      cash
+      + (depositByDate.get(date) ?? 0)
+      + (allocationByDate.get(date) ?? 0)
+      + (etfByDate.get(date) ?? 0),
+    );
     if (cash < minimumCash) {
       minimumCash = cash;
       minimumCashDate = date;
@@ -606,13 +664,14 @@ export function buildSchwabEtfCashPlan(input: {
   }
   if (minimumCash < -CASH_TOLERANCE_USD && minimumCashDate) {
     warnings.push({
-      message: `${minimumCashDate} 扣除个股投入后的可重建现金最低为 ${formatCash(minimumCash)}。`
+      message: `${minimumCashDate} 的可重建现金最低为 ${formatCash(minimumCash)}。`
         + '文件只把 Deposit 作为现金，未计入的股息、利息等事件可能造成暂时缺口；该提示不阻止导入。',
     });
   }
 
   return {
     deposits,
+    allocations,
     grossDeposits,
     excludedStockFunding,
     adjustedDeposits,
@@ -717,15 +776,20 @@ export function buildSchwabDepositImportDiff(
 
 export function exportSchwabTransactions(
   transactions: SchwabExportTransaction[],
-  deposits: SchwabExportDeposit[] = [],
+  cashflows: SchwabExportCashflow[] = [],
 ): string {
   const transactionRows = transactions.map((transaction, index) => {
     const shares = Number(transaction.shares);
     const price = Number(transaction.price);
     const fee = Math.max(0, Number(transaction.fees_usd ?? 0) || 0);
-    const amount = transaction.side === 'buy'
+    const fallbackAmount = transaction.side === 'buy'
       ? -(shares * price + fee)
       : shares * price - fee;
+    const settledAmount = Number(transaction.settled_amount_usd);
+    const hasSettledAmount = Number.isFinite(settledAmount)
+      && ((transaction.side === 'buy' && settledAmount < 0)
+        || (transaction.side === 'sell' && settledAmount > 0));
+    const amount = hasSettledAmount ? settledAmount : fallbackAmount;
     return {
       date: transaction.trade_date,
       createdAt: transaction.created_at ?? '',
@@ -739,27 +803,29 @@ export function exportSchwabTransactions(
         formatDecimal(shares, SHARES_DECIMAL_PLACES),
         `$${formatDecimal(price, PRICE_DECIMAL_PLACES)}`,
         fee > 0 ? `$${formatDecimal(fee, FEES_DECIMAL_PLACES)}` : '',
-        formatSignedMoney(amount),
+        formatSignedMoney(amount, CASH_DECIMAL_PLACES),
       ],
     };
   });
-  const depositRows = deposits.map((deposit, index) => ({
-    date: deposit.usd_in_date,
-    createdAt: deposit.created_at ?? '',
-    id: deposit.id ?? '',
+  const cashflowRows = cashflows.map((cashflow, index) => ({
+    date: cashflow.usd_in_date,
+    createdAt: cashflow.created_at ?? '',
+    id: cashflow.id ?? '',
     sourceOrder: transactions.length + index,
     cells: [
-      formatSchwabDate(deposit.usd_in_date),
-      deposit.source_action.trim(),
+      formatSchwabDate(cashflow.usd_in_date),
+      cashflow.cashflow_kind === 'stock_allocation'
+        ? 'Stock Allocation'
+        : cashflow.source_action.trim(),
       '',
-      deposit.source_description?.trim() ?? '',
+      cashflow.source_description?.trim() ?? '',
       '',
       '',
       '',
-      formatSignedMoney(Number(deposit.usd_amount), CASH_DECIMAL_PLACES),
+      formatSignedMoney(Number(cashflow.usd_amount), CASH_DECIMAL_PLACES),
     ],
   }));
-  const body = [...transactionRows, ...depositRows]
+  const body = [...transactionRows, ...cashflowRows]
     .sort((left, right) =>
       right.date.localeCompare(left.date)
       || right.createdAt.localeCompare(left.createdAt)
@@ -818,6 +884,26 @@ export function schwabDepositImportKey(
   duplicateOrdinal: number,
 ): string {
   return `${schwabDepositIdentity(input)}|${duplicateOrdinal}`;
+}
+
+export function schwabStockAllocationIdentity(input: {
+  allocation_date: string;
+  source_description?: string | null;
+  amount: number | string;
+}): string {
+  return [
+    input.allocation_date,
+    STOCK_ALLOCATION_ACTION,
+    (input.source_description ?? '').trim(),
+    Number(input.amount).toFixed(CASH_DECIMAL_PLACES),
+  ].join('|');
+}
+
+export function schwabStockAllocationImportKey(
+  input: Parameters<typeof schwabStockAllocationIdentity>[0],
+  duplicateOrdinal: number,
+): string {
+  return `${schwabStockAllocationIdentity(input)}|${duplicateOrdinal}`;
 }
 
 export function isSchwabDepositAction(action: string): boolean {
@@ -968,11 +1054,6 @@ function sumCash(values: number[]): number {
   return roundCash(values.reduce((sum, value) => sum + value, 0));
 }
 
-function transactionCashAmount(row: Pick<SchwabImportRow, 'side' | 'shares' | 'price' | 'fees_usd'>): number {
-  const notional = row.shares * row.price;
-  return roundCash(row.side === 'buy' ? notional + row.fees_usd : notional - row.fees_usd);
-}
-
 function finalizeDepositRows(
   rows: Array<Omit<SchwabDepositImportRow, 'duplicate_ordinal' | 'import_key'>
     | SchwabDepositImportRow>,
@@ -986,6 +1067,24 @@ function finalizeDepositRows(
       ...row,
       duplicate_ordinal: duplicateOrdinal,
       import_key: schwabDepositImportKey(row, duplicateOrdinal),
+    };
+  });
+}
+
+function finalizeAllocationRows(
+  rows: Array<Omit<SchwabStockAllocationImportRow, 'duplicate_ordinal' | 'import_key'>
+    | SchwabStockAllocationImportRow>,
+): SchwabStockAllocationImportRow[] {
+  const duplicateCounts = new Map<string, number>();
+  return rows.map((row) => {
+    const identity = schwabStockAllocationIdentity(row);
+    const duplicateOrdinal = (duplicateCounts.get(identity) ?? 0) + 1;
+    duplicateCounts.set(identity, duplicateOrdinal);
+    return {
+      ...row,
+      source_action: 'Stock Allocation',
+      duplicate_ordinal: duplicateOrdinal,
+      import_key: schwabStockAllocationImportKey(row, duplicateOrdinal),
     };
   });
 }

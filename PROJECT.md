@@ -105,7 +105,7 @@ More detail:
   and scheduled cache refresh.
 - `workers/email-cron/`: NYSE-calendar reminder scheduling and email delivery.
 - `supabase/migrations/`: append-only schema and RPC history, currently through
-  `0046_adjusted_deposit_precision.sql`.
+  `0047_schwab_settled_cash_and_stock_allocations.sql`.
 - `scripts/`: regression checks, local dataset generation, operational market
   data helpers, and X content tooling.
 - `tests/fixtures/`: finance and long-horizon regression fixtures.
@@ -190,20 +190,24 @@ for the production application.
 ## Financial Contracts
 
 - Account NAV is holdings market value plus cash reconstructed from imported
-  broker deposits. Trade-only imports without broker deposits retain the
-  legacy zero-cash behavior.
+  broker deposits, dated stock allocations, and ETF trade cash. Trade-only
+  imports without broker deposits retain the legacy zero-cash behavior.
 - Portfolio CSV imports keep confirmed ETF trades, exclude individual-stock
-  trades, and deduct the stock sleeve's net required funding from recognized
-  `Deposit` rows before importing them as broker cash.
+  trades, preserve recognized `Deposit` rows, and record the stock sleeve's net
+  required funding as a negative allocation on the actual stock trade date.
 - Stock sale proceeds fund later stock buys before any additional stock funding
-  is deducted. Stock funding that cannot be deducted from eligible deposits
+  is allocated. Stock funding that exceeds deposits available by that date
   blocks import. A temporary negative retained-ETF cash timeline is a
   non-blocking warning because dividends, interest, and other non-Deposit cash
   events are intentionally omitted; the importer never invents a balancing
   deposit.
-- Manual cashflows remain available for FX-loss reporting. Imported adjusted
-  broker deposits drive account cash, invested capital, and XIRR; when none
-  exist, XIRR falls back to the legacy manual cashflows.
+- A Schwab transaction's signed `Amount` is authoritative for cash, cost, and
+  proceeds. Quantity times price plus/minus fees is only the fallback for
+  six-column Portfolio CSV and manually entered transactions.
+- Manual cashflows remain available for FX-loss reporting. Imported broker
+  deposits plus dated stock allocations drive account cash, invested capital,
+  and XIRR; when no broker deposit exists, XIRR falls back to legacy manual
+  cashflows.
 - The performance chart is daily-linked TWR using inferred trade-funding flows;
   XIRR is a separate money-weighted metric and never draws the curve.
 - A flow on day `t` enters the next sub-period's starting NAV.

@@ -30,7 +30,7 @@ export interface CashflowRow {
   target_rate: number | null;
   fees_cny: number;
   fees_usd: number;
-  cashflow_kind: 'fx_transfer' | 'broker_deposit';
+  cashflow_kind: 'fx_transfer' | 'broker_deposit' | 'stock_allocation';
   source_action: string | null;
   source_description: string | null;
   import_source: string | null;
@@ -49,7 +49,7 @@ export interface CashflowInsert {
   target_rate?: number | null;
   fees_cny?: number;
   fees_usd?: number;
-  cashflow_kind?: 'fx_transfer' | 'broker_deposit';
+  cashflow_kind?: 'fx_transfer' | 'broker_deposit' | 'stock_allocation';
   source_action?: string | null;
   source_description?: string | null;
   import_source?: string | null;
@@ -69,6 +69,7 @@ export interface TransactionRow {
   price: number;
   shares: number;
   fees_usd: number;
+  settled_amount_usd: number | null;
   kind: 'dca' | 'lumpsum';
   note: string | null;
   source_description: string | null;
@@ -87,6 +88,7 @@ export interface TransactionInsert {
   price: number;
   shares: number;
   fees_usd?: number;
+  settled_amount_usd?: number | null;
   kind: 'dca' | 'lumpsum';
   note?: string | null;
   source_description?: string | null;
@@ -256,6 +258,7 @@ export type PortfolioHistory = {
       shares: number;
       price: number;
       fees_usd?: number;
+      settled_amount_usd?: number;
       kind: 'dca' | 'lumpsum';
     }>;
   }>;
@@ -422,7 +425,10 @@ export interface Database {
           }>;
           p_cashflows: Array<{
             source_index: number;
-            deposit_date: string;
+            cashflow_kind?: 'broker_deposit' | 'stock_allocation';
+            cashflow_date?: string;
+            /** Legacy clients can continue to send deposit_date. */
+            deposit_date?: string;
             source_action: string;
             source_description: string;
             amount: number;

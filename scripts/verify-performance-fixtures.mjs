@@ -93,14 +93,15 @@ const authoritativeDepositEvents = buildXirrEvents({
   cashflows: [
     { usd_in_date: '2026-01-01', usd_amount: 1000, cashflow_kind: 'fx_transfer' },
     { usd_in_date: '2026-01-02', usd_amount: 650, cashflow_kind: 'broker_deposit' },
+    { usd_in_date: '2026-01-20', usd_amount: -350, cashflow_kind: 'stock_allocation' },
   ],
   currentMarketValueUsd: 700,
   asOf: new Date('2026-02-01T00:00:00Z'),
 });
 assert.deepEqual(
   authoritativeDepositEvents.map((event) => event.amount),
-  [-650, 700],
-  'imported broker deposits replace manual FX rows as the XIRR funding source',
+  [-650, 350, 700],
+  'broker deposits and dated stock allocations replace manual FX rows as the XIRR funding source',
 );
 const legacyFxEvents = buildXirrEvents({
   cashflows: [{ usd_in_date: '2026-01-01', usd_amount: 1000, cashflow_kind: 'fx_transfer' }],
@@ -139,9 +140,21 @@ assert.equal(
   'cash balance uses buy total cost and sell net proceeds',
 );
 approx(
-  calculateBrokerCashBalance([{ usd_amount: 224.4 }], [buyWithFee, sellWithFee]),
+  calculateBrokerCashBalance([{ usd_amount: 574.4 }, { usd_amount: -350 }], [buyWithFee, sellWithFee]),
   172.4,
 );
+
+const settledBuy = transaction({
+  id: 'settled-buy',
+  trade_date: '2026-01-04',
+  side: 'buy',
+  ticker: 'QQQM',
+  shares: 1,
+  price: 100.0002015,
+  settled_amount_usd: -100,
+});
+assert.equal(transactionCashAmount(settledBuy), 100);
+assert.equal(transactionCashEffect(settledBuy), -100);
 
 const [feePosition] = aggregatePositions([buyWithFee, sellWithFee]);
 approx(feePosition.shares, 6);
@@ -196,6 +209,7 @@ function transaction(overrides) {
     price: overrides.price,
     shares: overrides.shares,
     fees_usd: overrides.fees_usd ?? 0,
+    settled_amount_usd: overrides.settled_amount_usd ?? null,
     kind: 'dca',
     note: null,
     source_description: null,

@@ -4,9 +4,9 @@
 
 - Add browser-only parsing for Schwab transaction CSV/TSV exports.
 - Classify every standard `Buy`/`Sell` symbol and import confirmed ETFs only.
-- Exclude individual-stock trades and deduct their net required funding from
-  recognized positive deposits. Stock sale proceeds fund later stock buys
-  before another deposit deduction is required.
+- Exclude individual-stock trades, preserve recognized positive deposits, and
+  record net stock funding as a negative allocation on the stock trade date.
+  Stock sale proceeds fund later stock buys before another allocation is required.
 - Parse positive recognized Schwab deposits and six-column Portfolio CSV
   `Deposit` rows. Continue to ignore withdrawals, dividends, taxes, and other
   unsupported cash events.
@@ -17,33 +17,35 @@
   decimal places for fill price, matching the portfolio CSV producer's full
   supported output rather than rounding imported trades.
 - Support append-only import and atomic full portfolio-input reset/import.
-- Export stored ETF trades and adjusted deposits in the same eight-column
-  Schwab format.
+- Export stored ETF trades, original deposits, and dated stock allocations in
+  the same eight-column Schwab format.
 - Preserve application metadata for matching transactions only in append mode.
-- Include transaction fees in private portfolio calculations.
+- Treat Schwab's signed `Amount` as authoritative for private cash, cost, and
+  proceeds; retain quantity-times-price plus/minus fees as the fallback.
 
 ## Database Contract
 
-- Existing migrations: `0043_schwab_transaction_import.sql`,
-  `0044_full_reset_schwab_import.sql`, and
-  `0045_transaction_numeric_precision.sql`. Migration
-  `0046_adjusted_deposit_precision.sql` widens imported USD cash to ten decimal
-  places and upgrades the private helper's deposit identity and validation.
+- Existing migrations: `0043_schwab_transaction_import.sql` through
+  `0046_adjusted_deposit_precision.sql`. New migration
+  `0047_schwab_settled_cash_and_stock_allocations.sql` adds signed transaction
+  settlement cash, dated stock allocations, and the compatible import wrapper.
 - Add transaction fee, source description, import source, and import key fields.
-- The client sends only adjusted positive broker deposits through the existing
-  authenticated RPC cashflow array.
+- The client sends original positive broker deposits and negative dated stock
+  allocations through the existing authenticated RPC cashflow array.
 - Enforce per-user import-key uniqueness.
 - Keep the browser and database import-key formats on the same 10/12/10
   quantity/price/fee precision so distinct fills do not collide.
 - Expose an authenticated, security-invoker import RPC.
 - Derive ownership from `auth.uid()` and rely on transaction RLS.
 - Full reset removes every transaction, cashflow, and funding batch owned by
-  the current user, then rebuilds confirmed ETF trades and adjusted deposits.
+  the current user, then rebuilds confirmed ETF trades, original deposits, and
+  dated stock allocations.
 - Files containing individual stocks or deposits cannot use append mode because
   append cannot remove existing stocks or replace the account cash basis.
-- Broker cash is adjusted deposits minus ETF buys plus ETF sells. Trade-only
-  files without deposits keep the zero-cash and inferred-funding fallback.
-- Failure to deduct the stock sleeve's required funding from eligible deposits
+- Broker cash is deposits plus stock allocations plus signed ETF settlement
+  amounts. Trade-only files without deposits keep the zero-cash and
+  inferred-funding fallback.
+- Stock funding that exceeds deposits available by its trade date
   blocks import. A temporary negative ETF cash timeline is shown as a warning,
   not an error, because ignored dividends, interest, or other non-Deposit events
   can legitimately explain the gap.
@@ -57,16 +59,16 @@
 - Use synthetic fixtures in tests.
 - Do not apply the migration or deploy without separate authorization.
 - Full reset intentionally deletes all transactions, manual cashflows, imported
-  deposits, and funding batches before rebuilding ETF trades and adjusted cash.
-- The confirmation must state how many ETF trades and adjusted deposits will be
-  rebuilt and that individual-stock trades will not be imported.
+  cash events, and funding batches before rebuilding ETF trades and cash.
+- The confirmation must state how many ETF trades, deposits, and stock
+  allocations will be rebuilt and that individual-stock trades will not be imported.
 - Any validation, oversell, or write failure must roll back the full import.
 - Do not invent balancing deposits to silence a temporary cash warning.
 
 ## Verification
 
-- Schwab/Portfolio parsing, symbol classification, ETF-only selection, adjusted
-  deposit ledger, strict reset, and trade-plus-deposit round-trip export tests.
+- Schwab/Portfolio parsing, symbol classification, ETF-only selection, settled
+  cash ledger, dated allocation, strict reset, and round-trip export tests.
 - Synthetic high-precision portfolio rows, precision boundaries, and import-key
   collision regression tests.
 - Fee-aware finance fixtures.
@@ -123,3 +125,14 @@
   fresh browser verification confirmed the login page, route guard, and
   adjusted-cash import markers.
 - No real Schwab export was read or imported during migration or deployment.
+
+## Local Root-Cause Fix (2026-08-05)
+
+- Migration `0047_schwab_settled_cash_and_stock_allocations.sql` and the matching
+  frontend are implemented locally but have not been applied, committed,
+  pushed, or deployed.
+- Synthetic regression coverage proves that a `$922.75` deposit against source
+  trade `Amount` totaling `-$922.75` has `$0.00` minimum and ending cash even
+  when quantity times price differs by `$0.0002015`.
+- A separate dated-allocation fixture proves a June 17 stock purchase cannot
+  move its cash effect back to June 5.

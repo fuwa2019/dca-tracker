@@ -39,7 +39,7 @@ export function buildXirrEvents(args: {
   cashflows: Array<{
     usd_in_date: string | null;
     usd_amount: number | null;
-    cashflow_kind?: 'fx_transfer' | 'broker_deposit';
+    cashflow_kind?: 'fx_transfer' | 'broker_deposit' | 'stock_allocation';
   }>;
   currentMarketValueUsd: number;
   asOf?: Date;
@@ -48,7 +48,9 @@ export function buildXirrEvents(args: {
   const importedDeposits = args.cashflows.filter((cashflow) =>
     cashflow.cashflow_kind === 'broker_deposit');
   const fundingCashflows = importedDeposits.length > 0
-    ? importedDeposits
+    ? args.cashflows.filter((cashflow) =>
+        cashflow.cashflow_kind === 'broker_deposit'
+        || cashflow.cashflow_kind === 'stock_allocation')
     : args.cashflows;
   for (const c of fundingCashflows) {
     if (!c.usd_in_date || !c.usd_amount) continue;

@@ -8,17 +8,22 @@ sanitized performance cache.
 ## Core Terms
 
 - NAV on dashboard cards is current holdings market value plus uninvested cash.
-- Cash is deposits minus buys plus sells.
-- Imported broker deposits are first reduced by the net funding required by
-  excluded individual-stock trades. Only the retained ETF sleeve and its cash
-  are included in private account NAV and XIRR.
-- Imported broker deposits replace manual FX rows as XIRR funding events.
+- Cash is broker deposits plus dated stock allocations plus signed ETF trade
+  settlement amounts.
+- Imported broker deposits keep their source amount and date. Net funding for
+  excluded individual-stock trades is a negative internal allocation on the
+  stock trade date. Only the retained ETF sleeve and its cash are included in
+  private account NAV and XIRR.
+- Imported broker deposits and stock allocations replace manual FX rows as XIRR
+  funding events.
   Accounts without imported deposits retain the legacy manual-FX fallback.
 - A negative point in the reconstructed ETF cash timeline is advisory rather
   than fatal because unsupported dividends, interest, and other cash events are
   absent from imported cash. The preview still reports the minimum and ending
   cash without fabricating a balancing deposit.
-- Cost basis defaults to average cost in product UI.
+- Schwab's signed `Amount` is authoritative for buy cost and sell proceeds;
+  quantity times price plus/minus fees remains the fallback when no settled
+  amount exists. Cost basis defaults to average cost in product UI.
 - Performance chart uses daily-linked TWR.
 - Performance chart uses the trading-performance view: it starts on the first
   transaction date and ignores idle cash before the first trade.
@@ -85,8 +90,8 @@ proceeds fund later buys first; only the unfunded portion of a buy is treated
 as a new external flow. This keeps the curve focused on trading performance and
 prevents an early deposit with no trade from starting the SPY clock.
 
-This chart contract is intentionally separate from account cash. Adjusted
-broker deposits affect private NAV and XIRR, while the dashboard and public
+This chart contract is intentionally separate from account cash. Broker
+deposits and dated stock allocations affect private NAV and XIRR, while the dashboard and public
 share performance curve continues to use the same transaction-derived TWR
 cache and does not expose cashflow amounts.
 

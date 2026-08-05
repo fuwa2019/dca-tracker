@@ -1,6 +1,6 @@
 import type { Database } from '../database.types';
 import { normalizeSymbol } from '../symbols.ts';
-import { transactionCashAmount, transactionFee } from './transactionAmounts.ts';
+import { transactionCashAmount } from './transactionAmounts.ts';
 
 export type TxnRow = Database['public']['Tables']['transactions']['Row'];
 
@@ -54,7 +54,6 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
     for (const tx of sorted) {
       const sh = Number(tx.shares);
       const px = Number(tx.price);
-      const fee = transactionFee(tx);
 
       if (tx.side === 'buy') {
         const buyCost = transactionCashAmount(tx);
@@ -70,15 +69,15 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
         // Oversells are rejected at the DB layer (trigger), so by the time we
         // reach this code the sell is always covered by available shares.
         let remaining = sh;
+        const netSellPrice = sh > 0 ? transactionCashAmount(tx) / sh : px;
         while (remaining > 1e-9 && fifoQueue.length > 0) {
           const lot = fifoQueue[0];
           const take = Math.min(remaining, lot.shares);
-          realizedUsd += take * (px - lot.unitCost);
+          realizedUsd += take * (netSellPrice - lot.unitCost);
           lot.shares -= take;
           remaining -= take;
           if (lot.shares <= 1e-9) fifoQueue.shift();
         }
-        realizedUsd -= fee;
         // avg-cost: keep per-share basis, subtract proportional cost
         if (avgShares > 1e-9) {
           const avgBasis = avgCostTotal / avgShares;

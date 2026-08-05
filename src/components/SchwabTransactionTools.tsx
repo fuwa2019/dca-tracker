@@ -29,6 +29,7 @@ import {
   type SchwabImportKind,
   type SchwabImportRow,
   type SchwabParseResult,
+  type SchwabStockAllocationImportRow,
   type SchwabSymbolClassification,
 } from '@/lib/schwabTransactions';
 import { useCashflows } from '@/hooks/usePortfolio';
@@ -122,8 +123,11 @@ export function SchwabTransactionTools({ transactions }: Props) {
     deposits: parsed?.deposits ?? [],
     etfRows: selectedRows,
     stockRows: excludedStockRows,
-  }), [excludedStockRows, parsed?.deposits, selectedRows]);
-  const requiresFullReset = (parsed?.deposits.length ?? 0) > 0 || excludedStockRows.length > 0;
+    allocations: parsed?.allocations ?? [],
+  }), [excludedStockRows, parsed?.allocations, parsed?.deposits, selectedRows]);
+  const requiresFullReset = (parsed?.deposits.length ?? 0) > 0
+    || (parsed?.allocations.length ?? 0) > 0
+    || excludedStockRows.length > 0;
 
   const diff = useMemo(() => buildSchwabImportDiff(
     selectedRows,
@@ -141,7 +145,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
     && parsed.errors.length === 0
     && cashPlan.errors.length === 0
     && unresolvedSymbols.length === 0
-    && (selectedRows.length > 0 || cashPlan.deposits.length > 0)
+    && (selectedRows.length > 0 || cashPlan.deposits.length > 0 || cashPlan.allocations.length > 0)
     && !classifying
     && !cashflowsLoading
     && !cashflowsError
@@ -164,7 +168,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
       const nextParsed = parseSchwabTransactions(await file.text());
       setParsed(nextParsed);
       setKinds(Object.fromEntries(nextParsed.rows.map((row) => [row.import_key, 'dca'])));
-      if (nextParsed.deposits.length > 0) setMode('reset_all');
+      if (nextParsed.deposits.length > 0 || nextParsed.allocations.length > 0) setMode('reset_all');
 
       const descriptions = new Map<string, string>();
       for (const transaction of transactions) {
@@ -239,14 +243,26 @@ export function SchwabTransactionTools({ transactions }: Props) {
       }));
       const response = await supabase.rpc('import_schwab_transactions', {
         p_rows: payload,
-        p_cashflows: cashPlan.deposits.map((row) => ({
-          source_index: row.source_index,
-          deposit_date: row.deposit_date,
-          source_action: row.source_action,
-          source_description: row.source_description,
-          amount: row.amount,
-          duplicate_ordinal: row.duplicate_ordinal,
-        })),
+        p_cashflows: [
+          ...cashPlan.deposits.map((row) => ({
+            source_index: row.source_index,
+            cashflow_kind: 'broker_deposit',
+            cashflow_date: row.deposit_date,
+            source_action: row.source_action,
+            source_description: row.source_description,
+            amount: row.amount,
+            duplicate_ordinal: row.duplicate_ordinal,
+          })),
+          ...cashPlan.allocations.map((row) => ({
+            source_index: row.source_index,
+            cashflow_kind: 'stock_allocation',
+            cashflow_date: row.allocation_date,
+            source_action: row.source_action,
+            source_description: row.source_description,
+            amount: row.amount,
+            duplicate_ordinal: row.duplicate_ordinal,
+          })),
+        ],
         p_etf_symbols: [...confirmedEtfSymbols],
         p_mode: mode,
       });
@@ -280,37 +296,43 @@ export function SchwabTransactionTools({ transactions }: Props) {
     setError(null);
     try {
       if (cashflowsLoading) {
-        setNotice('正在读取调整后存款，请稍后再导出。');
+        setNotice('正在读取现金事件，请稍后再导出。');
         return;
       }
-      if (cashflowsError) throw new Error('调整后存款读取失败，已阻止导出不完整文件。');
+      if (cashflowsError) throw new Error('现金事件读取失败，已阻止导出不完整文件。');
       const exportRows = [...transactions]
         .filter((transaction) => transaction.side === 'buy' || transaction.side === 'sell');
-      const exportDeposits = cashflows.filter((cashflow) =>
-        cashflow.cashflow_kind === 'broker_deposit'
+      const exportCashflows = cashflows.filter((cashflow) =>
+        (cashflow.cashflow_kind === 'broker_deposit'
+          || cashflow.cashflow_kind === 'stock_allocation')
         && cashflow.import_source === 'schwab'
         && !!cashflow.usd_in_date
-        && Number(cashflow.usd_amount) > 0
+        && ((cashflow.cashflow_kind === 'broker_deposit' && Number(cashflow.usd_amount) > 0)
+          || (cashflow.cashflow_kind === 'stock_allocation' && Number(cashflow.usd_amount) < 0))
         && !!cashflow.source_action
-        && isSchwabDepositAction(cashflow.source_action));
-      if (exportRows.length === 0 && exportDeposits.length === 0) {
-        setNotice('没有可导出的 ETF 交易或调整后存款。');
+        && (cashflow.cashflow_kind === 'stock_allocation'
+          || isSchwabDepositAction(cashflow.source_action)));
+      if (exportRows.length === 0 && exportCashflows.length === 0) {
+        setNotice('没有可导出的 ETF 交易、入金或个股资金划转。');
         return;
       }
 
       const content = exportSchwabTransactions(
         exportRows,
-        exportDeposits.map((cashflow) => ({
+        exportCashflows.map((cashflow) => ({
           id: cashflow.id,
           created_at: cashflow.created_at,
           usd_in_date: cashflow.usd_in_date!,
           usd_amount: cashflow.usd_amount!,
           source_action: cashflow.source_action!,
           source_description: cashflow.source_description,
+          cashflow_kind: cashflow.cashflow_kind === 'stock_allocation'
+            ? 'stock_allocation' as const
+            : 'broker_deposit' as const,
         })),
       );
       downloadTextFile(content, `Schwab_Transactions_${fileTimestamp(new Date())}.csv`);
-      setNotice(`已导出 ${exportRows.length} 笔 ETF 交易、${exportDeposits.length} 笔调整后存款。`);
+      setNotice(`已导出 ${exportRows.length} 笔 ETF 交易、${exportCashflows.length} 笔现金事件。`);
     } catch (exportError) {
       setError(exportError instanceof Error ? exportError.message : '导出失败。');
     } finally {
@@ -326,7 +348,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            title="导入 ETF 交易与调整后存款"
+            title="导入 ETF 交易与现金事件"
             onClick={() => {
               setOpen(true);
               setNotice(null);
@@ -339,7 +361,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            title="导出 ETF 交易与调整后存款"
+            title="导出 ETF 交易与现金事件"
             disabled={exporting || cashflowsLoading || (transactions.length === 0 && cashflows.length === 0)}
             onClick={() => void runExport()}
           >
@@ -369,7 +391,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
             <ResetConfirmation
               transactionAdded={diff.added.length}
               transactionRemoved={diff.removed.length}
-              cashflowAdded={depositDiff.added.length}
+              cashflowAdded={depositDiff.added.length + cashPlan.allocations.length}
               cashflowRemoved={cashflows.length}
               excludedStocks={excludedStockRows.length}
               adjustedDeposits={cashPlan.adjustedDeposits}
@@ -383,7 +405,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
               <DialogHeader>
                 <DialogTitle>导入 ETF 交易与现金</DialogTitle>
                 <DialogDescription>
-                  文件只在此设备解析；个股交易不导入，其净投入会从 Deposit 存款中扣除。
+                  文件只在此设备解析；个股交易不导入，其净投入按成交日从 ETF 现金划转。
                 </DialogDescription>
               </DialogHeader>
 
@@ -467,13 +489,17 @@ export function SchwabTransactionTools({ transactions }: Props) {
                         <DiffMetric label="ETF 交易" value={selectedRows.length} />
                         <DiffMetric label="个股排除" value={excludedStockRows.length} />
                         <DiffMetric label="原始存款" value={formatUsd(cashPlan.grossDeposits)} />
-                        <DiffMetric label="扣除个股" value={formatUsd(-cashPlan.excludedStockFunding)} />
-                        <DiffMetric label="导入存款" value={formatUsd(cashPlan.adjustedDeposits)} />
+                        <DiffMetric label="个股划转" value={formatUsd(-cashPlan.excludedStockFunding)} />
+                        <DiffMetric label="净投入" value={formatUsd(cashPlan.adjustedDeposits)} />
                         <DiffMetric label="期末现金" value={formatUsd(cashPlan.endingCash)} />
                       </div>
 
                       {cashPlan.deposits.length > 0 && (
                         <DepositReview rows={cashPlan.deposits} />
+                      )}
+
+                      {cashPlan.allocations.length > 0 && (
+                        <AllocationReview rows={cashPlan.allocations} />
                       )}
 
                       {diff.added.length > 0 && (
@@ -516,7 +542,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
                               {resetCoverageConfirmed ? '已确认清空全部组合数据' : '确认清空全部组合数据'}
                             </span>
                             <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
-                              全部交易、全部现金流和资金批次将先清除；只重建 ETF 交易与扣除个股净投入后的存款。
+                              全部交易、全部现金流和资金批次将先清除；重建 ETF 交易、原始入金和成交日个股划转。
                             </span>
                           </span>
                         </label>
@@ -555,7 +581,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
                       )}
                       {mode === 'append' && requiresFullReset && (
                         <p className="text-xs text-warn">
-                          含个股或存款的文件必须清空全部后导入，新增导入无法删除旧个股或替换旧现金。
+                          含个股、存款或个股划转的文件必须清空全部后导入，新增导入无法替换旧现金模型。
                         </p>
                       )}
                       {cashflowsError && (
@@ -563,7 +589,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
                       )}
                       {ignoredCount > 0 && (
                         <p className="text-xs text-muted-foreground">
-                          另有 {ignoredCount} 行被排除：包含个股交易及非 Deposit 的现金事件。
+                          另有 {ignoredCount} 行被排除：包含个股交易及不支持的现金事件。
                         </p>
                       )}
                     </>
@@ -656,7 +682,7 @@ function SymbolReview({
 function DepositReview({ rows }: { rows: SchwabDepositImportRow[] }) {
   return (
     <div className="space-y-2 border-t border-border pt-4">
-      <Label>调整后存款</Label>
+      <Label>原始入金</Label>
       <div className="max-h-36 min-w-0 divide-y divide-border overflow-y-auto rounded-lg border border-border">
         {rows.map((row) => (
           <div
@@ -667,6 +693,26 @@ function DepositReview({ rows }: { rows: SchwabDepositImportRow[] }) {
             <span className="min-w-0 truncate text-muted-foreground">
               {row.source_action}{row.source_description ? ` · ${row.source_description}` : ''}
             </span>
+            <span className="font-semibold tnum">{formatUsd(row.amount)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AllocationReview({ rows }: { rows: SchwabStockAllocationImportRow[] }) {
+  return (
+    <div className="space-y-2 border-t border-border pt-4">
+      <Label>个股资金划转</Label>
+      <div className="max-h-36 min-w-0 divide-y divide-border overflow-y-auto rounded-lg border border-border">
+        {rows.map((row) => (
+          <div
+            key={row.import_key}
+            className="grid min-w-0 grid-cols-[5rem_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-xs"
+          >
+            <span className="tnum">{row.allocation_date}</span>
+            <span className="min-w-0 truncate text-muted-foreground">{row.source_description}</span>
             <span className="font-semibold tnum">{formatUsd(row.amount)}</span>
           </div>
         ))}
@@ -765,7 +811,7 @@ function ResetConfirmation({
         <DialogDescription>
           全部交易将删除 {transactionRemoved} 笔，并重建 {transactionAdded} 笔 ETF 交易；
           {excludedStocks} 笔个股交易不导入。全部现金流将删除 {cashflowRemoved} 笔，
-          重建 {cashflowAdded} 笔调整后存款，共 {formatUsd(adjustedDeposits)}。
+          重建 {cashflowAdded} 笔入金与个股划转，ETF 净投入共 {formatUsd(adjustedDeposits)}。
         </DialogDescription>
       </DialogHeader>
       <div className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-3 text-sm">
@@ -805,7 +851,7 @@ function ImportResult({
         <DiffMetric label="错误" value={result.errors} />
       </div>
       <p className="text-sm text-muted-foreground">
-        ETF 交易、调整后存款、账户现金和业绩缓存状态已刷新。新增 ETF 的日线价格可在“数据健康”中补齐。
+        ETF 交易、原始入金、个股划转、账户现金和业绩缓存状态已刷新。新增 ETF 的日线价格可在“数据健康”中补齐。
       </p>
       <div className="flex flex-wrap justify-end gap-2">
         <Button type="button" variant="outline" asChild>

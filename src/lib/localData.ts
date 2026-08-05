@@ -144,6 +144,7 @@ export const localTransactions: TransactionRow[] = trades.flatMap(([date], month
       price: close,
       shares: Number((allocation.monthlyUsd / close).toFixed(6)),
       fees_usd: 0,
+      settled_amount_usd: null,
       kind: assetIndex === 0 ? 'dca' as const : 'lumpsum' as const,
       note: '[LOCAL_DEMO]',
       source_description: null,

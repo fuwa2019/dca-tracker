@@ -26,6 +26,7 @@ export function CashflowsPage() {
   const [editing, setEditing] = useState<CashRow | null>(null);
   const [deleting, setDeleting] = useState<CashRow | null>(null);
   const fxTransferCount = rows.filter((row) => row.cashflow_kind === 'fx_transfer').length;
+  const externalCashflowCount = rows.filter((row) => row.cashflow_kind !== 'stock_allocation').length;
 
   const del = useMutation({
     mutationFn: async (id: string) => {
@@ -49,7 +50,7 @@ export function CashflowsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Kicker en="Cash Flow" zh="资金流水" />
-          <p className="mt-1.5 text-[11px] text-muted-foreground">手工换汇用于汇损统计；导入的调整后存款参与账户现金与 XIRR。</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">手工换汇用于汇损统计；导入的原始入金与个股划转参与账户现金和 XIRR。</p>
         </div>
         <Dialog open={adding} onOpenChange={setAdding}>
           <DialogTrigger asChild>
@@ -63,7 +64,7 @@ export function CashflowsPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="累计 USD 到账" value={usd.format(stats.totalUsdActual)} sub={`${rows.length} 笔资金记录`} />
+        <StatCard label="累计 USD 到账" value={usd.format(stats.totalUsdActual)} sub={`${externalCashflowCount} 笔外部资金记录`} />
         <StatCard
           label="累计损耗"
           value={signedUsd(-stats.totalLoss)}
@@ -77,7 +78,7 @@ export function CashflowsPage() {
         <EmptyState
           icon={Plus}
           title="还没有资金流水"
-          description="可添加手工换汇，或从交易 CSV 导入扣除个股净投入后的存款。"
+          description="可添加手工换汇，或从交易 CSV 导入原始入金和按日个股划转。"
           action={
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus className="h-3.5 w-3.5" /> 添加第一笔
@@ -89,6 +90,8 @@ export function CashflowsPage() {
           <AnimatePresence initial={false}>
             {rows.map((c, i) => {
               const isBrokerDeposit = c.cashflow_kind === 'broker_deposit';
+              const isStockAllocation = c.cashflow_kind === 'stock_allocation';
+              const isFxTransfer = c.cashflow_kind === 'fx_transfer';
               const cnyAmt = Number(c.cny_amount);
               const feesCny = Number(c.fees_cny) || 0;
               const usdAmt = Number(c.usd_amount ?? 0);
@@ -118,6 +121,13 @@ export function CashflowsPage() {
                             {c.source_description ? ` · ${c.source_description}` : ''}
                           </div>
                         </>
+                      ) : isStockAllocation ? (
+                        <>
+                          <div className="font-medium tnum">{signedUsd(usdAmt)}</div>
+                          <div className="truncate text-[11px] text-muted-foreground">
+                            个股资金划转{c.source_description ? ` · ${c.source_description}` : ''}
+                          </div>
+                        </>
                       ) : (
                         <>
                           <div className="font-medium tnum">
@@ -130,10 +140,10 @@ export function CashflowsPage() {
                       )}
                     </div>
                     <div className={cn('w-24 shrink-0 text-right text-xs tnum', changeColor(-loss))}>
-                      {isBrokerDeposit ? '—' : usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
+                      {isFxTransfer && usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      {!isBrokerDeposit && (
+                      {isFxTransfer && (
                         <Button aria-label={`编辑 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -150,16 +160,22 @@ export function CashflowsPage() {
                       <div className="min-w-0 flex-1 font-medium tnum truncate">
                         {isBrokerDeposit
                           ? usd.format(usdAmt)
-                          : <>{cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}</>}
+                          : isStockAllocation
+                            ? signedUsd(usdAmt)
+                            : <>{cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}</>}
                       </div>
                       <div className={cn('ml-2 shrink-0 text-right text-xs tnum', changeColor(-loss))}>
-                        {isBrokerDeposit ? '嘉信入金' : usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
+                        {isBrokerDeposit
+                          ? '嘉信入金'
+                          : isStockAllocation
+                            ? '个股划转'
+                            : usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground tnum min-w-0">
                         <span>{shortDate(displayDate)}</span>
-                        {isBrokerDeposit ? (
+                        {isBrokerDeposit || isStockAllocation ? (
                           <span className="truncate">{c.source_action}{c.source_description ? ` · ${c.source_description}` : ''}</span>
                         ) : (
                           <span>汇率 {rate.toFixed(4)}</span>
@@ -167,7 +183,7 @@ export function CashflowsPage() {
                         {c.note && <span className="truncate">· {c.note}</span>}
                       </div>
                       <div className="ml-2 flex shrink-0 gap-1">
-                        {!isBrokerDeposit && (
+                        {isFxTransfer && (
                           <Button aria-label={`编辑 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -201,8 +217,8 @@ export function CashflowsPage() {
             <DialogTitle>确认删除？</DialogTitle>
             <DialogDescription>
               {deleting && (
-                deleting.cashflow_kind === 'broker_deposit'
-                  ? `${deleting.usd_in_date ?? deleting.cny_out_date} · ${usd.format(Number(deleting.usd_amount))} · 嘉信入金`
+                deleting.cashflow_kind !== 'fx_transfer'
+                  ? `${deleting.usd_in_date ?? deleting.cny_out_date} · ${signedUsd(Number(deleting.usd_amount))} · ${deleting.cashflow_kind === 'broker_deposit' ? '嘉信入金' : '个股资金划转'}`
                   : `${deleting.cny_out_date} · ${cny.format(Number(deleting.cny_amount))}`
               )}
             </DialogDescription>

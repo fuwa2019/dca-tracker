@@ -25,6 +25,7 @@ export interface HistoryPoint {
     shares: number;
     price: number;
     fees_usd?: number;
+    settled_amount_usd?: number;
     kind: 'dca' | 'lumpsum';
   }>;
 }
@@ -127,6 +128,9 @@ export function buildAccountValueHistory(input: BuildHistoryInput): HistoryPoint
         shares: Number(txn.shares),
         price: Number(txn.price),
         fees_usd: Number(txn.fees_usd) || 0,
+        settled_amount_usd: txn.settled_amount_usd == null
+          ? undefined
+          : Number(txn.settled_amount_usd),
         kind: txn.kind,
       })),
     });
@@ -181,6 +185,9 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       shares: Number(t.shares),
       price: Number(t.price),
       fees_usd: Number(t.fees_usd) || 0,
+      settled_amount_usd: t.settled_amount_usd == null
+        ? undefined
+        : Number(t.settled_amount_usd),
       kind: t.kind,
     });
     txnsByDate.set(t.trade_date, list);

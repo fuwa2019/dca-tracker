@@ -123,6 +123,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
             source_description: null,
             import_source: null,
             import_key: null,
+            settled_amount_usd: null,
             created_at: now,
             updated_at: now,
           };

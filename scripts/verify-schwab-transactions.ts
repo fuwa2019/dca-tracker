@@ -29,6 +29,7 @@ assert.equal(parsedTab.delimiter, '\t');
 assert.equal(parsedTab.headerRow, 2);
 assert.equal(parsedTab.rows.length, 3, 'all standard Buy/Sell rows are parsed before classification');
 assert.equal(parsedTab.deposits.length, 2, 'positive recognized deposits are parsed');
+assert.equal(parsedTab.allocations.length, 0);
 assert.equal(parsedTab.ignored.length, 2);
 assert.equal(parsedTab.errors.length, 0);
 assert.equal(parsedTab.rows[2].trade_date, '2025-04-14', '`as of` date is effective');
@@ -130,6 +131,13 @@ assert.equal(excessivePortfolioPrecision.rows.length, 0);
 assert.match(excessivePortfolioPrecision.errors[0].message, /成交价最多支持 12 位小数/);
 assert.match(excessivePortfolioPrecision.errors[1].message, /手续费最多支持 10 位小数/);
 
+const excessiveAmountPrecision = parseSchwabTransactions([
+  SCHWAB_HEADERS.join('\t'),
+  '06/05/2026\tBuy\tSMH\tVANECK SEMICONDUCTOR ETF\t0.1\t$600\t\t-$60.00000000001',
+].join('\n'));
+assert.equal(excessiveAmountPrecision.rows.length, 0);
+assert.match(excessiveAmountPrecision.errors[0].message, /金额最多支持 10 位小数/);
+
 const invalidSellFee = parseSchwabTransactions([
   SCHWAB_HEADERS.join('\t'),
   '06/05/2026\tSell\tSMH\tVANECK SEMICONDUCTOR ETF\t0.1\t$10\t$1.00\t$0.00',
@@ -188,15 +196,22 @@ assert.equal(cashPlan.excludedStockFunding, 350, 'stock sale proceeds fund later
 assert.equal(cashPlan.adjustedDeposits, 650);
 assert.equal(cashPlan.endingCash, 50);
 assert.equal(cashPlan.deposits.length, 1);
-assert.equal(cashPlan.deposits[0].amount, 650);
-assert.match(cashPlan.deposits[0].source_description, /已扣除个股净投入/);
+assert.equal(cashPlan.deposits[0].amount, 1000, 'source deposits retain their original amount and date');
+assert.deepEqual(
+  cashPlan.allocations.map((row) => [row.allocation_date, row.amount]),
+  [['2026-01-02', -300], ['2026-01-04', -50]],
+  'stock funding leaves the ETF sleeve on the actual stock buy dates',
+);
 assert.equal(
   calculateBrokerCashBalance(
-    cashPlan.deposits.map((row) => ({ usd_amount: row.amount })),
+    [
+      ...cashPlan.deposits.map((row) => ({ usd_amount: row.amount })),
+      ...cashPlan.allocations.map((row) => ({ usd_amount: row.amount })),
+    ],
     etfRows,
   ),
   50,
-  'imported adjusted deposits reconstruct retained ETF cash',
+  'original deposits plus dated stock allocations reconstruct retained ETF cash',
 );
 
 const insufficientCashPlan = buildSchwabEtfCashPlan({
@@ -212,18 +227,52 @@ assert.match(
   'an incomplete cash timeline warns without blocking the adjusted import',
 );
 
-const subCentCashGapPlan = buildSchwabEtfCashPlan({
-  deposits: cashPlanParsed.deposits.map((row) => ({ ...row, amount: 949.9997985 })),
-  etfRows,
-  stockRows,
+const settledAmountFixture = parseSchwabTransactions([
+  SCHWAB_HEADERS.join('\t'),
+  '05/14/2026\tDeposit\t\tSYNTHETIC SETTLED CASH\t\t\t\t$922.75',
+  '05/14/2026\tBuy\tVGT\tSYNTHETIC ETF\t1\t$100.00005\t\t-$100.00',
+  '05/14/2026\tBuy\tQQQM\tSYNTHETIC ETF\t1\t$200.00005\t\t-$200.00',
+  '05/14/2026\tBuy\tSMH\tSYNTHETIC ETF\t1\t$300.00005\t\t-$300.00',
+  '05/14/2026\tBuy\tSGOV\tSYNTHETIC ETF\t1\t$322.7500515\t\t-$322.75',
+].join('\n'));
+assert.equal(settledAmountFixture.errors.length, 0);
+const settledAmountPlan = buildSchwabEtfCashPlan({
+  deposits: settledAmountFixture.deposits,
+  etfRows: settledAmountFixture.rows,
+  stockRows: [],
 });
-assert.equal(subCentCashGapPlan.errors.length, 0);
-assert.equal(subCentCashGapPlan.minimumCash, -0.0002015);
-assert.match(
-  subCentCashGapPlan.warnings[0]?.message ?? '',
-  /现金最低为 -\$0\.0002015.*不阻止导入/,
-  'a fractional-cent cash gap remains advisory instead of blocking import',
+assert.equal(settledAmountPlan.minimumCash, 0);
+assert.equal(settledAmountPlan.endingCash, 0);
+assert.equal(settledAmountPlan.warnings.length, 0);
+assert.equal(
+  calculateBrokerCashBalance(
+    settledAmountFixture.deposits.map((row) => ({ usd_amount: row.amount })),
+    settledAmountFixture.rows.map((row) => ({ ...row, settled_amount_usd: row.amount })),
+  ),
+  0,
+  'persisted settled amounts keep the post-import account cash at zero',
 );
+assert.equal(
+  settledAmountFixture.rows.reduce((sum, row) => sum + row.shares * row.price, 0),
+  922.7502015,
+  'the synthetic notional reproduces the former fractional-cent drift',
+);
+
+const datedStockAllocationFixture = parseSchwabTransactions([
+  PORTFOLIO_CSV_HEADERS.join(','),
+  'USD:USD,Deposit,1000,,,2026-06-01 09:00:00',
+  'AMEX:VGT,Buy,9.9993,100,0,2026-06-05 09:00:00',
+  'NASDAQ:LITE,Buy,1,100,0,2026-06-17 09:00:00',
+].join('\n'));
+const datedStockAllocationPlan = buildSchwabEtfCashPlan({
+  deposits: datedStockAllocationFixture.deposits,
+  etfRows: datedStockAllocationFixture.rows.filter((row) => row.ticker === 'VGT'),
+  stockRows: datedStockAllocationFixture.rows.filter((row) => row.ticker === 'LITE'),
+});
+assert.equal(datedStockAllocationPlan.allocations[0].allocation_date, '2026-06-17');
+assert.equal(datedStockAllocationPlan.minimumCash, -99.93);
+assert.match(datedStockAllocationPlan.warnings[0]?.message ?? '', /2026-06-17.*-\$99\.93/);
+assert.doesNotMatch(datedStockAllocationPlan.warnings[0]?.message ?? '', /2026-06-05/);
 
 const missingStockFundingPlan = buildSchwabEtfCashPlan({
   deposits: cashPlanParsed.deposits.map((row) => ({ ...row, amount: 300 })),
@@ -232,8 +281,8 @@ const missingStockFundingPlan = buildSchwabEtfCashPlan({
 });
 assert.match(
   missingStockFundingPlan.errors[0]?.message ?? '',
-  /个股净投入缺少 \$50 可扣减存款/,
-  'stock funding that cannot be deducted from eligible deposits still blocks import',
+  /个股净投入缺少 \$50 已到账存款/,
+  'stock funding that exceeds deposits available by that date still blocks import',
 );
 
 const existing = [{
@@ -301,6 +350,7 @@ const exported = exportSchwabTransactions([
     shares: 0.25,
     price: 200,
     fees_usd: 0.01,
+    settled_amount_usd: -50.0098,
     created_at: '2025-04-10T10:00:00Z',
   },
   {
@@ -318,24 +368,35 @@ const exported = exportSchwabTransactions([
   source_action: 'Deposit',
   source_description: 'SYNTHETIC ADJUSTED DEPOSIT',
   created_at: '2025-04-12T10:00:00Z',
+}, {
+  usd_in_date: '2025-04-08',
+  usd_amount: -350,
+  source_action: 'Stock Allocation',
+  source_description: 'SYNTHETIC STOCK FUNDING',
+  cashflow_kind: 'stock_allocation',
+  created_at: '2025-04-08T10:00:00Z',
 }]);
 assert.ok(exported.startsWith('\uFEFF'));
 assert.match(exported, /Date\tAction\tSymbol\tDescription\tQuantity\tPrice\tFees & Comm\tAmount/);
 assert.match(exported, /0\.123456789\t\$123\.123456789012\t\$0\.0000000001/);
-assert.match(exported, /-\$50\.01/);
+assert.match(exported, /-\$50\.0098/);
 assert.match(exported, /Deposit\t\tSYNTHETIC ADJUSTED DEPOSIT\t\t\t\t\$650\.123456789/);
-assert.match(exported, /\t\$50\.00\r\n$/);
+assert.match(exported, /Stock Allocation\t\tSYNTHETIC STOCK FUNDING\t\t\t\t-\$350/);
+assert.match(exported, /\t\$50\r\n/);
 assert.doesNotMatch(exported, /Wire Received|MoneyLink Transfer/);
 
 const roundTrip = parseSchwabTransactions(exported);
 assert.equal(roundTrip.errors.length, 0);
 assert.equal(roundTrip.rows.length, 3);
 assert.equal(roundTrip.deposits.length, 1);
+assert.equal(roundTrip.allocations.length, 1);
 assert.equal(roundTrip.deposits[0].amount, 650.123456789);
+assert.equal(roundTrip.allocations[0].amount, -350);
 assert.equal(roundTrip.rows[0].shares, 0.123456789);
 assert.equal(roundTrip.rows[0].price, 123.123456789012);
 assert.equal(roundTrip.rows[0].fees_usd, 0.0000000001);
 assert.equal(roundTrip.rows[1].fees_usd, 0.01);
+assert.equal(roundTrip.rows[1].amount, -50.0098, 'export preserves the broker-settled amount');
 assert.equal(roundTrip.rows[1].source_description, 'SYNTHETIC\t"TECH" ETF');
 assert.equal(roundTrip.rows[2].source_description, 'SGOV');
 
@@ -359,6 +420,10 @@ const precisionMigration = readFileSync(
 );
 const adjustedDepositMigration = readFileSync(
   new URL('../supabase/migrations/0046_adjusted_deposit_precision.sql', import.meta.url),
+  'utf8',
+);
+const settledCashMigration = readFileSync(
+  new URL('../supabase/migrations/0047_schwab_settled_cash_and_stock_allocations.sql', import.meta.url),
   'utf8',
 );
 assert.match(migration, /security invoker/, 'import RPC uses caller privileges');
@@ -543,6 +608,33 @@ assert.match(
   /grant execute on function dca_private\._import_schwab_transactions_v1\(jsonb, jsonb, text\[\], text\)\s+to authenticated/,
   'the authenticated wrapper can execute the deposit precision helper',
 );
+assert.match(settledCashMigration, /add column if not exists settled_amount_usd numeric\(22, 10\)/);
+assert.match(settledCashMigration, /round\(row_data\.amount, 10\)/);
+assert.match(settledCashMigration, /coalesce\(row_data\.cashflow_date, row_data\.deposit_date\)/);
+assert.match(
+  settledCashMigration,
+  /cashflow_kind = 'stock_allocation'[\s\S]*?usd_amount < 0/,
+  'stock allocations are negative dated cash events',
+);
+assert.match(
+  settledCashMigration,
+  /coalesce\(-settled_amount_usd,[\s\S]*?as notional_delta/,
+  'cached performance uses the signed settled transaction amount',
+);
+assert.match(
+  settledCashMigration,
+  /coalesce\(abs\(t\.settled_amount_usd\),[\s\S]*?shared portfolio/,
+  'shared portfolio calculations use settled cash without exposing it',
+);
+assert.match(settledCashMigration, /security invoker/);
+assert.doesNotMatch(
+  settledCashMigration.match(/create or replace function public\.import_schwab_transactions[\s\S]*?\$\$;/)?.[0] ?? '',
+  /security definer/i,
+);
+assert.match(
+  settledCashMigration,
+  /revoke all on function public\.import_schwab_transactions\(jsonb, jsonb, text\[\], text\)[\s\S]*?from public, anon, authenticated/,
+);
 
 function syntheticTransaction(
   id: string,
@@ -561,6 +653,7 @@ function syntheticTransaction(
     price,
     shares,
     fees_usd: 0,
+    settled_amount_usd: null,
     kind: 'dca' as const,
     note: null,
     source_description: null,
