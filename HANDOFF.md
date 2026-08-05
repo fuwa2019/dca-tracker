@@ -6,13 +6,13 @@ Updated: 2026-08-05
 
 Fix the Schwab CSV cash reconstruction at its source: use the broker-settled
 `Amount` for imported transactions and keep excluded-stock funding on the stock
-trade date instead of reducing an earlier deposit.
+trade date instead of reducing an earlier deposit. This fix is now live.
 
 ## Current Status
 
 - Repository: `/Users/junxihuo/Documents/dca_system`, branch `master` tracking
   `origin/master`.
-- The root-cause fix is implemented locally and remains uncommitted.
+- Root-cause fix commit `395400e` is pushed to `origin/master` and deployed.
 - Schwab transaction `Amount` is parsed as before and now persists in nullable
   `transactions.settled_amount_usd`. Private cash, cost basis, realized proceeds,
   TWR cache generation, and sanitized share percentages prefer that settled
@@ -28,6 +28,10 @@ trade date instead of reducing an earlier deposit.
   replaces the four-argument import RPC without changing its signature. The RPC
   remains security-invoker, derives ownership from `auth.uid()`, and grants
   execution only to `authenticated`.
+- Migration `0047` was applied to production project `igwacbeojogblacektxr` as
+  version `20260805023032`. Structural checks confirmed
+  `transactions.settled_amount_usd numeric(22,10)`, the dated
+  `stock_allocation` cashflow constraint, and the updated owner-protected RPC.
 - Old clients that send `deposit_date` remain accepted. New stock allocations
   require `reset_all`; append and legacy `reset_etf` remain available for
   rolling-deploy compatibility.
@@ -49,20 +53,19 @@ trade date instead of reducing an earlier deposit.
 
 ## Production State
 
-- Production currently contains migrations through
-  `0046_adjusted_deposit_precision.sql`; migration `0047` has not been applied.
-- The live frontend still contains the earlier non-blocking-warning mitigation.
-  The local root-cause fix has not been committed, pushed, or deployed.
-- No production database, Cloudflare deployment, secrets, or user data changed
-  during this task.
+- Production contains migrations through
+  `0047_schwab_settled_cash_and_stock_allocations.sql`.
+- Cloudflare Pages deployment `cf406844-54cf-4950-b0ae-b2f57527c9f7` completed
+  from `395400e`; the canonical bundle is `index-DwZSZJvd.js` and contains
+  settled-cash and dated-stock-allocation logic.
+- Fresh browser verification confirmed the canonical login page renders with
+  zero console errors. No real CSV or user data was read or changed.
 
 ## Next Steps
 
-1. With separate production authorization, apply migration `0047` first and
-   verify schema, RPC privileges, RLS behavior, and Advisors.
-2. Only after the migration succeeds, commit/push and deploy the frontend, then
-   verify the canonical bundle and a synthetic browser preview.
-3. Leave the actual `reset_all` import to the user's separate confirmation; it
+1. Let the user review the real-file preview and confirm the adjusted ETF,
+   deposit, and dated allocation counts.
+2. Leave the actual `reset_all` import to the user's separate confirmation; it
    is a destructive data operation and is not part of deployment verification.
 
 ## Risks and Boundaries
