@@ -23,13 +23,12 @@ import { supabase } from '@/lib/supabase';
 import { pct, signedPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { availableRanges, sliceByRange, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
-import { computeLookThrough, type EtfHoldingsData } from '@/lib/calc/lookThrough';
+import { computeLookThrough } from '@/lib/calc/lookThrough';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { LOCAL_SHARE_TOKEN, localPortfolioHistory, localShareLinks, localSharedPortfolio } from '@/lib/localData';
-import etfHoldings from '@/data/etf-holdings.json';
+import { useEtfHoldings } from '@/hooks/useEtfHoldings';
 import type { PerformanceHistory, SharedPortfolio, SharedHistory } from '@/lib/database.types';
 
-const HOLDINGS = etfHoldings as unknown as EtfHoldingsData;
 const SHARE_DISTRIBUTION_COLOR_BY_LABEL: Record<string, string> = {
   'AI 芯片': '#3b82f6',
   '纳指 ETF': '#8b5cf6',
@@ -48,6 +47,7 @@ const SHARE_SECTOR_BY_TICKER: Record<string, string> = {
 };
 
 export function SharePage() {
+  const etfHoldings = useEtfHoldings();
   const { token } = useParams<{ token: string }>();
   const shareToken = isValidShareToken(token) ? token : null;
   const [range, setRange] = useState<RangeKey>('ALL');
@@ -157,8 +157,8 @@ export function SharePage() {
     [shareRows],
   );
   const lookThrough = useMemo(
-    () => computeLookThrough({ holdings: sharePositions, uninvestedCash: cashWeight, data: HOLDINGS, lines: [] }),
-    [cashWeight, sharePositions],
+    () => computeLookThrough({ holdings: sharePositions, uninvestedCash: cashWeight, data: etfHoldings.data, lines: [] }),
+    [cashWeight, sharePositions, etfHoldings.data],
   );
   const lookThroughTop = useMemo(() => lookThrough.stocks.slice(0, 10), [lookThrough.stocks]);
   const decomposedWeight = useMemo(
@@ -182,7 +182,7 @@ export function SharePage() {
   }, [shareRows]);
   const distribution = useMemo(() => {
     const byLabel = new Map<string, number>();
-    const cashLike = new Set((HOLDINGS._meta?.cashLike ?? []).map((ticker) => ticker.toUpperCase()));
+    const cashLike = new Set((etfHoldings.data._meta?.cashLike ?? []).map((ticker) => ticker.toUpperCase()));
     let cashLikeWeight = 0;
     for (const row of shareRows) {
       if (cashLike.has(row.ticker.toUpperCase())) {
@@ -202,7 +202,7 @@ export function SharePage() {
       }))
       .filter((row) => row.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [cashWeight, lookThrough.cashValue, lookThrough.totalNav, shareRows]);
+  }, [cashWeight, etfHoldings.data, lookThrough.cashValue, lookThrough.totalNav, shareRows]);
   const dayReturn = useMemo(
     () => shareRows.reduce((sum, row) => sum + row.weight_pct * (row.day_change_pct ?? 0), 0),
     [shareRows],

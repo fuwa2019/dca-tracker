@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
 import type { Database } from '@/lib/database.types';
 import { transactionCashAmount, transactionCashEffect, transactionFee } from '@/lib/calc/transactionAmounts';
+import { coordinateEtfHoldings } from '@/lib/etfHoldings';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
 
@@ -39,6 +40,7 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['portfolio_history'] });
       qc.invalidateQueries({ queryKey: ['performance_cache_status'] });
+      void coordinateEtfHoldings(qc);
     },
   });
 

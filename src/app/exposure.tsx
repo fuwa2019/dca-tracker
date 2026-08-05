@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Layers, ArrowUpRight, Plus, Info, ShieldQuestion, Wifi } from 'lucide-react';
+import { Layers, ArrowUpRight, Plus, Info, ShieldQuestion, Wifi, RefreshCw, TriangleAlert } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Kicker } from '@/components/Kicker';
@@ -10,6 +11,8 @@ import { EmptyState } from '@/components/EmptyState';
 import { useExposure } from '@/hooks/useExposure';
 import type { LookThroughStock } from '@/lib/calc/lookThrough';
 import { pct as fmtPct, usd } from '@/lib/format';
+import { refreshEtfHoldings } from '@/lib/etfHoldings';
+import { LOCAL_MODE } from '@/lib/localMode';
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
@@ -40,7 +43,21 @@ function sourceLabel(via: string): string {
 }
 
 export function ExposurePage() {
-  const { lookThrough, asOf, isEmpty, model } = useExposure();
+  const { lookThrough, asOf, sources, isFallback, isEmpty, model } = useExposure();
+  const queryClient = useQueryClient();
+  const refresh = useMutation({
+    mutationFn: refreshEtfHoldings,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['etf_holdings'] }),
+        queryClient.invalidateQueries({ queryKey: ['quotes'] }),
+      ]);
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['etf_holdings'] }),
+        queryClient.refetchQueries({ queryKey: ['quotes'] }),
+      ]);
+    },
+  });
 
   const topStocks = useMemo(() => lookThrough.stocks.slice(0, 14), [lookThrough.stocks]);
   const topStock = topStocks[0];
@@ -66,6 +83,7 @@ export function ExposurePage() {
     .join(' · ');
 
   const priceStale = model.quotesNone || model.quotesPartial || model.quotesError;
+  const failedRefreshes = refresh.data?.results.filter((item) => item.status === 'failed') ?? [];
 
   if (isEmpty) {
     return (
@@ -99,14 +117,41 @@ export function ExposurePage() {
             </StatusBadge>
           )}
         </div>
-        <div className="text-right">
-          <div className="kicker">成分表更新</div>
-          <div className="font-num text-[11px] text-muted-foreground">
-            <span className="sm:hidden">{heldEtfCount > 0 ? `${heldEtfCount} 个 ETF 来源` : '—'}</span>
-            <span className="hidden sm:inline">{asOfText || '—'}</span>
+        <div className="flex min-w-0 items-end gap-2">
+          <div className="min-w-0 text-right">
+            <div className="flex items-center justify-end gap-1.5">
+              <div className="kicker">成分表更新</div>
+              {isFallback && <StatusBadge tone="warn">静态兜底</StatusBadge>}
+            </div>
+            <div className="max-w-[520px] truncate font-num text-[11px] text-muted-foreground" title={asOfText || undefined}>
+              <span className="sm:hidden">{heldEtfCount > 0 ? `${heldEtfCount} 个 ETF 来源` : '—'}</span>
+              <span className="hidden sm:inline">{asOfText || '—'}</span>
+            </div>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => refresh.mutate()}
+            disabled={refresh.isPending || LOCAL_MODE}
+            title={LOCAL_MODE ? '本地演示模式使用静态数据' : '获取官网完整成分和最新行情'}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refresh.isPending ? 'animate-spin' : ''}`} />
+            {refresh.isPending ? '刷新中' : '刷新敞口'}
+          </Button>
         </div>
       </motion.header>
+
+      {(refresh.isError || failedRefreshes.length > 0) && (
+        <div className="mb-3 flex items-start gap-2 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-foreground">
+          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" />
+          <span>
+            {refresh.isError
+              ? `刷新失败：${(refresh.error as Error)?.message ?? '未知错误'}`
+              : `部分刷新失败：${failedRefreshes.map((item) => item.ticker).join('、')}。已保留这些 ETF 的旧快照。`}
+          </span>
+        </div>
+      )}
 
       <div className="rule-top" />
 
@@ -184,11 +229,18 @@ export function ExposurePage() {
 
         <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
           <Info className="mt-0.5 h-3 w-3 shrink-0" />
-          穿透基于一份手动维护的 ETF 成分股表,只取每只 ETF 的前若干大成分;其余归入「未穿透长尾」。上面三块加起来等于总净值。每季度核对一次即可,数值用于观察集中度趋势,非券商精确口径。
+          {isFallback
+            ? '当前使用内置静态成分表；其余归入未穿透长尾。上面三块加起来等于总净值。'
+            : `当前使用官网完整成分快照；无法识别的现金、衍生品和权重残差归入未穿透长尾。${Object.values(sources).length > 0 ? ` 最近抓取 ${latestFetchedAt(sources)}。` : ''}`}
         </p>
       </motion.section>
     </motion.div>
   );
+}
+
+function latestFetchedAt(sources: Record<string, { fetchedAt: string | null }>): string {
+  const latest = Object.values(sources).map((source) => source.fetchedAt).filter((value): value is string => !!value).sort().at(-1);
+  return latest ? new Date(latest).toLocaleString('zh-CN', { hour12: false }) : '—';
 }
 
 function StockRow({ stock, index }: { stock: LookThroughStock; index: number }) {

@@ -6,7 +6,7 @@ compatibility_date = "2025-12-01"
 # time, then retries UTC 12:15 and after close UTC 22:15. Retries reconcile
 # provisional rows once the provider's final daily candles are available.
 [triggers]
-crons = ["10 4 * * *", "10 5 * * *", "15 12 * * *", "15 22 * * *"]
+crons = ["10 4,5 * * *", "15 12 * * *", "15 22 * * *", "30 8 * * 1"]
 
 # Cache responses across requests (1 min for /api/quote, 1 hour for /api/chart, 1 hour for /api/history).
 [[kv_namespaces]]

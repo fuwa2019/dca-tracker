@@ -222,9 +222,11 @@ vgt_semi_pct = Σ_{c ∈ VGT 成分, in_semi_chain} w_VGT(c)
 - 代码规整:建一张映射(SIVE.STO→SIVE 等)统一两家券商的代码到 `instruments.ticker`。
 
 ### Phase 2 — ETF 成分自动更新
-- worker cron 周更:iShares(SMH)、Vanguard(VGT/VOO)官网持仓 CSV → 解析 → upsert `etf_holdings` + 兜底补 `company_classification`。
+- worker cron 周更:VanEck(SMH)、Vanguard(VGT/VOO)、Invesco(QQQ/QQQM)官网完整持仓 → 原子替换 `etf_holdings`;仅刷新仍被持有的 ETF,最后持有人清仓后物理删除动态快照。
 - 读取从 `etf-holdings.json` 切到 DB(JSON 保留为离线兜底/首屏)。
 - `_meta.asOf` 由 `etf_holdings.as_of` 取代,页面显示真实更新日。
+
+实现状态(2026-08-05):代码与 migrations `0048_etf_holdings_refresh.sql`、`0049_restrict_etf_holding_table_privileges.sql` 已部署,包含手动刷新、交易变更协调、每周 cron、逐 ETF 失败保留旧快照和公开只读成分契约。Quote Worker 与 Pages 已上线;仍需用合成账户完成已认证刷新、最后持有人清仓删除和重新买入验收。
 
 ### Phase 3 — 新仪表盘卡片(一屏看完)
 默认一屏:总览(总值 / 各桶权重 / SMH:VGT 偏离)→ 穿透 Top 持仓 → 三条监控线状态。补:

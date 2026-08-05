@@ -34,6 +34,7 @@ import {
 } from '@/lib/schwabTransactions';
 import { useCashflows } from '@/hooks/usePortfolio';
 import etfHoldings from '@/data/etf-holdings.json';
+import { coordinateEtfHoldings } from '@/lib/etfHoldings';
 import type {
   Database,
   SchwabTransactionImportResult,
@@ -282,6 +283,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
         qc.invalidateQueries({ queryKey: ['daily_prices'] }),
         qc.invalidateQueries({ queryKey: ['quotes'] }),
       ]);
+      void coordinateEtfHoldings(qc);
     } catch (importError) {
       setError(importError instanceof Error ? importError.message : '导入失败，原交易未改变。');
     } finally {

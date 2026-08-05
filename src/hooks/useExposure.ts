@@ -3,20 +3,19 @@ import { usePositionsModel, type PositionsModel } from '@/hooks/usePositionsMode
 import { unrealizedPL } from '@/lib/calc/position';
 import {
   computeLookThrough,
-  type EtfHoldingsData,
   type HoldingInput,
   type LookThroughResult,
 } from '@/lib/calc/lookThrough';
 import { MONITOR_LINES } from '@/lib/calc/exposureConfig';
-import etfHoldings from '@/data/etf-holdings.json';
-
-const HOLDINGS = etfHoldings as unknown as EtfHoldingsData;
+import { useEtfHoldings, type EtfHoldingSourceMeta } from '@/hooks/useEtfHoldings';
 
 export interface ExposureModel {
   model: PositionsModel;
   lookThrough: LookThroughResult;
   /** 成分股权重数据的「截至」日期表,用于页面提示。 */
   asOf: Record<string, string>;
+  sources: Record<string, EtfHoldingSourceMeta>;
+  isFallback: boolean;
   /** 是否还在等行情(影响穿透市值精度)。 */
   loading: boolean;
   isEmpty: boolean;
@@ -28,6 +27,7 @@ export interface ExposureModel {
  */
 export function useExposure(): ExposureModel {
   const model = usePositionsModel();
+  const holdingsData = useEtfHoldings();
   const { positions, quoteByTicker, cash, costBasisMode } = model;
 
   const holdings: HoldingInput[] = useMemo(
@@ -45,19 +45,26 @@ export function useExposure(): ExposureModel {
       computeLookThrough({
         holdings,
         uninvestedCash: cash,
-        data: HOLDINGS,
+        data: holdingsData.data,
         lines: MONITOR_LINES,
       }),
-    [holdings, cash],
+    [holdings, cash, holdingsData.data],
   );
 
-  const asOf = (HOLDINGS._meta?.asOf ?? {}) as Record<string, string>;
+  const asOf = (holdingsData.data._meta?.asOf ?? {}) as Record<string, string>;
+  const sources = Object.fromEntries(
+    positions.map((position) => [position.ticker, holdingsData.sources[position.ticker]] as const)
+      .filter((entry): entry is [string, EtfHoldingSourceMeta] => entry[1] != null),
+  );
+  const isFallback = Object.values(sources).some((source) => source.provider === 'static');
 
   return {
     model,
     lookThrough,
     asOf,
-    loading: model.quotesLoading,
+    sources,
+    isFallback,
+    loading: model.quotesLoading || holdingsData.isLoading,
     isEmpty: model.isEmpty,
   };
 }

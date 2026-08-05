@@ -26,15 +26,14 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { usd, usd0, signedUsd, signedPct, pct as fmtPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { unrealizedPL } from '@/lib/calc/position';
-import { computeLookThrough, type EtfHoldingsData, type LookThroughStock } from '@/lib/calc/lookThrough';
+import { computeLookThrough, type LookThroughStock } from '@/lib/calc/lookThrough';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { availableRanges, sliceByRange, type RangeKey } from '@/lib/calc/history';
-import etfHoldings from '@/data/etf-holdings.json';
+import { useEtfHoldings } from '@/hooks/useEtfHoldings';
 import type { DashboardModel } from './model';
 import { EmptyDashboard, EquitySpark, Kicker } from './shared';
 
 const ease = [0.16, 1, 0.3, 1] as const;
-const HOLDINGS = etfHoldings as unknown as EtfHoldingsData;
 
 const SECTOR_BY_TICKER: Record<string, string> = {
   NVDA: 'AI 芯片',
@@ -92,6 +91,7 @@ const DISTRIBUTION_COLOR_BY_LABEL: Record<string, string> = {
 };
 
 export function DashboardVariantA({ model }: { model: DashboardModel }) {
+  const etfHoldings = useEtfHoldings();
   const {
     loading, positions, selectedBenchmark, quoteByTicker, quotesNone, quotesPartial, quotesError,
     cacheDirty, history, accountValueHistory, last, costBasisMode, aggregates, dayChangePct, totalReturnPct,
@@ -135,10 +135,10 @@ export function DashboardVariantA({ model }: { model: DashboardModel }) {
           return { ticker: p.ticker, value: marketValue };
         }),
         uninvestedCash: aggregates.cash,
-        data: HOLDINGS,
+        data: etfHoldings.data,
         lines: [],
       }),
-    [positions, quoteByTicker, costBasisMode, aggregates.cash],
+    [positions, quoteByTicker, costBasisMode, aggregates.cash, etfHoldings.data],
   );
   const distribution = useMemo(() => {
     const bySector = new Map<string, number>();

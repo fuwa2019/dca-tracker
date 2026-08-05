@@ -44,6 +44,11 @@ import {
   isNyseTradingDay,
   lastCompletedNyseTradingDate,
 } from './nyseCalendar.js';
+import {
+  fetchEtfHoldingSnapshot,
+  SUPPORTED_ETFS,
+  type SupportedEtf,
+} from './etfHoldings.js';
 
 export interface Env {
   QUOTE_CACHE: KVNamespace;
@@ -146,6 +151,10 @@ export default {
       if (url.pathname === '/api/history') {
         return withCors(await handleHistory(url, env, ctx), corsHeaders);
       }
+      if (url.pathname === '/api/etf-holdings/refresh') {
+        if (req.method !== 'POST') return withCors(json({ error: 'method_not_allowed' }, 405), corsHeaders);
+        return withCors(await handleEtfHoldingsRefresh(req, env), corsHeaders);
+      }
       if (url.pathname === '/' || url.pathname === '/health') {
         return withCors(json({ ok: true, service: 'dca-quote', ts: Date.now() }), corsHeaders);
       }
@@ -161,14 +170,129 @@ export default {
    * Pulls the union of every user's watchlist + configured benchmarks, fetches recent closes, and upserts
    * into daily_prices. Idempotent thanks to PK (ticker, trade_date).
    */
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
       console.warn('[cron] missing Supabase secrets, skipping daily price sync');
+      return;
+    }
+    if (event.cron === '30 8 * * 1') {
+      ctx.waitUntil(runEtfHoldingsSync(env));
       return;
     }
     ctx.waitUntil(runDailyPriceSync(env));
   },
 };
+
+type EtfRefreshItem = {
+  ticker: SupportedEtf;
+  status: 'updated' | 'unchanged' | 'failed';
+  asOf?: string;
+  constituentCount?: number;
+  error?: string;
+};
+
+async function handleEtfHoldingsRefresh(req: Request, env: Env): Promise<Response> {
+  if (!hasSupabase(env)) return json({ error: 'service_unavailable' }, 503);
+  const authorization = req.headers.get('authorization') ?? '';
+  if (!/^Bearer\s+\S+$/i.test(authorization)) return json({ error: 'unauthorized' }, 401);
+
+  const universe = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/current_user_etf_universe`, {
+    method: 'POST',
+    headers: userSupabaseHeaders(env, authorization),
+    body: '{}',
+  });
+  if (universe.status === 401 || universe.status === 403) return json({ error: 'unauthorized' }, 401);
+  if (!universe.ok) throw new Error(`current_user_etf_universe_${universe.status}`);
+  const rows = (await universe.json()) as Array<{ etf_ticker?: string }>;
+  const tickers = supportedEtfs(rows.map((row) => row.etf_ticker ?? ''));
+
+  const results = await refreshEtfHoldings(env, tickers);
+  const deleted = await reconcileEtfHoldingSets(env);
+  let quotesRefreshed = false;
+  if (tickers.length > 0) {
+    try {
+      const quotes = await fetchQuotesFromProvider(env, tickers);
+      await upsertSnapshots(env, quotes);
+      quotesRefreshed = quotes.length > 0;
+    } catch (error) {
+      console.warn('[etf-holdings] quote refresh failed:', errorMessage(error));
+    }
+  }
+  const failed = results.filter((result) => result.status === 'failed').length;
+  return json({
+    status: failed === 0 ? 'ok' : failed === results.length ? 'failed' : 'partial',
+    quotesRefreshed,
+    results,
+    deleted,
+  }, failed === results.length && results.length > 0 ? 502 : 200);
+}
+
+async function runEtfHoldingsSync(env: Env): Promise<void> {
+  const universe = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/active_etf_universe`, {
+    method: 'POST', headers: supabaseHeaders(env), body: '{}',
+  });
+  if (!universe.ok) throw new Error(`active_etf_universe_${universe.status}`);
+  const rows = (await universe.json()) as Array<{ etf_ticker?: string }>;
+  const tickers = supportedEtfs(rows.map((row) => row.etf_ticker ?? ''));
+  const results = await refreshEtfHoldings(env, tickers);
+  const deleted = await reconcileEtfHoldingSets(env);
+  console.log('[etf-holdings] weekly sync', JSON.stringify({ tickers, results, deleted }));
+}
+
+async function refreshEtfHoldings(env: Env, tickers: SupportedEtf[]): Promise<EtfRefreshItem[]> {
+  const results: EtfRefreshItem[] = [];
+  for (const ticker of tickers) {
+    try {
+      const snapshot = await fetchEtfHoldingSnapshot(ticker);
+      const response = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/replace_etf_holdings`, {
+        method: 'POST',
+        headers: supabaseHeaders(env),
+        body: JSON.stringify({
+          p_etf_ticker: ticker,
+          p_provider: snapshot.provider,
+          p_source_url: snapshot.sourceUrl,
+          p_as_of: snapshot.asOf,
+          p_holdings: snapshot.holdings,
+        }),
+      });
+      if (!response.ok) throw new Error(`replace_etf_holdings_${response.status}`);
+      const replaced = (await response.json()) as { status?: 'updated' | 'unchanged'; as_of?: string; constituent_count?: number };
+      results.push({
+        ticker,
+        status: replaced.status ?? 'updated',
+        asOf: replaced.as_of ?? snapshot.asOf,
+        constituentCount: replaced.constituent_count ?? snapshot.holdings.length,
+      });
+    } catch (error) {
+      console.warn(`[etf-holdings] ${ticker} refresh failed:`, errorMessage(error));
+      results.push({ ticker, status: 'failed', error: safeEtfRefreshError(error) });
+    }
+  }
+  return results;
+}
+
+async function reconcileEtfHoldingSets(env: Env): Promise<string[]> {
+  const response = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/reconcile_etf_holding_sets`, {
+    method: 'POST', headers: supabaseHeaders(env), body: '{}',
+  });
+  if (!response.ok) throw new Error(`reconcile_etf_holding_sets_${response.status}`);
+  const rows = (await response.json()) as Array<{ deleted_ticker?: string }>;
+  return rows.map((row) => normalizeSymbol(row.deleted_ticker ?? '')).filter(Boolean);
+}
+
+function supportedEtfs(values: string[]): SupportedEtf[] {
+  const supported = new Set<string>(SUPPORTED_ETFS);
+  return [...new Set(values.map(normalizeSymbol).filter((ticker): ticker is SupportedEtf => supported.has(ticker)))];
+}
+
+function safeEtfRefreshError(error: unknown): string {
+  const message = errorMessage(error);
+  if (/provider_http_\d+/.test(message)) return message.match(/provider_http_\d+/)?.[0] ?? 'provider_error';
+  if (/missing_as_of|invalid_as_of|insufficient_holdings|invalid_weight_total|duplicate_ticker/.test(message)) {
+    return message.replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 120);
+  }
+  return 'refresh_failed';
+}
 
 async function runDailyPriceSync(env: Env): Promise<void> {
   const tickers = await collectCronTickers(env);
@@ -1117,6 +1241,14 @@ function supabaseHeaders(env: Env): Record<string, string> {
   };
 }
 
+function userSupabaseHeaders(env: Env, authorization: string): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    apikey: env.SUPABASE_SERVICE_ROLE_KEY!,
+    Authorization: authorization,
+  };
+}
+
 async function registerTrackedSymbols(env: Env, symbols: string[], source: string): Promise<void> {
   const rows = parseSymbolsParam(symbols.join(','), 1000).map((symbol) => ({ symbol, source }));
   if (rows.length === 0) return;
@@ -1459,8 +1591,8 @@ function buildCors(req: Request, env: Env): Record<string, string> {
   const allow = isOriginAllowed(origin, allowed) ? origin : allowed[0] ?? '*';
   return {
     'Access-Control-Allow-Origin': allow,
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };

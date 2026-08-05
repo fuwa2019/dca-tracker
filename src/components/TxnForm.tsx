@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTransactions } from '@/hooks/usePortfolio';
 import { useQuotes } from '@/hooks/useQuotes';
 import { aggregatePositions } from '@/lib/calc/position';
+import { coordinateEtfHoldings } from '@/lib/etfHoldings';
 import { todayLocalIso } from '@/lib/format';
 import { formatDefaultNumber, shouldAutoFillField } from '@/lib/formAutoFill';
 import { cn } from '@/lib/utils';
@@ -158,6 +159,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
       qc.invalidateQueries({ queryKey: ['performance_daily_pnl'] });
       qc.invalidateQueries({ queryKey: ['tracked_symbol_coverage'] });
       qc.invalidateQueries({ queryKey: ['price_coverage'] });
+      void coordinateEtfHoldings(qc);
       onDone?.();
     },
   });

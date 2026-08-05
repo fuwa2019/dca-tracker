@@ -326,6 +326,24 @@ export type PerformanceDailyPnl = {
   }>;
 };
 
+export type EtfHoldingSetRow = {
+  etf_ticker: string;
+  provider: string;
+  source_url: string;
+  as_of: string;
+  fetched_at: string;
+  constituent_count: number;
+  weight_total: number;
+  status: 'ready';
+  updated_at: string;
+};
+
+export type EtfHoldingRow = {
+  etf_ticker: string;
+  constituent_ticker: string;
+  weight: number;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -337,6 +355,8 @@ export interface Database {
       share_links: { Row: ShareLinkRow; Insert: ShareLinkInsert; Update: ShareLinkUpdate };
       settings: { Row: SettingsRow; Insert: SettingsInsert; Update: SettingsUpdate };
       email_log: { Row: EmailLogRow; Insert: EmailLogInsert; Update: EmailLogUpdate };
+      etf_holding_sets: { Row: EtfHoldingSetRow; Insert: EtfHoldingSetRow; Update: Partial<EtfHoldingSetRow> };
+      etf_holdings: { Row: EtfHoldingRow; Insert: EtfHoldingRow; Update: Partial<EtfHoldingRow> };
     };
     Views: Record<string, never>;
     Functions: {

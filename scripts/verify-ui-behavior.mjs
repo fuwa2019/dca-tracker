@@ -94,4 +94,13 @@ assert.match(quote, /limitedFetchJson<\{ quotes: Quote\[\] \}>\('quote'/, 'quote
 assert.match(quote, /rateLimited\('history'/, 'history requests pass through the unified rate limiter');
 assert.match(quote, /fetchCurrentExchangeRate/, 'FX lookup reuses the quote provider');
 
+const exposure = readFileSync(new URL('../src/app/exposure.tsx', import.meta.url), 'utf8');
+assert.match(exposure, /刷新敞口/, 'exposure page has a manual refresh action');
+assert.match(exposure, /refreshEtfHoldings/, 'exposure refresh calls the authenticated Worker flow');
+assert.match(exposure, /部分刷新失败/, 'exposure page reports partial provider failures');
+
+const quoteWorker = readFileSync(new URL('../workers/quote/src/index.ts', import.meta.url), 'utf8');
+assert.match(quoteWorker, /\/api\/etf-holdings\/refresh/, 'quote Worker exposes the ETF refresh route');
+assert.match(quoteWorker, /Access-Control-Allow-Headers': 'Authorization, Content-Type'/, 'Worker CORS permits bearer authorization');
+
 console.log('UI behavior checks passed');
