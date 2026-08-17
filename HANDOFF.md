@@ -1,6 +1,6 @@
 # Current Handoff
 
-Updated: 2026-08-05
+Updated: 2026-08-18
 
 ## Current Goal
 
@@ -10,6 +10,18 @@ database, Quote Worker, and Pages changes are now live.
 
 ## Current Status
 
+- SMH refresh compatibility is fixed locally but not deployed. The Quote Worker
+  now reads VanEck's page-backed `HoldingsBlock/GetDataset` JSON endpoint instead
+  of the marketing HTML page, sends the endpoint's expected request context,
+  and accepts percentage strings plus US-formatted JSON as-of dates. A stable
+  public-data fixture covers the current 25 equity constituents and excludes
+  cash rows. `test:etf-holdings`, `test:quote-status`, and `typecheck` pass.
+- Current read-only probing reproduced VanEck resetting direct local connections
+  to both the marketing page and XLSX endpoint. The official page and JSON
+  dataset were independently reachable through the web retrieval path. No
+  deployment or authenticated/private portfolio access was performed, so the
+  new endpoint still requires verification from the deployed Worker after a
+  separately authorized release.
 - Repository: `/Users/junxihuo/Documents/dca_system`, branch `master` tracking
   `origin/master`.
 - Append-only migrations `0048_etf_holdings_refresh.sql` and
@@ -80,12 +92,12 @@ database, Quote Worker, and Pages changes are now live.
 
 ## Next Steps
 
-1. Verify the authenticated `POST /api/etf-holdings/refresh` with a synthetic
+1. After an explicitly authorized Quote Worker deployment, verify SMH refresh
+   reaches the VanEck JSON dataset from the Worker runtime.
+2. Verify the authenticated `POST /api/etf-holdings/refresh` with a synthetic
    account, including partial provider failure, final-holder deletion, and
-   re-buy refresh. Vanguard and Invesco live read-only probes passed locally;
-   VanEck reset the local network connection and must be checked from the
-   deployed Worker before calling that provider production-verified.
-2. Let the user review the real-file Schwab preview separately. Leave the
+   re-buy refresh. Vanguard and Invesco live read-only probes passed locally.
+3. Let the user review the real-file Schwab preview separately. Leave the
    actual `reset_all` import to explicit confirmation.
 
 ## Risks and Boundaries

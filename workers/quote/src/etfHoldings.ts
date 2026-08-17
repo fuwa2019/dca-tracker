@@ -14,10 +14,22 @@ export interface EtfHoldingSnapshot {
   holdings: EtfConstituentRow[];
 }
 
-const SOURCES: Record<SupportedEtf, { provider: EtfHoldingSnapshot['provider']; url: string }> = {
+type EtfHoldingSource = {
+  provider: EtfHoldingSnapshot['provider'];
+  url: string;
+  headers?: Record<string, string>;
+};
+
+const VANECK_SMH_PAGE_URL = 'https://www.vaneck.com/us/en/investments/semiconductor-etf-smh/';
+
+const SOURCES: Record<SupportedEtf, EtfHoldingSource> = {
   VOO: { provider: 'vanguard', url: 'https://investor.vanguard.com/vmf/api/VOO/portfolio-holding/stock.json?start=1&count=20000&asOfType=DAILY' },
   VGT: { provider: 'vanguard', url: 'https://investor.vanguard.com/vmf/api/VGT/portfolio-holding/stock.json?start=1&count=20000&asOfType=DAILY' },
-  SMH: { provider: 'vaneck', url: 'https://www.vaneck.com/us/en/investments/semiconductor-etf-smh/' },
+  SMH: {
+    provider: 'vaneck',
+    url: 'https://www.vaneck.com/Main/HoldingsBlock/GetDataset/?blockId=144458&pageId=233107&ticker=SMH',
+    headers: { Referer: VANECK_SMH_PAGE_URL, 'X-Requested-With': 'XMLHttpRequest' },
+  },
   QQQ: { provider: 'invesco', url: 'https://dng-api.invesco.com/cache/v1/accounts/en_US/shareclasses/QQQ/holdings/fund?idType=ticker&productType=ETF' },
   QQQM: { provider: 'invesco', url: 'https://dng-api.invesco.com/cache/v1/accounts/en_US/shareclasses/46138G649/holdings/fund?idType=cusip&productType=ETF' },
 };
@@ -27,7 +39,11 @@ const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 export async function fetchEtfHoldingSnapshot(etfTicker: SupportedEtf): Promise<EtfHoldingSnapshot> {
   const source = SOURCES[etfTicker];
   const response = await fetch(source.url, {
-    headers: { Accept: 'text/csv,text/html,application/json;q=0.9', 'User-Agent': 'DCA-Tracker/1.0 ETF holdings refresh' },
+    headers: {
+      Accept: 'application/json,text/csv;q=0.9,text/html;q=0.8',
+      'User-Agent': 'DCA-Tracker/1.0 ETF holdings refresh',
+      ...source.headers,
+    },
     redirect: 'follow',
   });
   if (!response.ok) throw new Error(`provider_http_${response.status}`);
@@ -83,7 +99,9 @@ function rowFromObject(value: unknown): RawRow | null {
   const ticker = findValue(row, /ticker|symbol|holdingTicker|securityTicker/i);
   const weight = findValue(row, /weight|percent|pct|percentOfFund|percentageOfFund|percentage.*net.*asset/i);
   // Provider JSON fields are percentage points, including values below 1.
-  return ticker != null && weight != null ? { ticker: String(ticker), weight: `${String(weight)}%` } : null;
+  if (ticker == null || weight == null) return null;
+  const percentagePoints = String(weight).trim();
+  return { ticker: String(ticker), weight: percentagePoints.endsWith('%') ? percentagePoints : `${percentagePoints}%` };
 }
 
 function findValue(row: Record<string, unknown>, pattern: RegExp): unknown {
@@ -191,6 +209,7 @@ function extractAsOf(body: string): string {
     /as of\s+(\d{1,2}\/\d{1,2}\/\d{4})/i,
     /"(?:asOf|asOfDate|as_of|effectiveDate)"\s*:\s*"(\d{4}-\d{2}-\d{2})/i,
     /(?:asOf|asOfDate|as_of|effectiveDate)[^\d]{0,10}(\d{4}-\d{2}-\d{2})/i,
+    /"(?:asOf|asOfDate|as_of|effectiveDate)"\s*:\s*"(\d{1,2}\/\d{1,2}\/\d{4})/i,
   ];
   for (const pattern of patterns) {
     const match = body.match(pattern)?.[1];

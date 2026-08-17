@@ -1,0 +1,32 @@
+{
+  "asOfDate": "08/14/2026",
+  "holdings": [
+    { "ticker": "NVDA", "holdingName": "Nvidia Corp", "percentOfNetAssets": "22.04%" },
+    { "ticker": "TSM", "holdingName": "Taiwan Semiconductor Manufacturing Co L", "percentOfNetAssets": "9.28%" },
+    { "ticker": "AVGO", "holdingName": "Broadcom Inc", "percentOfNetAssets": "6.13%" },
+    { "ticker": "AMD", "holdingName": "Advanced Micro Devices Inc", "percentOfNetAssets": "5.58%" },
+    { "ticker": "MU", "holdingName": "Micron Technology Inc", "percentOfNetAssets": "5.34%" },
+    { "ticker": "ASML", "holdingName": "Asml Holding Nv", "percentOfNetAssets": "5.22%" },
+    { "ticker": "LRCX", "holdingName": "Lam Research Corp", "percentOfNetAssets": "4.56%" },
+    { "ticker": "AMAT", "holdingName": "Applied Materials Inc", "percentOfNetAssets": "4.50%" },
+    { "ticker": "ADI", "holdingName": "Analog Devices Inc", "percentOfNetAssets": "4.38%" },
+    { "ticker": "TXN", "holdingName": "Texas Instruments Inc", "percentOfNetAssets": "4.38%" },
+    { "ticker": "KLAC", "holdingName": "Kla Corp", "percentOfNetAssets": "4.23%" },
+    { "ticker": "INTC", "holdingName": "Intel Corp", "percentOfNetAssets": "4.23%" },
+    { "ticker": "MRVL", "holdingName": "Marvell Technology Inc", "percentOfNetAssets": "3.88%" },
+    { "ticker": "QCOM", "holdingName": "Qualcomm Inc", "percentOfNetAssets": "3.75%" },
+    { "ticker": "CDNS", "holdingName": "Cadence Design Systems Inc", "percentOfNetAssets": "2.08%" },
+    { "ticker": "SNPS", "holdingName": "Synopsys Inc", "percentOfNetAssets": "1.89%" },
+    { "ticker": "TER", "holdingName": "Teradyne Inc", "percentOfNetAssets": "1.45%" },
+    { "ticker": "MPWR", "holdingName": "Monolithic Power Systems Inc", "percentOfNetAssets": "1.38%" },
+    { "ticker": "NXPI", "holdingName": "Nxp Semiconductors Nv", "percentOfNetAssets": "1.07%" },
+    { "ticker": "ARM", "holdingName": "Arm Holdings Plc", "percentOfNetAssets": "1.03%" },
+    { "ticker": "STM", "holdingName": "Stmicroelectronics Nv", "percentOfNetAssets": "1.02%" },
+    { "ticker": "ALAB", "holdingName": "Astera Labs Inc", "percentOfNetAssets": "0.95%" },
+    { "ticker": "MCHP", "holdingName": "Microchip Technology Inc", "percentOfNetAssets": "0.87%" },
+    { "ticker": "ON", "holdingName": "On Semiconductor Corp", "percentOfNetAssets": "0.57%" },
+    { "ticker": "SWKS", "holdingName": "Skyworks Solutions Inc", "percentOfNetAssets": "0.18%" },
+    { "ticker": "-USD CASH-", "holdingName": "--", "percentOfNetAssets": "0.04%" },
+    { "ticker": "--", "holdingName": "Other/Cash", "percentOfNetAssets": "-0.01%" }
+  ]
+}

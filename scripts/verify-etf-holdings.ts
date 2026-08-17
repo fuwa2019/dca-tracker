@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { normalizeConstituentTicker, parseEtfHoldingSource } from '../workers/quote/src/etfHoldings.ts';
+import { readFile } from 'node:fs/promises';
+import { fetchEtfHoldingSnapshot, normalizeConstituentTicker, parseEtfHoldingSource } from '../workers/quote/src/etfHoldings.ts';
 
 const csv = `Portfolio composition as of 08/04/2026
 Ticker,Security Name,% of Net Assets
@@ -27,6 +28,30 @@ const html = `
 const htmlResult = parseEtfHoldingSource('SMH', 'vaneck', 'https://example.test/smh', html);
 assert.equal(htmlResult.holdings.length, 5);
 assert.ok(Math.abs(htmlResult.holdings.reduce((sum, row) => sum + row.weight, 0) - 0.9995) < 1e-10);
+
+const vaneckFixture = await readFile(new URL('../tests/fixtures/etf-holdings/vaneck-smh-current.json', import.meta.url), 'utf8');
+const vaneckResult = parseEtfHoldingSource('SMH', 'vaneck', 'https://example.test/smh.json', vaneckFixture);
+assert.equal(vaneckResult.asOf, '2026-08-14');
+assert.equal(vaneckResult.holdings.length, 25);
+assert.equal(vaneckResult.holdings[0]?.ticker, 'NVDA');
+assert.ok(Math.abs((vaneckResult.holdings[0]?.weight ?? 0) - 0.2204) < 1e-10);
+assert.ok(Math.abs(vaneckResult.holdings.reduce((sum, row) => sum + row.weight, 0) - 0.9999) < 1e-10);
+
+const originalFetch = globalThis.fetch;
+let vaneckRequest: Request | undefined;
+globalThis.fetch = async (input, init) => {
+  vaneckRequest = new Request(input, init);
+  return new Response(vaneckFixture, { status: 200, headers: { 'content-type': 'application/json' } });
+};
+try {
+  const fetchedVaneck = await fetchEtfHoldingSnapshot('SMH');
+  assert.equal(fetchedVaneck.holdings.length, 25);
+  assert.match(vaneckRequest?.url ?? '', /HoldingsBlock\/GetDataset/);
+  assert.equal(vaneckRequest?.headers.get('x-requested-with'), 'XMLHttpRequest');
+  assert.equal(vaneckRequest?.headers.get('referer'), 'https://www.vaneck.com/us/en/investments/semiconductor-etf-smh/');
+} finally {
+  globalThis.fetch = originalFetch;
+}
 
 const json = JSON.stringify({
   asOf: '2026-08-03',
