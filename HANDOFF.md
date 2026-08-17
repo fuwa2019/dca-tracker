@@ -10,18 +10,21 @@ database, Quote Worker, and Pages changes are now live.
 
 ## Current Status
 
-- SMH refresh compatibility is fixed locally but not deployed. The Quote Worker
-  now reads VanEck's page-backed `HoldingsBlock/GetDataset` JSON endpoint instead
-  of the marketing HTML page, sends the endpoint's expected request context,
-  and accepts percentage strings plus US-formatted JSON as-of dates. A stable
+- SMH refresh compatibility is deployed in Quote Worker version
+  `90d9eb62-0997-4a12-bb93-310fd6a1c6f1` from commit `bb09267`. The Worker now
+  reads VanEck's page-backed `HoldingsBlock/GetDataset` JSON endpoint instead of
+  the marketing HTML page, sends the endpoint's expected request context, and
+  accepts percentage strings plus US-formatted JSON as-of dates. A stable
   public-data fixture covers the current 25 equity constituents and excludes
-  cash rows. `test:etf-holdings`, `test:quote-status`, and `typecheck` pass.
+  cash rows. `test:etf-holdings`, the CI-equivalent tests, `typecheck`, `build`,
+  and `git diff --check` pass.
 - Current read-only probing reproduced VanEck resetting direct local connections
   to both the marketing page and XLSX endpoint. The official page and JSON
-  dataset were independently reachable through the web retrieval path. No
-  deployment or authenticated/private portfolio access was performed, so the
-  new endpoint still requires verification from the deployed Worker after a
-  separately authorized release.
+  dataset were independently reachable through the web retrieval path. The
+  deployed Worker health endpoint returned 200, refresh CORS preflight returned
+  200, and an unauthenticated refresh returned 401. No authenticated/private
+  portfolio access was performed, so a real SMH refresh through the deployed
+  Worker remains unverified.
 - Repository: `/Users/junxihuo/Documents/dca_system`, branch `master` tracking
   `origin/master`.
 - Append-only migrations `0048_etf_holdings_refresh.sql` and
@@ -92,12 +95,11 @@ database, Quote Worker, and Pages changes are now live.
 
 ## Next Steps
 
-1. After an explicitly authorized Quote Worker deployment, verify SMH refresh
-   reaches the VanEck JSON dataset from the Worker runtime.
-2. Verify the authenticated `POST /api/etf-holdings/refresh` with a synthetic
+1. Verify the authenticated `POST /api/etf-holdings/refresh` with a synthetic
    account, including partial provider failure, final-holder deletion, and
-   re-buy refresh. Vanguard and Invesco live read-only probes passed locally.
-3. Let the user review the real-file Schwab preview separately. Leave the
+   re-buy refresh and SMH access to the VanEck JSON dataset from the deployed
+   Worker runtime. Vanguard and Invesco live read-only probes passed locally.
+2. Let the user review the real-file Schwab preview separately. Leave the
    actual `reset_all` import to explicit confirmation.
 
 ## Risks and Boundaries
