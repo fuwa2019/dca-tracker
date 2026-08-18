@@ -1,0 +1,15 @@
+Date,Action,Symbol,Quantity,Price,Fees & Comm,Amount,Currency,Description
+2026-01-02,Deposit,,1,1,0,1000.0000000000,USD,Synthetic deposit
+2026-01-02,Buy,VGT,2.0000000000,100.1234567890,0.1234567890,-200.3703703670,USD,Synthetic technology ETF
+2026-01-02,Buy,SMH,1.0000000000,200.0000000000,0,-200.0000000000,USD,Synthetic semiconductor ETF
+2026-01-10,Dividend,VGT,1,1,0,1.2500000000,USD,Synthetic dividend
+2026-01-10,Reinvest Dividend,VGT,0.0123456789,101.2500000000,0,-1.2500000000,USD,Synthetic DRIP
+2026-01-12,Interest,,1,1,0,0.0700000000,USD,Synthetic interest
+2026-01-14,Sell,VGT,0.5000000000,110.3333333333,0.0100000000,55.1566666667,USD,Synthetic partial sell
+2026-01-15,Withdrawal,,1,1,0,-100.0000000000,USD,Synthetic withdrawal
+2026-01-15,Withholding Tax,,1,1,0,-0.1300000000,USD,Synthetic withholding tax
+2026-01-15,Fee,,1,1,0,-0.0700000000,USD,Synthetic independent fee
+2026-01-15,Deposit,,1,1,0,0.0000000001,USD,Synthetic precision deposit
+2026-01-15,Buy,VGT,2.0000000000,100.1234567890,0.1234567890,-200.3703703670,USD,Synthetic exact duplicate
+2026-01-16,Buy,VOO,1,400,0,-400,EUR,Blocked non-USD event without USD settlement
+bad-date,Buy,SMH,1,200,0,-200,USD,Blocked malformed date

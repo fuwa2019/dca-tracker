@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_URL: string;
   readonly VITE_SUPABASE_ANON_KEY: string;
   readonly VITE_QUOTE_WORKER_URL: string;
+  readonly VITE_LEDGER_IMPORT_V2?: string;
 }
 
 interface ImportMeta {

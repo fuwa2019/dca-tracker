@@ -1,0 +1,5 @@
+日期,证券代码,净额,账目货币,费用,税款,份额,类型,备注,现金账户,证券账户
+2026-01-02,VGT,200.3703703670,USD,0.1234567890,0,2.0000000000,买入,buy-vgt-20260102-1,DCA Synthetic Cash,DCA Synthetic Securities
+2026-01-02,SMH,200.0000000000,USD,0,0,1.0000000000,买入,buy-smh-20260102-1,DCA Synthetic Cash,DCA Synthetic Securities
+2026-01-10,VGT,1.2500000000,USD,0,0,0.0123456789,买入,drip-vgt-20260110-1,DCA Synthetic Cash,DCA Synthetic Securities
+2026-01-14,VGT,55.1566666667,USD,0.0100000000,0,0.5000000000,卖出,sell-vgt-20260114-1,DCA Synthetic Cash,DCA Synthetic Securities

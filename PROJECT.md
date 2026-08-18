@@ -105,7 +105,8 @@ More detail:
   and scheduled cache refresh.
 - `workers/email-cron/`: NYSE-calendar reminder scheduling and email delivery.
 - `supabase/migrations/`: append-only schema and RPC history, currently through
-  `0049_restrict_etf_holding_table_privileges.sql`.
+  `0050_portfolio_ledger_import.sql`; production was verified through `0050`
+  after the explicit migration authorization on 2026-08-18.
 - `scripts/`: regression checks, local dataset generation, operational market
   data helpers, and X content tooling.
 - `tests/fixtures/`: finance and long-horizon regression fixtures.

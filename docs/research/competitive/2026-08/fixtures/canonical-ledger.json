@@ -1,0 +1,128 @@
+{
+  "fixture_id": "dca-competitive-2026-08-v1",
+  "base_currency": "USD",
+  "events": [
+    {
+      "event_id": "deposit-20260102-1",
+      "effective_date": "2026-01-02",
+      "sequence": 1,
+      "kind": "broker_deposit",
+      "usd_amount": "1000.0000000000",
+      "source": "schwab"
+    },
+    {
+      "event_id": "buy-vgt-20260102-1",
+      "effective_date": "2026-01-02",
+      "sequence": 2,
+      "kind": "trade",
+      "side": "buy",
+      "ticker": "VGT",
+      "shares": "2.0000000000",
+      "price": "100.1234567890",
+      "fees_usd": "0.1234567890",
+      "usd_amount": "-200.3703703670",
+      "source": "schwab"
+    },
+    {
+      "event_id": "buy-smh-20260102-1",
+      "effective_date": "2026-01-02",
+      "sequence": 3,
+      "kind": "trade",
+      "side": "buy",
+      "ticker": "SMH",
+      "shares": "1.0000000000",
+      "price": "200.0000000000",
+      "fees_usd": "0.0000000000",
+      "usd_amount": "-200.0000000000",
+      "source": "ibkr"
+    },
+    {
+      "event_id": "dividend-vgt-20260110-1",
+      "effective_date": "2026-01-10",
+      "sequence": 1,
+      "kind": "dividend",
+      "ticker": "VGT",
+      "usd_amount": "1.2500000000",
+      "source": "ibkr"
+    },
+    {
+      "event_id": "drip-vgt-20260110-1",
+      "effective_date": "2026-01-10",
+      "sequence": 2,
+      "kind": "trade",
+      "side": "buy",
+      "ticker": "VGT",
+      "shares": "0.0123456789",
+      "price": "101.2500000000",
+      "fees_usd": "0.0000000000",
+      "usd_amount": "-1.2500000000",
+      "source": "ibkr"
+    },
+    {
+      "event_id": "interest-20260112-1",
+      "effective_date": "2026-01-12",
+      "sequence": 1,
+      "kind": "interest",
+      "usd_amount": "0.0700000000",
+      "source": "ibkr"
+    },
+    {
+      "event_id": "sell-vgt-20260114-1",
+      "effective_date": "2026-01-14",
+      "sequence": 1,
+      "kind": "trade",
+      "side": "sell",
+      "ticker": "VGT",
+      "shares": "0.5000000000",
+      "price": "110.3333333333",
+      "fees_usd": "0.0100000000",
+      "usd_amount": "55.1566666667",
+      "source": "schwab"
+    },
+    {
+      "event_id": "withdrawal-20260115-1",
+      "effective_date": "2026-01-15",
+      "sequence": 1,
+      "kind": "broker_withdrawal",
+      "usd_amount": "-100.0000000000",
+      "source": "tradingview"
+    },
+    {
+      "event_id": "tax-20260115-1",
+      "effective_date": "2026-01-15",
+      "sequence": 2,
+      "kind": "tax",
+      "usd_amount": "-0.1300000000",
+      "source": "tradingview"
+    },
+    {
+      "event_id": "fee-20260115-1",
+      "effective_date": "2026-01-15",
+      "sequence": 3,
+      "kind": "fee",
+      "usd_amount": "-0.0700000000",
+      "source": "tradingview"
+    },
+    {
+      "event_id": "deposit-20260115-2",
+      "effective_date": "2026-01-15",
+      "sequence": 4,
+      "kind": "broker_deposit",
+      "usd_amount": "0.0000000001",
+      "source": "tradingview"
+    }
+  ],
+  "expected": {
+    "ending_shares": {
+      "VGT": "1.5123456789",
+      "SMH": "1.0000000000"
+    },
+    "ending_cash_usd": "554.6562962998",
+    "investor_deposits_usd": "1000.0000000001",
+    "investor_withdrawals_usd": "-100.0000000000",
+    "dividends_usd": "1.2500000000",
+    "interest_usd": "0.0700000000",
+    "taxes_usd": "-0.1300000000",
+    "independent_fees_usd": "-0.0700000000"
+  }
+}

@@ -36,6 +36,27 @@ sanitized performance cache.
 - Historical chart points use daily prices. The current dashboard cards use
   latest quote snapshots/live quotes where available.
 
+## Ledger TWR V2 Draft
+
+The V2 pure calculation boundary is implemented in
+`src/lib/calc/ledgerTwr.ts` and is not yet the dashboard/cache contract. It
+uses ordinary close prices and the explicit cash ledger:
+
+- `broker_deposit` and positive sleeve-boundary transfers enter at the start
+  of the day;
+- `broker_withdrawal` and negative `stock_allocation` leave at the end of the
+  day;
+- trades, dividends, interest, taxes, and fees remain internal portfolio
+  events and are not neutralized;
+- each daily factor is `(ending NAV + end-of-day external outflow) /
+  (beginning NAV + start-of-day external inflow)`;
+- missing ordinary closes produce a warning and an incomplete result instead of
+  silently switching to adjusted close or cost basis.
+
+`ledger_twr_v2` is selected only after a complete import and reconciliation.
+Legacy data remains on `adjusted_proxy_v1` until a separately released database
+and cache migration changes the method field.
+
 ## Performance Cache
 
 `performance_history_cache` stores only public-safe curve fields:

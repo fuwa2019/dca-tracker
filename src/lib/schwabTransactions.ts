@@ -1,4 +1,5 @@
 import Papa from 'papaparse';
+import type { LedgerCashEventType } from './import/types.ts';
 
 export const SCHWAB_HEADERS = [
   'Date',
@@ -115,7 +116,7 @@ export interface ExistingCashflowLike {
   id: string;
   usd_in_date: string | null;
   usd_amount: number | string | null;
-  cashflow_kind?: 'fx_transfer' | 'broker_deposit' | 'stock_allocation';
+  cashflow_kind?: LedgerCashEventType;
   import_source?: string | null;
   import_key?: string | null;
 }

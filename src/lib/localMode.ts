@@ -13,6 +13,9 @@ import type { User } from '@supabase/supabase-js';
  */
 export const LOCAL_MODE = import.meta.env.VITE_LOCAL_MODE === '1';
 
+/** Enables the source-neutral preview UI; local mode always exposes it safely. */
+export const LEDGER_IMPORT_V2 = LOCAL_MODE || import.meta.env.VITE_LEDGER_IMPORT_V2 === '1';
+
 /** Synthetic user so `RequireAuth` lets the local build straight through. */
 export const LOCAL_USER = {
   id: '00000000-0000-4000-8000-000000000c0a',

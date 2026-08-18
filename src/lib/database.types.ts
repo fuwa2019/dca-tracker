@@ -19,6 +19,16 @@ export interface FundingBatchInsert {
 }
 export type FundingBatchUpdate = Partial<FundingBatchInsert>;
 
+export type LedgerCashflowKind =
+  | 'fx_transfer'
+  | 'broker_deposit'
+  | 'broker_withdrawal'
+  | 'stock_allocation'
+  | 'dividend'
+  | 'interest'
+  | 'tax'
+  | 'fee';
+
 export interface CashflowRow {
   id: string;
   user_id: string;
@@ -27,10 +37,14 @@ export interface CashflowRow {
   cny_amount: number | null;
   usd_in_date: string | null;
   usd_amount: number | null;
+  effective_date?: string | null;
+  ticker?: string | null;
+  source_currency?: string | null;
+  source_amount?: number | null;
   target_rate: number | null;
   fees_cny: number;
   fees_usd: number;
-  cashflow_kind: 'fx_transfer' | 'broker_deposit' | 'stock_allocation';
+  cashflow_kind: LedgerCashflowKind;
   source_action: string | null;
   source_description: string | null;
   import_source: string | null;
@@ -46,10 +60,14 @@ export interface CashflowInsert {
   cny_amount?: number | null;
   usd_in_date?: string | null;
   usd_amount?: number | null;
+  effective_date?: string;
+  ticker?: string | null;
+  source_currency?: string | null;
+  source_amount?: number | null;
   target_rate?: number | null;
   fees_cny?: number;
   fees_usd?: number;
-  cashflow_kind?: 'fx_transfer' | 'broker_deposit' | 'stock_allocation';
+  cashflow_kind?: LedgerCashflowKind;
   source_action?: string | null;
   source_description?: string | null;
   import_source?: string | null;
@@ -293,6 +311,22 @@ export type SchwabTransactionImportResult = {
   errors: number;
 };
 
+export type PortfolioLedgerImportResult = {
+  source: 'schwab' | 'ibkr' | 'tradingview';
+  mode: 'append' | 'replace_source' | 'reset_all';
+  added: number;
+  unchanged: number;
+  removed: number;
+  transactions_added: number;
+  transactions_unchanged: number;
+  transactions_removed: number;
+  cashflows_added: number;
+  cashflows_unchanged: number;
+  cashflows_removed: number;
+  funding_batches_removed: number;
+  errors: number;
+};
+
 export type HistoryCacheRefresh = {
   ok: true;
   points: number;
@@ -458,6 +492,44 @@ export interface Database {
           p_mode: 'append' | 'reset_all';
         };
         Returns: SchwabTransactionImportResult;
+      };
+      import_portfolio_ledger: {
+        Args: {
+          p_source: 'schwab' | 'ibkr' | 'tradingview';
+          p_trades: Array<{
+            source?: 'schwab' | 'ibkr' | 'tradingview';
+            source_index: number;
+            effective_date: string;
+            side: 'buy' | 'sell';
+            ticker: string;
+            shares: number | string;
+            price: number | string;
+            fees_usd: number | string;
+            usd_amount: number | string;
+            source_currency: string;
+            source_action: string;
+            source_description?: string | null;
+            duplicate_ordinal: number;
+            import_key: string;
+            kind?: 'dca' | 'lumpsum';
+          }>;
+          p_cash_events: Array<{
+            source?: 'schwab' | 'ibkr' | 'tradingview';
+            source_index: number;
+            effective_date: string;
+            event_type: LedgerCashflowKind;
+            ticker?: string | null;
+            source_currency: string;
+            source_amount: number | string;
+            usd_amount: number | string;
+            source_action: string;
+            source_description?: string | null;
+            duplicate_ordinal: number;
+            import_key: string;
+          }>;
+          p_mode: 'append' | 'replace_source' | 'reset_all';
+        };
+        Returns: PortfolioLedgerImportResult;
       };
       tracked_symbol_coverage: {
         Args: { p_benchmark?: string | null };

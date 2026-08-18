@@ -1,6 +1,7 @@
 // Use require shim since xirr is CommonJS without types.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 import xirrLib from 'xirr';
+import type { LedgerCashflowKind } from '../database.types.ts';
 
 interface CashEvent {
   /** Negative = money in (you invested). Positive = money out (you received). */
@@ -39,7 +40,7 @@ export function buildXirrEvents(args: {
   cashflows: Array<{
     usd_in_date: string | null;
     usd_amount: number | null;
-    cashflow_kind?: 'fx_transfer' | 'broker_deposit' | 'stock_allocation';
+    cashflow_kind?: LedgerCashflowKind;
   }>;
   currentMarketValueUsd: number;
   asOf?: Date;
@@ -55,6 +56,41 @@ export function buildXirrEvents(args: {
   for (const c of fundingCashflows) {
     if (!c.usd_in_date || !c.usd_amount) continue;
     events.push({ amount: -Number(c.usd_amount), when: new Date(c.usd_in_date + 'T00:00:00Z') });
+  }
+  if (args.currentMarketValueUsd > 0) {
+    events.push({ amount: args.currentMarketValueUsd, when: args.asOf ?? new Date() });
+  }
+  return events;
+}
+
+/**
+ * V2 XIRR boundary: only money entering/leaving the investor-owned ETF sleeve
+ * is an external cashflow. Dividends, interest, trades, taxes, and fees stay
+ * inside the portfolio and therefore are intentionally excluded here.
+ */
+export function buildLedgerXirrEvents(args: {
+  cashflows: Array<{
+    effective_date?: string | null;
+    usd_in_date?: string | null;
+    usd_amount: number | string | null;
+    cashflow_kind: LedgerCashflowKind;
+  }>;
+  currentMarketValueUsd: number;
+  asOf?: Date;
+}): CashEvent[] {
+  const externalKinds = new Set<LedgerCashflowKind>([
+    'fx_transfer',
+    'broker_deposit',
+    'broker_withdrawal',
+    'stock_allocation',
+  ]);
+  const events: CashEvent[] = [];
+  for (const cashflow of args.cashflows) {
+    if (!externalKinds.has(cashflow.cashflow_kind)) continue;
+    const date = cashflow.effective_date ?? cashflow.usd_in_date;
+    const amount = Number(cashflow.usd_amount);
+    if (!date || !Number.isFinite(amount) || amount === 0) continue;
+    events.push({ amount: -amount, when: new Date(`${date}T00:00:00Z`) });
   }
   if (args.currentMarketValueUsd > 0) {
     events.push({ amount: args.currentMarketValueUsd, when: args.asOf ?? new Date() });

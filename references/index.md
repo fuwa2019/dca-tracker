@@ -11,6 +11,7 @@
 | Invesco ETFs | Provider data | https://www.invesco.com/us/financial-products/etfs/ | QQQ/QQQM official portfolio holdings | 2026-08-05 |
 | Resend documentation | Provider documentation | https://resend.com/docs | Reminder email delivery | 2026-07-27 |
 | NYSE hours and calendars | Exchange calendar | https://www.nyse.com/markets/hours-calendars | Trading-day and holiday maintenance | 2026-07-27 |
+| IBKR Trades reporting reference | Provider documentation | https://www.ibkrguides.com/reportingreference/reportguide/et_trades.htm | Activity Statement/Trades field names and cash semantics | 2026-08-18 |
 
 Links are leads, not project state. Verify provider behavior against current
 code, configuration, and an authorized environment before making operational

@@ -6,8 +6,9 @@
    - `migrations/0001_init.sql`（核心表 + RLS + 分享函数 v1）
    - `migrations/0002_daily_prices.sql`（资产曲线和基准对照所需的历史价表）
    - `migrations/0003_shared_portfolio_v2.sql`（修复卖出后均价虚高，覆盖旧函数）
-   - 后续已部署项目继续按编号运行新增 migration，当前最新版本到
-     `migrations/0047_schwab_settled_cash_and_stock_allocations.sql`
+   - 后续已部署项目继续按编号运行新增 migration。当前仓库和生产最新
+     验证版本为 `migrations/0050_portfolio_ledger_import.sql`；该迁移已在
+     2026-08-18 获得明确授权并完成生产 schema/RPC/RLS 核验。
 
    新部署只需按顺序跑一次；已部署的项目跑新增的 sql 即可（idempotent）。
 

@@ -13,6 +13,17 @@ performance. Cashflows remain the source of truth for account NAV and XIRR.
 
 The detailed calculation contract is in `docs/PERFORMANCE_SPEC.md`.
 
+## V2 Migration Boundary
+
+The repository now contains a pure `ledger_twr_v2` calculation fixture and an
+append-only local schema/RPC migration, but the live dashboard and public cache
+still use the V1 contract above. V2 must use ordinary closes and explicit cash
+events, neutralize only start-of-day inflows and end-of-day outflows, and keep
+dividends, interest, trades, taxes, and fees internal. XIRR must use only
+investor cash and ETF sleeve boundary transfers. Do not switch the cache or
+public share method until the Portfolio Performance reconciliation and privacy
+snapshot gates pass.
+
 ## Shared Cache Contract
 
 Authenticated dashboard and public share views read the same cumulative-return

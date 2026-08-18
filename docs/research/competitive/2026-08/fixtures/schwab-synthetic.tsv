@@ -1,0 +1,14 @@
+Transactions for account SYNTHETIC-001
+Date	Action	Symbol	Description	Quantity	Price	Fees & Comm	Amount
+01/02/2026	Wire Received		Synthetic deposit				$1000.0000000000
+01/02/2026	Buy	VGT	Synthetic technology ETF	2.0000000000	$100.1234567890	$0.1234567890	-$200.3703703670
+01/02/2026	Buy	VGT	Synthetic technology ETF duplicate	2.0000000000	$100.1234567890	$0.1234567890	-$200.3703703670
+01/02/2026	Buy	LITE	Synthetic common stock	1.0000000000	$10.0000000000		-$10.0000000000
+01/10/2026	Cash Dividend	VGT	Synthetic dividend				$1.2500000000
+01/10/2026	Reinvest Shares	VGT	Synthetic dividend reinvestment	0.0123456789	$101.2500000000		-$1.2500000000
+01/12/2026	Bank Interest		Synthetic interest				$0.0700000000
+01/14/2026	Sell	VGT	Synthetic partial sell	0.5000000000	$110.3333333333	$0.0100000000	$55.1566666667
+01/15/2026	MoneyLink Transfer		Synthetic withdrawal				-$100.0000000000
+bad-date	Buy	SMH	Malformed date	1	$200.00		-$200.00
+01/15/2026	Withholding Tax		Synthetic tax				-$0.1300000000
+01/15/2026	Fee		Synthetic independent fee				-$0.0700000000

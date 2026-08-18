@@ -89,6 +89,27 @@ assert.match(transactionTools, /exportSchwabTransactions/, 'transaction tools ex
 assert.match(transactionTools, /exportSchwabTransactions\([\s\S]*?exportRows,[\s\S]*?exportCashflows\.map/, 'Schwab export contains ETF trades and cash events');
 assert.match(transactionTools, /Schwab_Transactions_/, 'combined export uses a transaction-history filename');
 
+const portfolioImport = readFileSync(new URL('../src/components/PortfolioImportTools.tsx', import.meta.url), 'utf8');
+assert.match(portfolioImport, /import_portfolio_ledger/, 'source-neutral preview writes through the generic ledger RPC');
+assert.match(portfolioImport, /replace_source/, 'source-neutral preview exposes source replacement');
+assert.match(portfolioImport, /reset_all/, 'source-neutral preview exposes full reset mode');
+assert.match(portfolioImport, /导入/, 'source-neutral preview labels import rows');
+assert.match(portfolioImport, /重复/, 'source-neutral preview labels duplicate rows');
+assert.match(portfolioImport, /忽略/, 'source-neutral preview labels ignored rows');
+assert.match(portfolioImport, /阻止/, 'source-neutral preview labels blocked rows');
+assert.match(portfolioImport, /role="table"/, 'source-neutral preview exposes a semantic row table');
+assert.match(portfolioImport, /aria-live/, 'source-neutral preview announces status changes');
+assert.match(portfolioImport, /sm:grid-cols-\[3\.5rem_8rem_5rem/, 'row details collapse into a mobile layout');
+assert.match(portfolioImport, /本地演示模式只展示预览，不写入数据库/, 'local mode never writes through the preview');
+assert.match(portfolioImport, /资产确认/, 'source-neutral preview exposes asset confirmation');
+assert.match(portfolioImport, /个股，忽略/, 'asset confirmation can explicitly ignore stocks');
+assert.match(portfolioImport, /ETF，导入/, 'asset confirmation can explicitly retain ETFs');
+assert.match(portfolioImport, /导入前对账/, 'preview exposes normalized reconciliation totals');
+assert.match(portfolioImport, /cash_by_kind/, 'preview exposes cash-event reconciliation categories');
+
+const localMode = readFileSync(new URL('../src/lib/localMode.ts', import.meta.url), 'utf8');
+assert.match(localMode, /VITE_LEDGER_IMPORT_V2/, 'ledger preview has an explicit rollout flag');
+
 const quote = readFileSync(new URL('../src/lib/quote.ts', import.meta.url), 'utf8');
 assert.match(quote, /limitedFetchJson<\{ quotes: Quote\[\] \}>\('quote'/, 'quote requests pass through the unified rate limiter');
 assert.match(quote, /rateLimited\('history'/, 'history requests pass through the unified rate limiter');

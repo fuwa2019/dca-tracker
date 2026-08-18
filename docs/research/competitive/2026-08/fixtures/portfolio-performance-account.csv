@@ -1,0 +1,8 @@
+日期,证券代码,净额,账目货币,类型,备注,现金账户,证券账户
+2026-01-02,,1000.0000000000,USD,存款,deposit-20260102-1,DCA Synthetic Cash,DCA Synthetic Securities
+2026-01-10,VGT,1.2500000000,USD,股息,dividend-vgt-20260110-1,DCA Synthetic Cash,DCA Synthetic Securities
+2026-01-12,,0.0700000000,USD,利息,interest-20260112-1,DCA Synthetic Cash,DCA Synthetic Securities
+2026-01-15,,100.0000000000,USD,取款,withdrawal-20260115-1,DCA Synthetic Cash,DCA Synthetic Securities
+2026-01-15,,0.1300000000,USD,税款,tax-20260115-1,DCA Synthetic Cash,DCA Synthetic Securities
+2026-01-15,,0.0700000000,USD,费用,fee-20260115-1,DCA Synthetic Cash,DCA Synthetic Securities
+2026-01-15,,0.0000000001,USD,存款,deposit-20260115-2,DCA Synthetic Cash,DCA Synthetic Securities
