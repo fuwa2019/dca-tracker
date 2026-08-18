@@ -9,12 +9,12 @@ move from trusted source import and ledger semantics to financial calculation,
 task-oriented interaction, and privacy-safe analysis without expanding beyond
 one personal ETF portfolio.
 
-## Goal Progress (2026-08-18)
+## Goal Progress (2026-08-19)
 
 - The pre-goal baseline commit is `e1bed4e`; it was clean and passed
   `test:finance`, `test:csv-import`, `test:ui`, `typecheck`, and `build` before
-  this working-tree change set. The current tree contains the uncommitted goal
-  work described below.
+  this working-tree change set. The workbench release is committed as
+  `4d499d3` and pushed to `origin/master`.
 - `PRODUCT.md` and `DESIGN.md` define the precise, restrained, transparent
   product boundary and WCAG 2.2 AA baseline.
 - Fixed-version research sources, task script, scorecard, reconciliation
@@ -68,8 +68,9 @@ one personal ETF portfolio.
 - Supabase branching was checked and intentionally not used. The Free
   organization has only `main`; a create attempt returned
   `PaymentRequiredException` because branching requires Pro or above. The
-  user chose `main` as the cloud baseline. No production write occurred; the
-  local PostgreSQL 15 cluster remains the isolated write/test boundary.
+  user chose `main` as the cloud baseline. No production portfolio rows were
+  written; the local PostgreSQL 15 cluster remains the isolated write/test
+  boundary for write/RLS tests.
 - Homebrew PostgreSQL `15.19` is installed. A separate local cluster is
   running at `127.0.0.1:55432` with database `dca_ledger_test` under
   `/private/tmp/dca-pg15-ledger.rwVrwh`; all 52 repository migrations through
@@ -142,11 +143,11 @@ one personal ETF portfolio.
   authenticated `POST /api/etf-holdings/refresh` and weekly Sunday refresh.
   UTC 04:10 and 05:10 daily runs use one equivalent comma-list Cron expression
   to stay within the account's five-trigger limit without dropping a run.
-- Git-backed Pages deployment `59a8baa0-13e7-4ffc-8aae-9abc44c3c283` is live
-  from `4d61150`. The canonical bundle `index-D58U0UV7.js` contains the Pages
-  Supabase configuration and refresh UI, without the localhost stub. Fresh
-  browser login rendered the login route without console errors; an invalid
-  share token returned only the expired-link message.
+- Git-backed Pages deployment `16cf94a6-32b8-46ab-8898-295591d34d4e` is live
+  from `4d499d3`. The canonical bundle `index--thvpyYG.js` contains the new
+  workbench and unified import UI, without the localhost stub. Fresh browser
+  login rendered the login route without console errors; an invalid share token
+  returned only the expired-link message.
 - The preceding direct upload `b4191fc1` was built locally without public
   `VITE_` variables and briefly broke login with `Failed to fetch`. The Git
   deployment replaced it; production login now renders without the missing
@@ -198,10 +199,10 @@ one personal ETF portfolio.
   checks passed.
 - Quote Worker version `23f51a7b-cc60-416d-9c3d-a95fe4a34671` serves health 200,
   valid refresh-route CORS preflight 200, and unauthenticated refresh 401.
-- The previous Cloudflare Pages deployment `59a8baa0-13e7-4ffc-8aae-9abc44c3c283`
-  remains the last verified production baseline until the current workbench
-  commit is pushed and deployed; the final bundle and deployment ID must be
-  recorded after the release.
+- Cloudflare Pages deployment `16cf94a6-32b8-46ab-8898-295591d34d4e` for source
+  `4d499d3` is live at
+  `https://16cf94a6.dca-tracker-git.pages.dev`; canonical
+  `https://dca-tracker-git.pages.dev` serves bundle `index--thvpyYG.js`.
 - No real CSV, financial import, authenticated holdings, or user data was read
   or changed during deployment verification.
 
@@ -209,9 +210,9 @@ one personal ETF portfolio.
 
 1. Treat any future reduced-motion emulation or native focus audit as
    supplemental research; the current study records its unavailable surfaces.
-2. After the workbench release, verify the unified import path on the canonical
-   Pages URL with a synthetic file. Use `VITE_LEDGER_IMPORT_V2=0` only as an
-   explicit compatibility rollback; the old Schwab RPC remains available.
+2. Keep the synthetic-file import smoke test separate from real brokerage data.
+   Use `VITE_LEDGER_IMPORT_V2=0` only as an explicit compatibility rollback;
+   the old Schwab RPC remains available.
 3. The weighted scorecard adopts Wealthfolio as the main interaction
    reference and keeps Portfolio Performance as the calculation reference;
    do not treat this research decision as a production release authorization.
