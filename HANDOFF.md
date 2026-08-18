@@ -139,9 +139,11 @@ one personal ETF portfolio.
   authenticated `POST /api/etf-holdings/refresh` and weekly Sunday refresh.
   UTC 04:10 and 05:10 daily runs use one equivalent comma-list Cron expression
   to stay within the account's five-trigger limit without dropping a run.
-- Git-backed Pages deployment `e175d135-addb-4b93-b5c4-de407b1b58a1` is live
-  from `b31d3e9`. The canonical bundle `index-BE4-C0D2.js` contains the Pages
-  Supabase configuration and refresh UI, without the localhost stub.
+- Git-backed Pages deployment `59a8baa0-13e7-4ffc-8aae-9abc44c3c283` is live
+  from `4d61150`. The canonical bundle `index-D58U0UV7.js` contains the Pages
+  Supabase configuration and refresh UI, without the localhost stub. Fresh
+  browser login rendered the login route without console errors; an invalid
+  share token returned only the expired-link message.
 - The preceding direct upload `b4191fc1` was built locally without public
   `VITE_` variables and briefly broke login with `Failed to fetch`. The Git
   deployment replaced it; production login now renders without the missing
@@ -193,8 +195,8 @@ one personal ETF portfolio.
   checks passed.
 - Quote Worker version `23f51a7b-cc60-416d-9c3d-a95fe4a34671` serves health 200,
   valid refresh-route CORS preflight 200, and unauthenticated refresh 401.
-- Cloudflare Pages deployment `e175d135-addb-4b93-b5c4-de407b1b58a1` is live;
-  the canonical bundle is `index-BE4-C0D2.js` and has configured Supabase Auth.
+- Cloudflare Pages deployment `59a8baa0-13e7-4ffc-8aae-9abc44c3c283` is live;
+  the canonical bundle is `index-D58U0UV7.js` and has configured Supabase Auth.
 - No real CSV, financial import, authenticated holdings, or user data was read
   or changed during deployment verification.
 
