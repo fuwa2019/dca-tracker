@@ -28,7 +28,7 @@ export function StatCard({ label, value, sub, trailing, tone = 'default', classN
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, type: 'spring', damping: 26, stiffness: 220 }}
-      className="surface-card rounded-2xl p-4"
+      className="surface-card rounded-lg p-4"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">

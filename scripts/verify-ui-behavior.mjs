@@ -33,8 +33,8 @@ assert.equal(shouldAutoFillField({ isEdit: false, touched: true, currentValue: '
 assert.equal(shouldAutoFillField({ isEdit: true, touched: false, currentValue: '' }), false, 'edit form is not overwritten');
 
 const performance = readFileSync(new URL('../src/app/performance.tsx', import.meta.url), 'utf8');
-assert.match(performance, /交易业绩是否跑赢 \{selectedBenchmark\}/, 'performance title uses selected benchmark');
-assert.doesNotMatch(performance, /交易业绩是否跑赢 SPY/, 'performance title must not hard-code SPY');
+assert.match(performance, /相对 \$\{selectedBenchmark\}/, 'performance summary uses selected benchmark');
+assert.doesNotMatch(performance, /相对 SPY。/, 'performance summary must not hard-code SPY');
 assert.match(performance, /MonthlyPerformanceCalendar/, 'performance page includes the monthly calendar');
 
 const calendar = readFileSync(new URL('../src/components/MonthlyPerformanceCalendar.tsx', import.meta.url), 'utf8');

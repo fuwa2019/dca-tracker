@@ -68,19 +68,12 @@ export function PerformancePage() {
     : '录入交易并补齐日线价格后，这里会生成一份可分享、可审计的业绩报告。';
 
   return (
-    <div className="container max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="workbench-page space-y-5">
+      <header className="workbench-intro">
         <div className="max-w-3xl">
-          <div className="flex items-baseline gap-3">
-            <span className="font-serif text-3xl italic leading-none text-brand">02</span>
-            <div>
-              <div className="kicker">Performance Report</div>
-              <h2 className="mt-0.5 font-serif text-3xl font-semibold tracking-tight sm:text-[2.6rem] sm:leading-[1.05]">
-                交易业绩是否跑赢 {selectedBenchmark}？
-              </h2>
-            </div>
-          </div>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">{reportLead}</p>
+          <div className="workbench-eyebrow">Performance</div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">绩效与对账</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">{reportLead}</p>
           <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
             <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
               <CalendarDays className="h-3.5 w-3.5" />
@@ -152,7 +145,7 @@ export function PerformancePage() {
             {refreshCache.isPending ? '刷新中' : '刷新业绩缓存'}
           </Button>
         </div>
-      </div>
+      </header>
 
       {cacheError && (
         <Card className="flex items-start gap-3 border-loss/30 bg-loss/5 p-4 text-sm">

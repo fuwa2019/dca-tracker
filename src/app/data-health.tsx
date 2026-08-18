@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Kicker } from '@/components/Kicker';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { useSettings, useTransactions } from '@/hooks/usePortfolio';
@@ -188,14 +187,17 @@ export function DataHealthPage() {
   });
 
   return (
-    <div className="container max-w-[1400px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8 space-y-5">
-      <header>
-        <Kicker en="Data Health" zh="数据健康" />
-        <p className="mt-1.5 text-xs text-muted-foreground">
+    <div className="workbench-page space-y-5">
+      <header className="workbench-intro">
+        <div>
+          <div className="workbench-eyebrow">Data health</div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">数据健康</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
           {LOCAL_MODE
             ? '本地 Debug 模式使用内置 10 年 QQQ 数据，不连接 Supabase / Quote Worker。'
             : '检查价格覆盖、业绩缓存、分享安全和计算输入状态。'}
-        </p>
+          </p>
+        </div>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -233,7 +235,7 @@ export function DataHealthPage() {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle className="font-serif text-lg">运维操作</CardTitle>
+              <CardTitle className="text-lg">运维操作</CardTitle>
               <CardDescription className="text-xs">
                 {LOCAL_MODE
                   ? '本地模式下价格和缓存来自内置样本；操作按钮只演示状态，不写外部服务。'
@@ -322,7 +324,7 @@ export function DataHealthPage() {
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle className="font-serif text-lg">行情授权（Schwab）</CardTitle>
+              <CardTitle className="text-lg">行情授权（Schwab）</CardTitle>
                 <CardDescription className="text-xs">
                   Schwab refresh token 有效期 7 天，过期后行情自动降级到 Yahoo 备用源。失效时点「重新授权」跳转 Schwab 登录，回调会写回新 token。
                 </CardDescription>
@@ -368,7 +370,7 @@ export function DataHealthPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="font-serif text-lg">价格覆盖</CardTitle>
+          <CardTitle className="text-lg">价格覆盖</CardTitle>
           <CardDescription className="text-xs">
             历史业绩曲线优先用 adjusted close（总回报口径）；缺失时回退 close。
           </CardDescription>
@@ -446,7 +448,7 @@ export function DataHealthPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="font-serif text-lg">分享链接审计</CardTitle>
+          <CardTitle className="text-lg">分享链接审计</CardTitle>
           <CardDescription className="text-xs">
             分享页只读公开收益率曲线和持仓比例，不返回金额或交易明细。
           </CardDescription>
@@ -495,7 +497,7 @@ function LocalQuoteSourceCard() {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="font-serif text-lg">本地行情源</CardTitle>
+        <CardTitle className="text-lg">本地行情源</CardTitle>
         <CardDescription className="text-xs">
           本地 Debug 版使用内置 10 年 QQQ 样本和派生股票价格，不需要登录、授权或连接 Quote Worker。
         </CardDescription>

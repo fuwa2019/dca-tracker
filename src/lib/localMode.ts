@@ -13,8 +13,12 @@ import type { User } from '@supabase/supabase-js';
  */
 export const LOCAL_MODE = import.meta.env.VITE_LOCAL_MODE === '1';
 
-/** Enables the source-neutral preview UI; local mode always exposes it safely. */
-export const LEDGER_IMPORT_V2 = LOCAL_MODE || import.meta.env.VITE_LEDGER_IMPORT_V2 === '1';
+/**
+ * Enables the source-neutral ledger preview by default now that migration 0050
+ * is live. Set VITE_LEDGER_IMPORT_V2=0 only for an explicit compatibility
+ * rollback; local mode always exposes the preview safely.
+ */
+export const LEDGER_IMPORT_V2 = LOCAL_MODE || import.meta.env.VITE_LEDGER_IMPORT_V2 !== '0';
 
 /** Synthetic user so `RequireAuth` lets the local build straight through. */
 export const LOCAL_USER = {

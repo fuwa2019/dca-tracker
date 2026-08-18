@@ -59,7 +59,7 @@ export function HoldingsList(props: Props) {
   );
   if (rows.length === 0) return null;
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
       <HoldingsTable rows={rows} />
       <HoldingsCards rows={rows} basis={props.basis} />
     </div>

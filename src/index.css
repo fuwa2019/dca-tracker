@@ -5,38 +5,38 @@
 @layer base {
   :root,
   [data-theme='light'] {
-    /* Surfaces — warm paper × ink */
-    --background: 38 33% 96%;
-    --surface: 40 46% 99%;
-    --surface-elevated: 38 26% 92%;
-    --foreground: 230 17% 13%;
-    --muted-foreground: 232 9% 42%;
-    --border: 36 20% 86%;
-    --input: 36 20% 86%;
-    --ring: 348 78% 48%;
+    /* Surfaces — neutral workbench */
+    --background: 220 20% 97%;
+    --surface: 0 0% 100%;
+    --surface-elevated: 220 18% 94%;
+    --foreground: 222 28% 13%;
+    --muted-foreground: 220 10% 42%;
+    --border: 220 15% 86%;
+    --input: 220 15% 84%;
+    --ring: 351 75% 43%;
 
-    /* Brand & semantic — editorial crimson ink + magazine figures */
-    --brand: 348 78% 48%;
+    /* Brand & semantic — restrained red with explicit result colors */
+    --brand: 351 75% 43%;
     --brand-foreground: 0 0% 100%;
-    --gain: 158 66% 32%;
-    --loss: 8 76% 48%;
+    --gain: 158 62% 30%;
+    --loss: 5 72% 46%;
     --warn: 32 90% 44%;
-    --info: 348 78% 56%;
+    --info: 211 72% 42%;
     --night: 222 68% 46%;
-    --benchmark: 222 12% 48%;
-    --chart-grid: 36 18% 88%;
-    --chart-axis: 232 9% 42%;
-    --crosshair: 230 30% 40%;
+    --benchmark: 220 12% 48%;
+    --chart-grid: 220 15% 88%;
+    --chart-axis: 220 10% 42%;
+    --crosshair: 222 30% 40%;
 
     /* Editorial accent hues for the two dashboard variants */
-    --accent-rose: 348 78% 48%;
+    --accent-rose: 351 75% 43%;
     --accent-amber: 33 92% 44%;
 
     /* Atmospheric tints used by the body backdrop (kept faint on paper) */
-    --halo-a: 38 64% 64%;
-    --halo-b: 348 64% 60%;
-    --elevation: 230 17% 13%;
-    --shadow-card: 0 1px 2px hsl(var(--elevation) / 0.05), 0 10px 30px -16px hsl(var(--elevation) / 0.16);
+    --halo-a: 220 20% 80%;
+    --halo-b: 351 40% 78%;
+    --elevation: 222 28% 13%;
+    --shadow-card: 0 1px 2px hsl(var(--elevation) / 0.04), 0 8px 24px -18px hsl(var(--elevation) / 0.18);
 
     /* shadcn back-compat aliases */
     --card: var(--surface);
@@ -57,33 +57,33 @@
   }
 
   [data-theme='dark'] {
-    --background: 240 13% 6%;
-    --surface: 240 12% 9%;
-    --surface-elevated: 240 10% 13%;
-    --foreground: 40 32% 92%;
-    --muted-foreground: 38 10% 66%;
-    --border: 240 8% 19%;
-    --input: 240 8% 19%;
-    --ring: 348 88% 70%;
+    --background: 222 18% 7%;
+    --surface: 222 16% 10%;
+    --surface-elevated: 222 14% 14%;
+    --foreground: 220 22% 93%;
+    --muted-foreground: 220 10% 66%;
+    --border: 222 10% 21%;
+    --input: 222 10% 21%;
+    --ring: 351 84% 68%;
 
-    --brand: 348 88% 70%;
+    --brand: 351 84% 68%;
     --brand-foreground: 0 0% 100%;
     --gain: 156 70% 52%;
     --loss: 6 90% 68%;
     --warn: 40 94% 64%;
-    --info: 348 88% 70%;
+    --info: 211 85% 68%;
     --night: 218 80% 68%;
     --benchmark: 222 10% 60%;
-    --chart-grid: 240 8% 19%;
-    --chart-axis: 38 10% 66%;
-    --crosshair: 230 60% 78%;
+    --chart-grid: 222 10% 21%;
+    --chart-axis: 220 10% 66%;
+    --crosshair: 222 60% 78%;
 
     --accent-rose: 348 86% 66%;
     --accent-amber: 36 94% 60%;
 
     --halo-a: 348 74% 56%;
     --halo-b: 38 58% 48%;
-    --elevation: 240 40% 1%;
+    --elevation: 222 40% 1%;
     --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.03) inset, 0 1px 2px hsl(var(--elevation) / 0.5), 0 16px 40px -20px hsl(var(--elevation) / 0.8);
 
     --card: var(--surface);
@@ -124,20 +124,14 @@
     -webkit-tap-highlight-color: transparent;
     overflow-x: hidden;
     overscroll-behavior-y: none;
-    /* Layered atmosphere: two soft halos that give the dark theme depth
-       without fighting the surfaces. Fixed so it doesn't scroll away. */
-    background-image:
-      radial-gradient(60rem 60rem at 12% -8%, hsl(var(--halo-a) / 0.14), transparent 60%),
-      radial-gradient(52rem 52rem at 108% 8%, hsl(var(--halo-b) / 0.1), transparent 55%);
-    background-attachment: fixed;
-    background-repeat: no-repeat;
+    background-color: hsl(var(--background));
   }
   h1,
   h2,
   h3,
   h4 {
     font-family: theme('fontFamily.display');
-    letter-spacing: -0.012em;
+    letter-spacing: 0;
   }
   input,
   select,
@@ -184,6 +178,151 @@
   }
 }
 
+@layer components {
+  .workbench-page {
+    width: min(100%, 1400px);
+    margin-inline: auto;
+    padding: 1.25rem 1rem 2.5rem;
+  }
+
+  .workbench-intro {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 1px solid hsl(var(--border));
+    padding-bottom: 1.25rem;
+  }
+
+  .workbench-eyebrow {
+    color: hsl(var(--muted-foreground));
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .workbench-metrics {
+    display: grid;
+    gap: 1px;
+    overflow: hidden;
+    margin-top: 1rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    background: hsl(var(--border));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workbench-metric {
+    min-width: 0;
+    background: hsl(var(--surface));
+    padding: 1rem;
+  }
+
+  .workbench-grid {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .workbench-panel {
+    min-width: 0;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    background: hsl(var(--surface));
+    padding: 1rem;
+  }
+
+  .workbench-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: hsl(var(--brand));
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .workbench-link:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .workbench-tooltip {
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.375rem;
+    background: hsl(var(--surface));
+    padding: 0.5rem 0.625rem;
+    font-family: theme('fontFamily.num');
+    font-size: 0.7rem;
+    box-shadow: var(--shadow-card);
+  }
+
+  .workbench-chart-empty {
+    display: flex;
+    min-height: 18rem;
+    align-items: center;
+    justify-content: center;
+    border-top: 1px dashed hsl(var(--border));
+    border-bottom: 1px dashed hsl(var(--border));
+    color: hsl(var(--muted-foreground));
+    font-size: 0.75rem;
+  }
+
+  .workbench-empty,
+  .workbench-next {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    background: hsl(var(--surface));
+    padding: 1.25rem;
+  }
+}
+
+@media (min-width: 640px) {
+  .workbench-page {
+    padding: 1.5rem 1.5rem 3rem;
+  }
+
+  .workbench-metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .workbench-panel {
+    padding: 1.25rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .workbench-page {
+    padding-inline: 2rem;
+  }
+
+  .workbench-grid {
+    grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 0.75fr);
+  }
+}
+
+@media (max-width: 639px) {
+  .workbench-intro,
+  .workbench-empty,
+  .workbench-next {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workbench-intro > :last-child,
+  .workbench-empty > :last-child,
+  .workbench-next > :last-child {
+    width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -200,7 +339,7 @@
   .font-num {
     font-family: theme('fontFamily.num');
     font-variant-numeric: tabular-nums;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
   }
   /* Refined card surface: hairline border, soft elevation, faint top sheen. */
   .surface-card {
@@ -213,7 +352,7 @@
     font-family: theme('fontFamily.serif');
     font-variant-numeric: tabular-nums lining-nums;
     font-optical-sizing: auto;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
     font-feature-settings: 'tnum', 'lnum';
   }
   /* Section kicker: small uppercase label, often paired with an index number. */
@@ -221,7 +360,7 @@
     font-family: theme('fontFamily.display');
     font-size: 10px;
     font-weight: 600;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     color: hsl(var(--muted-foreground));
   }

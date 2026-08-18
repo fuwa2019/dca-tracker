@@ -4,9 +4,9 @@ import { motion } from 'framer-motion';
 import {
   Activity,
   BarChart3,
+  BookOpen,
   Layers,
   LayoutDashboard,
-  ListOrdered,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -37,29 +37,29 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   /** Group it sits under in the desktop sidebar. */
-  group: 'overview' | 'tracking' | 'ops';
+  group: 'overview' | 'ledger' | 'ops';
 }
 
 const NAV: ReadonlyArray<NavItem> = [
   { to: '/', label: '总览', icon: LayoutDashboard, group: 'overview' },
-  { to: '/performance', label: '业绩', icon: BarChart3, group: 'overview' },
+  { to: '/performance', label: '绩效', icon: BarChart3, group: 'overview' },
   { to: '/exposure', label: '穿透敞口', icon: Layers, group: 'overview' },
-  { to: '/transactions', label: '交易', icon: ListOrdered, group: 'tracking' },
+  { to: '/transactions', label: '账本与导入', icon: BookOpen, group: 'ledger' },
   { to: '/health', label: '数据健康', icon: Activity, group: 'ops' },
   { to: '/settings', label: '设置', icon: Settings, group: 'ops' },
 ];
 
 const GROUP_LABELS: Record<NavItem['group'], string> = {
-  overview: '概览',
-  tracking: '记录',
-  ops: '工具',
+  overview: '查看',
+  ledger: '记录',
+  ops: '维护',
 };
 
 const MOBILE_NAV: ReadonlyArray<NavItem> = [
   { to: '/', label: '总览', icon: LayoutDashboard, group: 'overview' },
-  { to: '/performance', label: '业绩', icon: BarChart3, group: 'overview' },
+  { to: '/performance', label: '绩效', icon: BarChart3, group: 'overview' },
   { to: '/exposure', label: '敞口', icon: Layers, group: 'overview' },
-  { to: '/transactions', label: '交易', icon: ListOrdered, group: 'tracking' },
+  { to: '/transactions', label: '账本', icon: BookOpen, group: 'ledger' },
   { to: '/settings', label: '设置', icon: Settings, group: 'ops' },
 ];
 
@@ -157,11 +157,11 @@ class RouteErrorBoundary extends Component<
 function TopBar({ title }: { title: string }) {
   return (
     <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/95 lg:bg-background/90 lg:backdrop-blur lg:supports-[backdrop-filter]:bg-background/75">
-      <div className="flex flex-col gap-y-1.5 px-3 py-2 lg:flex-row lg:items-center lg:gap-x-3 lg:px-6 lg:py-2.5">
+      <div className="flex flex-col gap-y-1.5 px-3 py-2.5 lg:flex-row lg:items-center lg:gap-x-3 lg:px-8 lg:py-3">
         {/* Row 1 (mobile): Logo + title + ThemeToggle; Row 1 (desktop): title only */}
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Logo className="lg:hidden" />
-          <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight">{title}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">{title}</h1>
           <LocalBadge className="hidden sm:inline-flex lg:hidden" />
           <div className="lg:hidden">
             <ThemeToggle />
@@ -188,7 +188,7 @@ function DesktopNav() {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('dca-sidebar-collapsed') === '1';
   });
-  const groups: Array<NavItem['group']> = ['overview', 'tracking', 'ops'];
+  const groups: Array<NavItem['group']> = ['overview', 'ledger', 'ops'];
 
   useEffect(() => {
     window.localStorage.setItem('dca-sidebar-collapsed', collapsed ? '1' : '0');
@@ -201,20 +201,20 @@ function DesktopNav() {
         collapsed ? 'w-16' : 'w-56',
       )}
     >
-      <div className={cn('flex items-center pt-5', collapsed ? 'justify-center px-2' : 'gap-2.5 px-4')}>
+      <div className={cn('flex items-center pt-5', collapsed ? 'justify-center px-2' : 'gap-2.5 px-5')}>
         <Logo className="h-9 w-9" />
         {!collapsed && (
           <div className="min-w-0 flex-1 leading-tight">
-            <div className="truncate font-serif text-lg font-semibold tracking-tight">DCA Tracker</div>
-            <div className="kicker mt-0.5">Investing Journal</div>
+            <div className="truncate text-base font-semibold tracking-tight">DCA Tracker</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">单组合 · 可核对账本</div>
           </div>
         )}
       </div>
-      <div className={cn('pt-3', collapsed ? 'px-2' : 'px-4')}>
+      <div className={cn('pt-4', collapsed ? 'px-2' : 'px-5')}>
         <button
           type="button"
           className={cn(
-            'inline-flex h-8 items-center rounded-md border border-border bg-surface-elevated text-xs font-medium text-muted-foreground transition-colors hover:text-foreground',
+            'inline-flex h-8 items-center rounded-md border border-border bg-background text-xs font-medium text-muted-foreground transition-colors hover:text-foreground',
             collapsed ? 'w-full justify-center px-0' : 'gap-2 px-2.5',
           )}
           onClick={() => setCollapsed((value) => !value)}
@@ -225,11 +225,11 @@ function DesktopNav() {
           {!collapsed && <span>隐藏侧栏</span>}
         </button>
       </div>
-      {LOCAL_MODE && !collapsed && <div className="px-4 pt-3"><LocalBadge /></div>}
-      <nav className={cn('mt-5 flex flex-col gap-4 pb-6', collapsed ? 'px-2' : 'px-2.5')}>
+      {LOCAL_MODE && !collapsed && <div className="px-5 pt-3"><LocalBadge /></div>}
+      <nav aria-label="主导航" className={cn('mt-6 flex flex-col gap-5 pb-6', collapsed ? 'px-2' : 'px-3')}>
         {groups.map((group) => (
           <div key={group}>
-            {!collapsed && <div className="kicker px-3 pb-1.5">{GROUP_LABELS[group]}</div>}
+            {!collapsed && <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{GROUP_LABELS[group]}</div>}
             <div className="flex flex-col gap-0.5">
               {NAV.filter((n) => n.group === group).map(({ to, label, icon: Icon }) => (
                 <NavLink
@@ -239,7 +239,7 @@ function DesktopNav() {
                   title={collapsed ? label : undefined}
                   className={({ isActive }) =>
                     cn(
-                      'group relative flex items-center rounded-md py-2 text-sm transition-colors',
+                      'group relative flex items-center rounded-md py-2.5 text-sm transition-colors',
                       collapsed ? 'justify-center px-0' : 'gap-2.5 px-3',
                       isActive
                         ? 'bg-brand/10 text-foreground'
@@ -267,9 +267,9 @@ function DesktopNav() {
         ))}
       </nav>
       <div className={cn('mt-auto border-t border-border py-3', collapsed ? 'px-2 text-center' : 'px-4')}>
-        <div className="kicker">{collapsed ? 'Commit' : `Commit · ${__APP_COMMIT_DATE__}`}</div>
+        <div className={cn('text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground', collapsed && 'text-center')}>{collapsed ? 'Build' : `Build · ${__APP_COMMIT_DATE__}`}</div>
         {!collapsed && <div className="mt-0.5 text-[10px] text-muted-foreground">
-          {LOCAL_MODE ? '本地调试 · 10年QQQ样本 · 免登录' : '投资记录 · 公开报告'}
+          {LOCAL_MODE ? '本地演示 · 免登录' : '投资记录 · 公开报告'}
         </div>}
       </div>
     </aside>
@@ -279,7 +279,7 @@ function DesktopNav() {
 function MobileNav() {
   return (
     <nav className="safe-bottom fixed bottom-3 left-3 z-30 w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] lg:hidden">
-      <div className="flex overflow-hidden rounded-2xl border border-border bg-background/92 px-1.5 py-1 shadow-[0_14px_40px_-20px_hsl(var(--elevation)/0.55)] backdrop-blur supports-[backdrop-filter]:bg-background/78">
+      <div className="flex overflow-hidden rounded-lg border border-border bg-surface px-1.5 py-1 shadow-[0_10px_28px_-18px_hsl(var(--elevation)/0.4)]">
         {MOBILE_NAV.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -287,7 +287,7 @@ function MobileNav() {
             end={to === '/'}
             className={({ isActive }) =>
               cn(
-                'relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl text-[10px] transition-colors',
+                'relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-md text-[10px] transition-colors',
                 isActive ? 'bg-brand/10 text-brand' : 'text-muted-foreground hover:bg-surface-elevated hover:text-foreground',
               )
             }
@@ -316,9 +316,8 @@ function Logo({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'relative flex h-8 w-8 items-center justify-center rounded-[10px] text-white font-serif text-base font-semibold',
-        'bg-gradient-to-br from-[hsl(348_86%_58%)] to-[hsl(332_74%_42%)] shadow-[0_4px_14px_-4px_hsl(var(--brand)/0.7)]',
-        'ring-1 ring-inset ring-white/15',
+        'relative flex h-8 w-8 items-center justify-center rounded-md bg-brand text-sm font-semibold text-brand-foreground',
+        'ring-1 ring-inset ring-white/20',
         className,
       )}
     >

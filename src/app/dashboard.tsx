@@ -1,8 +1,8 @@
 import { useDashboardModel } from './dashboard/model';
-import { DashboardVariantA } from './dashboard/VariantA';
+import { WorkbenchDashboard } from './dashboard/WorkbenchDashboard';
 
-/** Magazine-front dashboard. Data comes from the shared `useDashboardModel()`. */
+/** Task-oriented overview backed by the shared `useDashboardModel()`. */
 export function DashboardPage() {
   const model = useDashboardModel();
-  return <DashboardVariantA model={model} />;
+  return <WorkbenchDashboard model={model} />;
 }

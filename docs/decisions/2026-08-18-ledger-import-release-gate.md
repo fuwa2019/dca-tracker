@@ -61,6 +61,15 @@ first cloud frontend release remains on the verified legacy import path.
 boundary. Enabling the V2 flag or switching the performance method is a later
 release gate.
 
+## Update (2026-08-19)
+
+The workbench frontend release completed the import gate. The unified preview is
+now the default path in the cloud bundle, with `VITE_LEDGER_IMPORT_V2=0` kept as
+an explicit compatibility rollback. Migration `0050` is already applied on
+Supabase `main`; no new database migration or production data write is part of
+this frontend release. The performance calculation method remains separately
+gated and continues to report its current method honestly in the UI.
+
 ## Rollback
 
 Migration rollback is not automatic: the repository keeps the append-only

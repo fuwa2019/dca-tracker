@@ -5,7 +5,6 @@ import { motion } from 'framer-motion';
 import { Layers, ArrowUpRight, Plus, Info, ShieldQuestion, Wifi, RefreshCw, TriangleAlert } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Kicker } from '@/components/Kicker';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { useExposure } from '@/hooks/useExposure';
@@ -87,7 +86,7 @@ export function ExposurePage() {
 
   if (isEmpty) {
     return (
-      <div className="container max-w-[1180px] px-4 py-6 sm:px-6">
+      <div className="workbench-page">
         <EmptyState
           icon={Layers}
           title="还没有可穿透的持仓"
@@ -103,19 +102,22 @@ export function ExposurePage() {
       initial="hidden"
       animate="show"
       variants={{ hidden: {}, show: { transition: { staggerChildren: 0.07 } } }}
-      className="container max-w-[1180px] px-4 py-6 sm:px-6 lg:px-8"
+      className="workbench-page"
     >
       <motion.header
         variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0, transition: { duration: 0.5, ease } } }}
-        className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 pb-4"
+        className="workbench-intro"
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <Kicker index="01" en="Look-through Exposure" zh="穿透敞口" />
+        <div>
+          <div className="workbench-eyebrow">Look-through exposure</div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">穿透敞口</h1>
+          <div className="mt-2 flex flex-wrap gap-2">
           {priceStale && (
             <StatusBadge tone="warn" dot>
               <Wifi className="h-3 w-3" /> 行情缺失·按成本估
             </StatusBadge>
           )}
+          </div>
         </div>
         <div className="flex min-w-0 items-end gap-2">
           <div className="min-w-0 text-right">
@@ -191,7 +193,10 @@ export function ExposurePage() {
         className="py-6"
       >
         <div className="mb-3 flex items-end justify-between">
-          <Kicker index="02" en="True per-stock weights" zh="穿透后单票权重" />
+          <div>
+            <div className="workbench-eyebrow">True per-stock weights</div>
+            <h2 className="mt-1 text-lg font-semibold">穿透后单票权重</h2>
+          </div>
           <Button asChild variant="ghost" size="sm" className="shrink-0 text-brand">
             <Link to="/">回总览 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
           </Button>
@@ -290,7 +295,7 @@ function ExposureSummaryCard({ label, value, sub }: { label: string; value: stri
   return (
     <div className="rounded-xl border border-border bg-surface px-4 py-3">
       <div className="kicker">{label}</div>
-      <div className="font-serif-fig mt-1 text-2xl font-semibold">{value}</div>
+      <div className="font-num mt-1 text-2xl font-semibold">{value}</div>
       <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>
     </div>
   );
@@ -313,7 +318,7 @@ function FootStat({
         {Icon && <Icon className="h-3 w-3" />}
         {label}
       </div>
-      <div className="font-serif-fig mt-1 text-2xl font-semibold">{value}</div>
+      <div className="font-num mt-1 text-2xl font-semibold">{value}</div>
       <div className="text-[11px] text-muted-foreground">{zh}</div>
     </div>
   );

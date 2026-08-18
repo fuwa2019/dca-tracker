@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Copy, Trash2, Plus, LogOut, Check, ShieldCheck, Mail } from 'lucide-react';
-import { Kicker } from '@/components/Kicker';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -156,11 +155,17 @@ export function SettingsPage() {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
   return (
-    <div className="container max-w-3xl px-4 py-5 sm:px-6 sm:py-6 space-y-5">
-      <Kicker en="Settings" zh="设置" />
+    <div className="workbench-page max-w-3xl space-y-5">
+      <header className="workbench-intro">
+        <div>
+          <div className="workbench-eyebrow">Settings</div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">设置</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">管理目标参数、成本口径、基准、自选和隐私分享。</p>
+        </div>
+      </header>
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="font-serif text-lg">目标与定投</CardTitle>
+          <CardTitle className="text-lg">目标与定投</CardTitle>
           <CardDescription className="text-xs">用于 $1M 进度环和入金提醒邮件</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -181,7 +186,7 @@ export function SettingsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="font-serif text-lg">邮件提醒</CardTitle>
+          <CardTitle className="text-lg">邮件提醒</CardTitle>
           <CardDescription className="text-xs">每月第一个美股交易日前一天 11:00（北京）提醒入金</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -202,7 +207,7 @@ export function SettingsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="font-serif text-lg">持仓与自选</CardTitle>
+          <CardTitle className="text-lg">持仓与自选</CardTitle>
           <CardDescription className="text-xs">控制盈亏计算口径、首页自选股和业绩基准</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -265,7 +270,7 @@ export function SettingsPage() {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <CardTitle className="font-serif text-lg">分享链接</CardTitle>
+              <CardTitle className="text-lg">分享链接</CardTitle>
               <CardDescription className="text-xs">
                 {LOCAL_MODE
                   ? '本地 Debug 模式使用固定 demo 分享链接，不创建线上 token。'
@@ -353,7 +358,7 @@ export function SettingsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="font-serif text-lg">外观</CardTitle>
+          <CardTitle className="text-lg">外观</CardTitle>
           <CardDescription className="text-xs">默认跟随系统，也可以手动固定浅色或深色。</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-between">

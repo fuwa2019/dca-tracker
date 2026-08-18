@@ -1,6 +1,6 @@
 # Current Handoff
 
-Updated: 2026-08-18
+Updated: 2026-08-19
 
 ## Current Goal
 
@@ -30,11 +30,14 @@ one personal ETF portfolio.
   runs in Colima, Wealthfolio `v3.6.2` runs from its official DMG, and
   Portfolio Performance `0.86.0` now has a saved synthetic `.portfolio` file
   and XML export. No real brokerage file was read.
-- The existing Schwab UI remains the write boundary; migration `0050` and its
-  generic RPC are now applied and verified in production. The source-neutral
-  preview remains behind `VITE_LEDGER_IMPORT_V2`; local mode exposes it safely,
-  while the default cloud build keeps the legacy Schwab path until the deployed
-  frontend smoke test is complete.
+- Migration `0050` and its generic RPC are applied and verified in production.
+  The source-neutral preview is now the default cloud path after the frontend
+  workbench release; setting `VITE_LEDGER_IMPORT_V2=0` remains an explicit
+  compatibility rollback to the legacy Schwab path.
+- The private shell now uses a task-oriented workbench: overview, performance,
+  look-through exposure, ledger/import, data health, and settings share the same
+  navigation and responsive state language. The old editorial dashboard is no
+  longer rendered by the root route.
 - The new preview has four row states, source detection, asset confirmation,
   append/source-replace/reset modes, and generic RPC payload construction. A
   synthetic TradingView run passed desktop and 390px Playwright checks with no
@@ -195,8 +198,10 @@ one personal ETF portfolio.
   checks passed.
 - Quote Worker version `23f51a7b-cc60-416d-9c3d-a95fe4a34671` serves health 200,
   valid refresh-route CORS preflight 200, and unauthenticated refresh 401.
-- Cloudflare Pages deployment `59a8baa0-13e7-4ffc-8aae-9abc44c3c283` is live;
-  the canonical bundle is `index-D58U0UV7.js` and has configured Supabase Auth.
+- The previous Cloudflare Pages deployment `59a8baa0-13e7-4ffc-8aae-9abc44c3c283`
+  remains the last verified production baseline until the current workbench
+  commit is pushed and deployed; the final bundle and deployment ID must be
+  recorded after the release.
 - No real CSV, financial import, authenticated holdings, or user data was read
   or changed during deployment verification.
 
@@ -204,9 +209,9 @@ one personal ETF portfolio.
 
 1. Treat any future reduced-motion emulation or native focus audit as
    supplemental research; the current study records its unavailable surfaces.
-2. Keep `VITE_LEDGER_IMPORT_V2=0` during the first frontend release until the
-   deployed legacy-path smoke test is complete; the old Schwab RPC remains the
-   compatibility path.
+2. After the workbench release, verify the unified import path on the canonical
+   Pages URL with a synthetic file. Use `VITE_LEDGER_IMPORT_V2=0` only as an
+   explicit compatibility rollback; the old Schwab RPC remains available.
 3. The weighted scorecard adopts Wealthfolio as the main interaction
    reference and keeps Portfolio Performance as the calculation reference;
    do not treat this research decision as a production release authorization.
@@ -225,9 +230,10 @@ one personal ETF portfolio.
   batches before rebuilding ETF trades and imported cash events. Any validation
   or write error must roll back the whole RPC transaction.
 - Dividends, interest, withdrawals, taxes, and unsupported cash events remain
-  omitted from the existing Schwab write path. The new adapters and preview
-  normalize them locally; migration `0050` is released, but the V2 cloud flag
-  and ledger performance method remain separately gated.
+  omitted from the existing Schwab compatibility write path. The new adapters
+  and unified preview normalize them locally; migration `0050` and the V2
+  import surface are released, but the ledger performance method remains
+  separately gated.
 - Public share responses remain percentage-only. The new absolute settled and
   allocation amounts stay behind existing owner RLS and are not added to public
   JSON contracts.
