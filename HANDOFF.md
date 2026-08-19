@@ -118,13 +118,15 @@ one personal ETF portfolio.
 ## Current Status
 
 - SMH refresh compatibility is deployed in Quote Worker version
-  `90d9eb62-0997-4a12-bb93-310fd6a1c6f1` from commit `bb09267`. The Worker now
-  reads VanEck's page-backed `HoldingsBlock/GetDataset` JSON endpoint instead of
-  the marketing HTML page, sends the endpoint's expected request context, and
-  accepts percentage strings plus US-formatted JSON as-of dates. A stable
-  public-data fixture covers the current 25 equity constituents and excludes
-  cash rows. `test:etf-holdings`, the CI-equivalent tests, `typecheck`, `build`,
-  and `git diff --check` pass.
+  `ecc88916-3df4-492e-9895-727942b9f518` from commit `9b51b04`. The Worker reads
+  VanEck's page-backed `HoldingsBlock/GetDataset` JSON endpoint with its expected
+  request context and parses percentage strings plus US-formatted JSON as-of
+  dates. If VanEck returns a transport/edge failure, it writes the verified
+  official SMH static snapshot as of 2026-08-18 and returns a
+  `static-fallback` warning instead of reporting a partial refresh failure.
+  Parser/schema and database write errors still fail. `test:etf-holdings`, the
+  CI-equivalent tests, `typecheck`, Worker dry-run, `build`, and
+  `git diff --check` pass.
 - Current read-only probing reproduced VanEck resetting direct local connections
   to both the marketing page and XLSX endpoint. The official page and JSON
   dataset were independently reachable through the web retrieval path. The
@@ -136,8 +138,10 @@ one personal ETF portfolio.
   updated from VanEck's official SMH holdings page as of 2026-08-18: 25 equity
   constituents totaling 99.93%, with cash rows excluded. Direct Mac `curl`
   requests to the VanEck page and JSON endpoint still reset the connection.
-  No database row or deployment was changed; normal cloud mode still prefers
-  the remote `etf_holdings` snapshot over this static fallback.
+-  The fallback is bundled in the frontend and Worker; normal cloud mode still
+  prefers the remote `etf_holdings` snapshot, which is now refreshed from this
+  snapshot when the live provider is unavailable. No private portfolio data was
+  read during the fix or deployment.
 - Repository: `/Users/junxihuo/Documents/dca_system`, branch `master` tracking
   `origin/master`.
 - Append-only migrations `0048_etf_holdings_refresh.sql`,
