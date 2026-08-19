@@ -189,7 +189,7 @@ one personal ETF portfolio.
   `onCloseAutoFocus` unless a call-site handler prevented default; the
   `DialogTrigger` path (`手工录入`) was re-tested without regression, and
   `verify-ui-behavior.mjs` gained source assertions for the restore contract.
-- Fourth slice (plan C1/C2/C3 plus a C4 addition), committed as `2dd4a4c` on
+- Fourth slice (plan C1/C2/C3 plus a C4 addition), committed as `4b2b49a` on
   `master` via branch `a11y/reduced-motion-and-route-audit` (not pushed):
   reduced-motion degradation, the remaining keyboard evidence, and the
   full-route WCAG audit with its fixes.
