@@ -5,6 +5,8 @@ import type { QueryClient } from '@tanstack/react-query';
 export type EtfRefreshItem = {
   ticker: string;
   status: 'updated' | 'unchanged' | 'failed';
+  mode?: 'live' | 'static-fallback';
+  warning?: 'provider_unavailable';
   asOf?: string;
   constituentCount?: number;
   error?: string;

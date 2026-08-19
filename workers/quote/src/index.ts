@@ -45,8 +45,9 @@ import {
   lastCompletedNyseTradingDate,
 } from './nyseCalendar.js';
 import {
-  fetchEtfHoldingSnapshot,
+  fetchEtfHoldingSnapshotWithFallback,
   SUPPORTED_ETFS,
+  type EtfHoldingFetchMode,
   type SupportedEtf,
 } from './etfHoldings.js';
 
@@ -186,6 +187,8 @@ export default {
 type EtfRefreshItem = {
   ticker: SupportedEtf;
   status: 'updated' | 'unchanged' | 'failed';
+  mode?: EtfHoldingFetchMode;
+  warning?: 'provider_unavailable';
   asOf?: string;
   constituentCount?: number;
   error?: string;
@@ -243,7 +246,8 @@ async function refreshEtfHoldings(env: Env, tickers: SupportedEtf[]): Promise<Et
   const results: EtfRefreshItem[] = [];
   for (const ticker of tickers) {
     try {
-      const snapshot = await fetchEtfHoldingSnapshot(ticker);
+      const fetched = await fetchEtfHoldingSnapshotWithFallback(ticker);
+      const snapshot = fetched.snapshot;
       const response = await fetch(`${env.SUPABASE_URL!}/rest/v1/rpc/replace_etf_holdings`, {
         method: 'POST',
         headers: supabaseHeaders(env),
@@ -260,6 +264,8 @@ async function refreshEtfHoldings(env: Env, tickers: SupportedEtf[]): Promise<Et
       results.push({
         ticker,
         status: replaced.status ?? 'updated',
+        mode: fetched.mode,
+        ...(fetched.mode === 'static-fallback' ? { warning: 'provider_unavailable' as const } : {}),
         asOf: replaced.as_of ?? snapshot.asOf,
         constituentCount: replaced.constituent_count ?? snapshot.holdings.length,
       });

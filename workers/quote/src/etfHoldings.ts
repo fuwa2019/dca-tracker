@@ -14,6 +14,13 @@ export interface EtfHoldingSnapshot {
   holdings: EtfConstituentRow[];
 }
 
+export type EtfHoldingFetchMode = 'live' | 'static-fallback';
+
+export interface EtfHoldingFetchResult {
+  snapshot: EtfHoldingSnapshot;
+  mode: EtfHoldingFetchMode;
+}
+
 type EtfHoldingSource = {
   provider: EtfHoldingSnapshot['provider'];
   url: string;
@@ -35,6 +42,34 @@ const SOURCES: Record<SupportedEtf, EtfHoldingSource> = {
 };
 
 const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
+const SMH_STATIC_FALLBACK_AS_OF = '2026-08-18';
+const SMH_STATIC_FALLBACK_HOLDINGS: EtfConstituentRow[] = [
+  { ticker: 'NVDA', weight: 0.2218 },
+  { ticker: 'TSM', weight: 0.0928 },
+  { ticker: 'AVGO', weight: 0.0611 },
+  { ticker: 'AMD', weight: 0.0542 },
+  { ticker: 'MU', weight: 0.0534 },
+  { ticker: 'ASML', weight: 0.0526 },
+  { ticker: 'AMAT', weight: 0.0471 },
+  { ticker: 'LRCX', weight: 0.0464 },
+  { ticker: 'TXN', weight: 0.0439 },
+  { ticker: 'ADI', weight: 0.0437 },
+  { ticker: 'KLAC', weight: 0.0415 },
+  { ticker: 'INTC', weight: 0.0411 },
+  { ticker: 'MRVL', weight: 0.0389 },
+  { ticker: 'QCOM', weight: 0.0374 },
+  { ticker: 'CDNS', weight: 0.0209 },
+  { ticker: 'SNPS', weight: 0.0187 },
+  { ticker: 'TER', weight: 0.0144 },
+  { ticker: 'MPWR', weight: 0.0135 },
+  { ticker: 'NXPI', weight: 0.0107 },
+  { ticker: 'STM', weight: 0.0101 },
+  { ticker: 'ARM', weight: 0.0096 },
+  { ticker: 'ALAB', weight: 0.0092 },
+  { ticker: 'MCHP', weight: 0.0089 },
+  { ticker: 'ON', weight: 0.0056 },
+  { ticker: 'SWKS', weight: 0.0018 },
+];
 
 export async function fetchEtfHoldingSnapshot(etfTicker: SupportedEtf): Promise<EtfHoldingSnapshot> {
   const source = SOURCES[etfTicker];
@@ -52,6 +87,38 @@ export async function fetchEtfHoldingSnapshot(etfTicker: SupportedEtf): Promise<
   const body = await response.text();
   if (body.length > MAX_SOURCE_BYTES) throw new Error('provider_response_too_large');
   return parseEtfHoldingSource(etfTicker, source.provider, source.url, body);
+}
+
+/**
+ * Keep the last verified official SMH snapshot usable when VanEck's edge
+ * rejects the Worker request. Parser and database errors still fail loudly.
+ */
+export async function fetchEtfHoldingSnapshotWithFallback(etfTicker: SupportedEtf): Promise<EtfHoldingFetchResult> {
+  try {
+    return { snapshot: await fetchEtfHoldingSnapshot(etfTicker), mode: 'live' };
+  } catch (error) {
+    const fallback = staticEtfHoldingSnapshot(etfTicker);
+    if (!fallback || !isProviderTransportFailure(error)) throw error;
+    console.warn(`[etf-holdings] ${etfTicker} using static official snapshot after provider transport failure`);
+    return { snapshot: fallback, mode: 'static-fallback' };
+  }
+}
+
+export function staticEtfHoldingSnapshot(etfTicker: SupportedEtf): EtfHoldingSnapshot | null {
+  if (etfTicker !== 'SMH') return null;
+  return {
+    etfTicker,
+    provider: 'vaneck',
+    sourceUrl: SOURCES.SMH.url,
+    asOf: SMH_STATIC_FALLBACK_AS_OF,
+    holdings: SMH_STATIC_FALLBACK_HOLDINGS.map((row) => ({ ...row })),
+  };
+}
+
+function isProviderTransportFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return error instanceof TypeError
+    || /fetch failed|connection reset|network|timed out|timeout|provider_http_(401|403|408|425|429|5\d\d)/i.test(message);
 }
 
 export function parseEtfHoldingSource(

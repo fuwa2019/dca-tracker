@@ -83,6 +83,7 @@ export function ExposurePage() {
 
   const priceStale = model.quotesNone || model.quotesPartial || model.quotesError;
   const failedRefreshes = refresh.data?.results.filter((item) => item.status === 'failed') ?? [];
+  const fallbackRefreshes = refresh.data?.results.filter((item) => item.mode === 'static-fallback') ?? [];
 
   if (isEmpty) {
     return (
@@ -151,6 +152,16 @@ export function ExposurePage() {
             {refresh.isError
               ? `刷新失败：${(refresh.error as Error)?.message ?? '未知错误'}`
               : `部分刷新失败：${failedRefreshes.map((item) => item.ticker).join('、')}。已保留这些 ETF 的旧快照。`}
+          </span>
+        </div>
+      )}
+
+      {!refresh.isError && failedRefreshes.length === 0 && fallbackRefreshes.length > 0 && (
+        <div className="mb-3 flex items-start gap-2 rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-foreground">
+          <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" />
+          <span>
+            {fallbackRefreshes.map((item) => `${item.ticker}${item.asOf ? `（截至 ${item.asOf}）` : ''}`).join('、')}
+            {' '}已采用官方静态快照；实时供应商接口暂不可达，本次仍已完成可用快照更新。
           </span>
         </div>
       )}

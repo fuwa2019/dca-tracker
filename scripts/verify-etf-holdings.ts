@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { fetchEtfHoldingSnapshot, normalizeConstituentTicker, parseEtfHoldingSource } from '../workers/quote/src/etfHoldings.ts';
+import {
+  fetchEtfHoldingSnapshot,
+  fetchEtfHoldingSnapshotWithFallback,
+  normalizeConstituentTicker,
+  parseEtfHoldingSource,
+  staticEtfHoldingSnapshot,
+} from '../workers/quote/src/etfHoldings.ts';
 
 const csv = `Portfolio composition as of 08/04/2026
 Ticker,Security Name,% of Net Assets
@@ -49,6 +55,20 @@ try {
   assert.match(vaneckRequest?.url ?? '', /HoldingsBlock\/GetDataset/);
   assert.equal(vaneckRequest?.headers.get('x-requested-with'), 'XMLHttpRequest');
   assert.equal(vaneckRequest?.headers.get('referer'), 'https://www.vaneck.com/us/en/investments/semiconductor-etf-smh/');
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
+const staticData = JSON.parse(await readFile(new URL('../src/data/etf-holdings.json', import.meta.url), 'utf8')) as {
+  etfs: Record<string, Array<{ ticker: string; weight: number }>>;
+};
+assert.deepEqual(staticEtfHoldingSnapshot('SMH')?.holdings, staticData.etfs.SMH);
+globalThis.fetch = async () => { throw new TypeError('fetch failed'); };
+try {
+  const fallback = await fetchEtfHoldingSnapshotWithFallback('SMH');
+  assert.equal(fallback.mode, 'static-fallback');
+  assert.equal(fallback.snapshot.asOf, '2026-08-18');
+  assert.equal(fallback.snapshot.holdings.length, 25);
 } finally {
   globalThis.fetch = originalFetch;
 }
