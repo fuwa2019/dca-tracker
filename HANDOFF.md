@@ -366,6 +366,21 @@ one personal ETF portfolio.
 
 ## Production State
 
+- 2026-08-20 frontend release: `master` was pushed to `origin/master` at
+  `2c93d45` with explicit user authorization, and the Git-backed Cloudflare
+  Pages project rebuilt automatically. Canonical
+  `https://dca-tracker-git.pages.dev` now serves bundle `index-DCYExNkH.js`
+  with stylesheet `index-Cv_3GGMn.css`. Post-deploy checks: the served
+  `index.html` viewport meta no longer carries `maximum-scale`, the stylesheet
+  contains the new `--gain-ink` token, `/`, `/settings`, `/performance` and an
+  invalid `/share/<token>` all return 200 (SPA `_redirects` intact), and the
+  production login route renders with no console output, so the Pages build
+  still injects the public `VITE_` values. No login was attempted and no
+  private data was read. Any later docs-only commit rebuilds the same assets.
+- The Quote Worker, Email Worker, and Supabase were not touched by this
+  release; production remains at migration `0050` and Quote Worker version
+  `8d63a31a-2d64-4997-a039-a95dee51816e`.
+
 - Production contains migrations through
   `0050_portfolio_ledger_import.sql`; post-migration schema and permission
   checks passed.
