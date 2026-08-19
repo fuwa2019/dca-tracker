@@ -24,6 +24,16 @@
     --info: 211 72% 42%;
     --night: 222 68% 46%;
     --benchmark: 220 12% 48%;
+    /* Soft chips paint the tone at 12–14% alpha; the tone itself is then too
+       light to read on that fill. These inks keep chip text at WCAG AA
+       (>= 4.5:1) over both --surface and --surface-elevated, without moving
+       the chart/series colors. */
+    --gain-ink: 158 62% 26%;
+    --loss-ink: 5 72% 34%;
+    --warn-ink: 32 90% 30%;
+    --night-ink: 222 68% 34%;
+    --brand-ink: 351 75% 34%;
+    --benchmark-ink: 220 12% 34%;
     --chart-grid: 220 15% 88%;
     --chart-axis: 220 10% 42%;
     --crosshair: 222 30% 40%;
@@ -67,13 +77,21 @@
     --ring: 351 84% 68%;
 
     --brand: 351 84% 68%;
-    --brand-foreground: 0 0% 100%;
+    /* The dark brand is a pale pink; white on it is 2.96:1, so ink it dark. */
+    --brand-foreground: 222 39% 11%;
     --gain: 156 70% 52%;
     --loss: 6 90% 68%;
     --warn: 40 94% 64%;
     --info: 211 85% 68%;
     --night: 218 80% 68%;
     --benchmark: 222 10% 60%;
+    /* On the dark chip fill the tones themselves already clear AA. */
+    --gain-ink: var(--gain);
+    --loss-ink: var(--loss);
+    --warn-ink: var(--warn);
+    --night-ink: var(--night);
+    --brand-ink: var(--brand);
+    --benchmark-ink: var(--benchmark);
     --chart-grid: 222 10% 21%;
     --chart-axis: 220 10% 66%;
     --crosshair: 222 60% 78%;
@@ -237,6 +255,9 @@
   .workbench-link {
     display: inline-flex;
     align-items: center;
+    /* WCAG 2.2 target size (minimum): these are standalone panel actions, not
+       links inside a sentence, so they do not get the inline exception. */
+    min-height: 1.5rem;
     gap: 0.25rem;
     color: hsl(var(--brand));
     font-size: 0.75rem;
@@ -401,26 +422,26 @@
   }
   .bg-gain-soft {
     background-color: hsl(var(--gain) / 0.12);
-    color: hsl(var(--gain));
+    color: hsl(var(--gain-ink));
   }
   .bg-loss-soft {
     background-color: hsl(var(--loss) / 0.12);
-    color: hsl(var(--loss));
+    color: hsl(var(--loss-ink));
   }
   .bg-warn-soft {
     background-color: hsl(var(--warn) / 0.14);
-    color: hsl(var(--warn));
+    color: hsl(var(--warn-ink));
   }
   .bg-brand-soft {
     background-color: hsl(var(--brand) / 0.12);
-    color: hsl(var(--brand));
+    color: hsl(var(--brand-ink));
   }
   .bg-night-soft {
     background-color: hsl(var(--night) / 0.14);
-    color: hsl(var(--night));
+    color: hsl(var(--night-ink));
   }
   .bg-benchmark-soft {
     background-color: hsl(var(--benchmark) / 0.12);
-    color: hsl(var(--benchmark));
+    color: hsl(var(--benchmark-ink));
   }
 }

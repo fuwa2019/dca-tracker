@@ -217,7 +217,7 @@ function CalendarCell({
     <div className="min-h-[58px] overflow-hidden bg-surface px-1 py-1.5 min-[380px]:px-1.5 sm:min-h-[76px] sm:px-2 sm:py-2" title={title}>
       <div className="flex items-center justify-between gap-1 text-[10px] text-muted-foreground sm:text-[11px]">
         <span className="tnum">{Number(date.slice(-2))}</span>
-        {point && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand/60" aria-label="交易日" />}
+        {point && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand/60" role="img" aria-label="交易日" />}
       </div>
       {point && (
         <div className={cn('mt-2 truncate font-mono text-[9px] font-semibold leading-tight tracking-tight tnum min-[380px]:text-[10px] sm:text-xs sm:tracking-normal', tone)}>

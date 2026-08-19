@@ -323,6 +323,7 @@ export function SettingsPage() {
                     {!s.revoked ? (
                       <div className="flex shrink-0 gap-1">
                         <Button
+                          aria-label={`复制 /share/${maskToken(s.token)} 的完整链接`}
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
@@ -336,6 +337,7 @@ export function SettingsPage() {
                           {copied ? <Check className="h-3.5 w-3.5 text-gain" /> : <Copy className="h-3.5 w-3.5" />}
                         </Button>
                         <Button
+                          aria-label={`撤销 /share/${maskToken(s.token)} 分享链接`}
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-loss"
@@ -435,13 +437,13 @@ function BenchmarkManager({
                 : 'border-border bg-surface text-muted-foreground hover:text-foreground',
             )}
           >
-            <button type="button" onClick={() => onChange(benchmarks, ticker)}>
+            <button type="button" className="inline-flex min-h-6 min-w-6 items-center justify-center" onClick={() => onChange(benchmarks, ticker)}>
               {ticker}
             </button>
             {ticker !== 'SPY' && (
               <button
                 type="button"
-                className="text-muted-foreground hover:text-loss"
+                className="inline-flex min-h-6 min-w-6 items-center justify-center text-muted-foreground hover:text-loss"
                 onClick={() => remove(ticker)}
                 aria-label={`删除 ${ticker}`}
               >

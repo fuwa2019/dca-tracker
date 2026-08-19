@@ -15,7 +15,9 @@ CardHeader.displayName = 'CardHeader';
 
 export const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
-    <h3 ref={ref} className={cn('text-base font-semibold leading-none tracking-tight', className)} {...props} />
+    // Card titles are page-level section headings: h2 keeps the outline
+    // going h1 -> h2 instead of skipping a level (axe `heading-order`).
+    <h2 ref={ref} className={cn('text-base font-semibold leading-none tracking-tight', className)} {...props} />
   ),
 );
 CardTitle.displayName = 'CardTitle';

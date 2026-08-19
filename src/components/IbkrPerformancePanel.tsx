@@ -291,7 +291,7 @@ function BenchmarkToggle({
       role="switch"
       aria-checked={checked}
       onClick={() => onCheckedChange(!checked)}
-      className="inline-flex items-center gap-2 text-xs"
+      className="inline-flex min-h-6 items-center gap-2 text-xs"
     >
       <span
         className={cn(
@@ -332,11 +332,13 @@ function SummaryTable({
         <div className="text-[11px] text-muted-foreground tnum">{dateLabel}</div>
       </div>
       <div className="px-4 pb-3 pt-3">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="历史业绩表格">
           <table className="w-full min-w-[360px] border-separate border-spacing-0 text-[13px]">
             <thead>
               <tr className="text-muted-foreground">
-                <th className="w-40 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wider whitespace-nowrap"></th>
+                <th className="w-40 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">
+                  <span className="sr-only">指标</span>
+                </th>
                 {headers.map((h) => (
                   <th key={h} className="px-2 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">
                     {h}

@@ -88,6 +88,14 @@ requirements-audit）、`HANDOFF.md`（2026-08-19 已验证状态）。
 - C1 为 login、overview、performance、ledger/import、data health、
   settings、share 全路由补自动化 + 手动 WCAG 审计记录；
   requirements-audit 当前为 partial。
+  【进度 2026-08-20】审计记录落到
+  `docs/accessibility/2026-08-20-wcag-route-audit.md`，探针脚本在同目录
+  `probes/`（不入 CI，也未新增仓库依赖）。axe-core 4.10.2 覆盖 9 条路由 ×
+  桌面/390px × 浅色/深色 共 36 次扫描：修复前 10 类违规（对比度 75 节点、
+  meta-viewport 36、aria-prohibited-attr 16、scrollable-region-focusable 2
+  等），修复后 0 违规。同批修掉的还有 24×24 目标尺寸（3 处）与 h1→h3 跳级。
+  仍未证明：读屏实测、2.4.11 焦点不被遮挡、云端才渲染的
+  `/cashflows`、有数据的分享页与登录成功流。
 - C2 键盘全路径：每个路由 forward/reverse Tab、可见 focus、菜单可键盘
   展开，纳入 Playwright 检查（桌面 + 390px）。
   【进度 2026-08-20】账本与导入路由完成 playwright-cli 键盘证据：
@@ -97,15 +105,35 @@ requirements-audit）、`HANDOFF.md`（2026-08-19 已验证状态）。
   Dialog（统一导入预览、行编辑/删除、资金删除确认）关闭后焦点掉到
   body——已在共享 `src/components/ui/dialog.tsx` 中以 onOpenAutoFocus 记忆
   触发元素、onCloseAutoFocus 返还修复，DialogTrigger 路径无回归；
-  `verify-ui-behavior.mjs` 增加对应源断言。其余路由的键盘证据仍待补。
+  `verify-ui-behavior.mjs` 增加对应源断言。
+  【进度 2026-08-20 补全】overview / performance / exposure / health /
+  settings 以及 login（用 stub Supabase 凭据启动的非本地构建）完成整圈
+  正/反向 Tab 取证：每圈停留点分别为 14 / 22 / 18 / 11 / 24 / 2，全部命中
+  可交互元素且有可见焦点环，Shift+Tab 逐点回溯对称。`/share/:token` 失效
+  态没有任何可聚焦元素（不是 WCAG 失败，但记为产品死路问题）。修复项见
+  C1 条目。
 - C3 reduced-motion：应用侧提供 `prefers-reduced-motion` 降级样式并以
   emulation 断言；不再依赖 macOS 系统设置探针（该探针已明确不可用）。
+  【进度 2026-08-20】已交付。CSS 的 media 块只能压住 CSS 过渡/关键帧，
+  framer 与 Recharts 自带时间线，且 `reducedMotion="user"` 仍然执行
+  `delay`（列表变成逐行"跳"入）。现在：入口加 `MotionConfig
+  reducedMotion="user"`；纯规则 `src/lib/motionPrefs.ts` +
+  `src/hooks/useEnterMotion.ts` 在 reduced motion 下同时取消入场位移与排队
+  延迟，覆盖列表、卡片、目标环、敞口半环与分享页权重条；`AnimatedNumber`
+  直接跳到目标值；spark 图传 `isAnimationActive={!reduceMotion}`。
+  emulation 取证：重挂载后 90ms 与 2.4s 两次采样对比，默认偏好下五条路由
+  都能测到 transform/位移变化，开启 reduce 后只剩透明度变化，
+  transform / 位置 / `stroke-dashoffset` / width 全部归零。
+  `test:ui` 增加纯函数断言与各调用点的源断言。
 - C4 移动端反例落地：避免 PP 392px “固定侧栏裁切表格” 的失败模式，
   所有数据表在 390px 内自身滚动而非页面横向溢出。
   【进度 2026-08-20】390px 证据：/transactions、/transactions/all 与加载
   15 行 TradingView synthetic 预览的导入对话框均无页面横向溢出；对话框内
   唯一 scrollWidth 超宽元素是 sr-only 文件输入（预期）；逐行结果容器自身
   可聚焦并内部滚动。资金流水页在本地模式重定向，无法在演示数据下取证。
+  【补充 2026-08-20】九条路由在 390px 与 1.4.10 的 320px 下页面横向溢出
+  均为 0；绩效页的历史业绩表原本是「可横向滚动但键盘够不到」的容器
+  （axe `scrollable-region-focusable`），已改为可聚焦命名区域。
 
 ### D. V2 缓存与分享（Ghostfolio 外壳参考，隐私红线）
 

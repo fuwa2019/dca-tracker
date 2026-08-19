@@ -4,6 +4,7 @@ import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
 import type { Position } from '@/lib/calc/position';
 import type { Quote } from '@/lib/quote';
 import { unrealizedPL } from '@/lib/calc/position';
+import { useEnterMotion } from '@/hooks/useEnterMotion';
 
 interface Props {
   position: Position;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function PositionCard({ position, quote, basis, index }: Props) {
+  const enter = useEnterMotion();
   const price = quote?.price ?? null;
   const { marketValue, unrealizedUsd, unrealizedPct } = unrealizedPL(position, price, basis);
   const dayChange = quote?.change ?? null;
@@ -22,9 +24,8 @@ export function PositionCard({ position, quote, basis, index }: Props) {
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 12 }}
+      {...enter({ opacity: 0, y: 12 }, { delay: index * 0.04, type: 'spring', damping: 25, stiffness: 200 })}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04, type: 'spring', damping: 25, stiffness: 200 }}
     >
       <Card className="p-5">
         <div className="flex items-baseline justify-between">

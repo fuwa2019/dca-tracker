@@ -12,6 +12,7 @@ import { Kicker } from '@/components/Kicker';
 import { StatusBadge } from '@/components/StatusBadge';
 import { cashEventChip } from '@/lib/ledgerEvents';
 import { useCashflows, useExchangeLoss } from '@/hooks/usePortfolio';
+import { useEnterMotion } from '@/hooks/useEnterMotion';
 import { supabase } from '@/lib/supabase';
 import { cny, usd, signedUsd, signedPct, changeColor, shortDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -21,6 +22,7 @@ import type { Database } from '@/lib/database.types';
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
 
 export function CashflowsPage() {
+  const enter = useEnterMotion();
   const { data: rows = [] } = useCashflows();
   const stats = useExchangeLoss();
   const qc = useQueryClient();
@@ -104,10 +106,9 @@ export function CashflowsPage() {
                 <motion.div
                   key={c.id}
                   layout
-                  initial={{ opacity: 0, y: 4 }}
+                  {...enter({ opacity: 0, y: 4 }, { delay: i * 0.02 })}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -8 }}
-                  transition={{ delay: i * 0.02 }}
                   className="border-b border-border px-4 py-3 text-sm last:border-b-0"
                 >
                   {/* Desktop: horizontal row */}

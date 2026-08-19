@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, YAxis, Tooltip } from 'recharts';
 import { Plus, Activity, Briefcase, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -42,6 +42,7 @@ export function EquitySpark({
   gradientId?: string;
   mode?: 'return' | 'value';
 }) {
+  const reduceMotion = useReducedMotion();
   const rows = useMemo(() => {
     const source = mode === 'return'
       ? history.map((p) => ({ date: p.date, value: p.returnPctUser * 100 }))
@@ -95,7 +96,7 @@ export function EquitySpark({
             stroke={`hsl(${colorVar})`}
             strokeWidth={2.2}
             fill={`url(#${gradientId})`}
-            isAnimationActive
+            isAnimationActive={!reduceMotion}
             animationDuration={1400}
             animationEasing="ease-in-out"
           />

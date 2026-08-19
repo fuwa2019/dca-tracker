@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { usd0 } from '@/lib/format';
+import { useEnterMotion } from '@/hooks/useEnterMotion';
 
 interface Props {
   current: number;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function TargetProgressRing({ current, target, monthsToTarget, size = 220, strokeWidth = 14 }: Props) {
+  const enter = useEnterMotion();
   const progress = target > 0 ? Math.min(1, current / target) : 0;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -37,9 +39,8 @@ export function TargetProgressRing({ current, target, monthsToTarget, size = 220
           strokeLinecap="round"
           className="stroke-foreground"
           strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
+          {...enter({ strokeDashoffset: circumference }, { type: 'spring', damping: 28, stiffness: 80, mass: 1 })}
           animate={{ strokeDashoffset: circumference * (1 - progress) }}
-          transition={{ type: 'spring', damping: 28, stiffness: 80, mass: 1 }}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center">

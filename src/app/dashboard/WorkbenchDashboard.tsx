@@ -175,7 +175,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
           </div>
         </section>
 
-        <aside className="space-y-4">
+        <aside aria-label="账本与操作" className="space-y-4">
           <section className="workbench-panel" aria-labelledby="status-title">
             <PanelHeader title="账本状态" id="status-title" detail="写入前可追溯" />
             <div className="mt-4 space-y-3">

@@ -189,9 +189,52 @@ one personal ETF portfolio.
   `onCloseAutoFocus` unless a call-site handler prevented default; the
   `DialogTrigger` path (`手工录入`) was re-tested without regression, and
   `verify-ui-behavior.mjs` gained source assertions for the restore contract.
-- Next frontend slices per the plan: C2 keyboard evidence for the remaining
-  routes (overview, performance, exposure, health, settings, login, share),
-  reduced-motion emulation checks (C3), and the C1 WCAG audit records.
+- Fourth slice (plan C1/C2/C3 plus a C4 addition), committed as `2dd4a4c` on
+  `master` via branch `a11y/reduced-motion-and-route-audit` (not pushed):
+  reduced-motion degradation, the remaining keyboard evidence, and the
+  full-route WCAG audit with its fixes.
+  - C3: `src/lib/motionPrefs.ts` is the pure rule (`enterMotionProps`) and
+    `src/hooks/useEnterMotion.ts` the hook over it. The CSS media block only
+    reaches CSS transitions/keyframes, and framer's `reducedMotion="user"`
+    still honours per-item `delay`, so lists kept popping in row by row. The
+    entry now wraps the app in `MotionConfig reducedMotion="user"`, every
+    staggered list/card/ring/gauge/share bar goes through `enter(...)`,
+    `AnimatedNumber` snaps instead of counting, and the shared spark chart
+    passes `isAnimationActive={!reduceMotion}`.
+  - C2: overview / performance / exposure / health / settings and `/login`
+    now have full forward and reverse Tab traces (14 / 22 / 18 / 11 / 24 / 2
+    stops per cycle). Every stop is interactive and shows a focus ring, and
+    Shift+Tab retraces the same order. The invalid `/share/:token` state has
+    no focusable element at all — recorded as a product dead end, not a pass.
+  - C1: `docs/accessibility/2026-08-20-wcag-route-audit.md` is the audit
+    record; the four probe scripts live in `docs/accessibility/probes/` with a
+    README (not in CI, no new repository dependency). axe-core 4.10.2 over
+    nine routes x desktop/390px x light/dark went from ten violation classes
+    (color-contrast 75 nodes, meta-viewport 36, aria-prohibited-attr 16,
+    scrollable-region-focusable 2, and six best-practice rules) to zero.
+    Fixes: viewport `maximum-scale` removed; new `--*-ink` tokens for the soft
+    chips and a dark `--brand-foreground` (chart/series colors untouched);
+    `role="img"` on the calendar trade-day dot; the history table wrapper is a
+    focusable named region; aria-labels on the share-link copy/revoke buttons;
+    `<main>` on login and the share fallback plus an `h1`; named sidebar,
+    overview aside and mobile nav; `CardTitle` renders `h2`; `sr-only` label
+    for the blank table corner; three sub-24px targets raised to the 2.5.8
+    minimum.
+  - C4 addition: page horizontal overflow is 0 on all nine routes at both
+    390px and the 1.4.10 320px reflow width.
+  - Not proved and recorded as such: screen-reader pass, 2.4.11 focus not
+    obscured, and the cloud-only states (`/cashflows`, a populated share page,
+    the authenticated login flow).
+- Verified for this slice: `test:finance`, `test:ui`, `test:csv-import`,
+  `test:portfolio-import`, `test:email-reminder`, `test:quote-status`,
+  `test:competitive-fixture`, `typecheck`, `build`, `git diff --check`.
+  `test:ui` gained a pure `enterMotionProps` unit assertion plus source
+  assertions for every reduced-motion call site. No database, worker,
+  share-contract or dependency change; `supabase/migrations/` untouched.
+- Next frontend slices per the plan: the D1/D2 privacy-snapshot work for the
+  V2 cache, then the E2 release gates (Lighthouse budget, cross-browser
+  record). Accessibility follow-ups are the screen-reader pass, 2.4.11, and
+  auditing the cloud-only routes when a cloud session is authorized.
 
 ## Session Notes (2026-08-20 handoff)
 
@@ -212,6 +255,17 @@ one personal ETF portfolio.
 - `competitive-learning-plan-2026-08-19.pptx` in the repo root is the meeting
   deck this rectification plan was derived from. It is untracked on purpose;
   decide whether to commit, relocate under `artifacts/`, or remove it.
+- Accessibility evidence method (repeatable, documented in
+  `docs/accessibility/probes/README.md`): `playwright-cli` `run-code` snippets
+  against `npm run dev:local` on 5174. `/login` redirects to `/` in local mode,
+  so it was audited on a second dev server (5175) started with stub Supabase
+  credentials (`VITE_SUPABASE_URL=http://127.0.0.1:9`), which keeps the run
+  offline — no real project was contacted. Both server entries live in the
+  gitignored `.claude/launch.json`. axe-core is loaded from the dev server, so
+  the run copies `axe.min.js` into `public/axe-audit-tmp.js` and deletes it
+  afterwards; confirm `git status` is clean of it before committing.
+- A `run-code` file must contain a bare `async (page) => { ... }` with no
+  trailing semicolon: the CLI wraps it as `await (<file>)(page)`.
 - The synthetic TradingView fixture surfaces 1 blocked row in the import
   preview (visible in the 阻止 counter). This is the preview honestly
   reporting fixture content, not a regression; adapter tests pass.

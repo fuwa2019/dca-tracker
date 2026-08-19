@@ -4,6 +4,7 @@ import { Info } from 'lucide-react';
 import { pct as fmtPct } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { MonitorLineResult } from '@/lib/calc/lookThrough';
+import { useEnterMotion } from '@/hooks/useEnterMotion';
 
 /**
  * 风险状态色刻意避开盈亏的绿/红二元:
@@ -28,6 +29,7 @@ const STATUS_LABEL: Record<MonitorLineResult['status'], string> = {
  * denomNote 可覆盖分母口径文案(分享页用「占公开持仓」,避免对外失真)。
  */
 export function ExposureGauge({ line, denomNote }: { line: MonitorLineResult; denomNote?: string }) {
+  const enter = useEnterMotion();
   const [infoOpen, setInfoOpen] = useState(false);
   const { config, pct, status, members } = line;
   const colorVar = STATUS_VAR[status];
@@ -100,9 +102,8 @@ export function ExposureGauge({ line, denomNote }: { line: MonitorLineResult; de
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={circ}
-          initial={{ strokeDashoffset: circ }}
+          {...enter({ strokeDashoffset: circ }, { duration: 1.1, ease: [0.16, 1, 0.3, 1] })}
           animate={{ strokeDashoffset: circ * (1 - valueFrac) }}
-          transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
         />
         {/* 上限刻度 */}
         <line

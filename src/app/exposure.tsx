@@ -12,6 +12,7 @@ import type { LookThroughStock } from '@/lib/calc/lookThrough';
 import { pct as fmtPct, usd } from '@/lib/format';
 import { refreshEtfHoldings } from '@/lib/etfHoldings';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { useEnterMotion } from '@/hooks/useEnterMotion';
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
@@ -260,12 +261,12 @@ function latestFetchedAt(sources: Record<string, { fetchedAt: string | null }>):
 }
 
 function StockRow({ stock, index }: { stock: LookThroughStock; index: number }) {
+  const enter = useEnterMotion();
   const barWidthPct = Math.min(100, Math.max(2, stock.weightNav * 100));
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
+      {...enter({ opacity: 0, y: 4 }, { delay: index * 0.025 })}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.025 }}
       className="grid grid-cols-[64px_minmax(0,1fr)_64px] items-center gap-3 px-4 py-2.5"
     >
       <div className="flex items-center gap-1.5">

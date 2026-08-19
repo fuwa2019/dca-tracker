@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useEnterMotion } from '@/hooks/useEnterMotion';
 
 type Tone = 'default' | 'gain' | 'loss' | 'muted';
 
@@ -23,11 +24,11 @@ const toneClass: Record<Tone, string> = {
 };
 
 export function StatCard({ label, value, sub, trailing, tone = 'default', className, delay = 0 }: Props) {
+  const enter = useEnterMotion();
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
+      {...enter({ opacity: 0, y: 6 }, { delay, type: 'spring', damping: 26, stiffness: 220 })}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, type: 'spring', damping: 26, stiffness: 220 }}
       className="surface-card rounded-lg p-4"
     >
       <div className="flex items-start justify-between gap-2">

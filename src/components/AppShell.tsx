@@ -196,6 +196,7 @@ function DesktopNav() {
 
   return (
     <aside
+      aria-label="侧栏"
       className={cn(
         'hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex',
         collapsed ? 'w-16' : 'w-56',
@@ -278,7 +279,7 @@ function DesktopNav() {
 
 function MobileNav() {
   return (
-    <nav className="safe-bottom fixed bottom-3 left-3 z-30 w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] lg:hidden">
+    <nav aria-label="底部导航" className="safe-bottom fixed bottom-3 left-3 z-30 w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] lg:hidden">
       <div className="flex overflow-hidden rounded-lg border border-border bg-surface px-1.5 py-1 shadow-[0_10px_28px_-18px_hsl(var(--elevation)/0.4)]">
         {MOBILE_NAV.map(({ to, label, icon: Icon }) => (
           <NavLink

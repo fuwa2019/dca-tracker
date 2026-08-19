@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
+import { motion, useMotionValue, useTransform, animate, useReducedMotion } from 'framer-motion';
 
 interface Props {
   value: number;
@@ -18,6 +18,7 @@ export function AnimatedNumber({
   duration = 0.6,
   animateThreshold = 0.005,
 }: Props) {
+  const reduceMotion = useReducedMotion();
   const mv = useMotionValue(value);
   const text = useTransform(mv, (latest) => format(latest));
   const prev = useRef(value);
@@ -29,6 +30,12 @@ export function AnimatedNumber({
     // 行情每次轮询都会微调 NAV;变化很小就直接 snap,
     // 避免每次重放动画(动画期间逐帧 setState 很贵)。
     const rel = Math.abs(value - from) / Math.max(Math.abs(from), Math.abs(value), 1);
+    // 数字滚动是 JS 驱动的,CSS 的 reduced-motion 降级管不到它,这里显式跳到目标值。
+    if (reduceMotion) {
+      mounted.current = true;
+      mv.set(value);
+      return;
+    }
     if (mounted.current && rel < animateThreshold) {
       mv.set(value);
       return;
@@ -36,7 +43,7 @@ export function AnimatedNumber({
     mounted.current = true;
     const controls = animate(mv, value, { duration, ease: [0.16, 1, 0.3, 1] });
     return controls.stop;
-  }, [mv, value, duration, animateThreshold]);
+  }, [mv, value, duration, animateThreshold, reduceMotion]);
 
   // Render a string motion value via state subscription
   const [display, setDisplay] = useState(format(value));

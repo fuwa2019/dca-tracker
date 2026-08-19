@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { cashEventChip, ledgerEventChip, tradeEventChip, LEDGER_EVENT_KINDS } from '../src/lib/ledgerEvents.ts';
 import { countLedgerEventKinds, retainedRowReasons, summarizeImportReceipt } from '../src/lib/import/receipt.ts';
+import { enterMotionProps } from '../src/lib/motionPrefs.ts';
 
 function calculateRefreshInterval(symbolCount, config) {
   const count = Math.max(0, Math.floor(symbolCount));
@@ -247,5 +248,59 @@ const dialogUi = readFileSync(new URL('../src/components/ui/dialog.tsx', import.
 assert.match(dialogUi, /onOpenAutoFocus=\{\(event\) => \{\s*if \(document\.activeElement instanceof HTMLElement/, 'dialog remembers the invoker before Radix moves focus');
 assert.match(dialogUi, /onCloseAutoFocus=\{\(event\) => \{\s*onCloseAutoFocus\?\.\(event\);/, 'dialog runs the call-site close handler first');
 assert.match(dialogUi, /!event\.defaultPrevented && target && target\.isConnected/, 'dialog only restores focus to a still-mounted invoker');
+
+// --- Reduced motion (C3) -----------------------------------------------------
+// The CSS media block only reaches CSS transitions and keyframes. Framer and
+// Recharts drive their own timelines in JS, so the app opts in explicitly:
+// MotionConfig for the transform/layout family, and `useEnterMotion()` for the
+// entrance animations, whose per-row `delay` framer keeps honouring even under
+// reducedMotion="user".
+assert.deepEqual(
+  enterMotionProps(false, { opacity: 0, y: 4 }, { delay: 0.06 }),
+  { initial: { opacity: 0, y: 4 }, transition: { delay: 0.06 } },
+  'the default path keeps the authored entrance animation',
+);
+assert.deepEqual(
+  enterMotionProps(true, { opacity: 0, y: 4 }, { delay: 0.06 }),
+  { initial: false, transition: { duration: 0 } },
+  'reduced motion drops both the entrance offset and the stagger delay',
+);
+
+const globalCss = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+assert.match(globalCss, /@media \(prefers-reduced-motion: reduce\)/, 'CSS keeps a reduced-motion degradation block');
+assert.match(globalCss, /animation-duration: 0\.01ms !important/, 'CSS animations collapse under reduced motion');
+assert.match(globalCss, /transition-duration: 0\.01ms !important/, 'CSS transitions collapse under reduced motion');
+
+const entry = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
+assert.match(entry, /MotionConfig reducedMotion="user"/, 'framer follows the OS reduced-motion setting app-wide');
+
+const enterHook = readFileSync(new URL('../src/hooks/useEnterMotion.ts', import.meta.url), 'utf8');
+assert.match(enterHook, /useReducedMotion\(\) === true/, 'the hook only degrades on a definite reduced-motion preference');
+assert.match(enterHook, /enterMotionProps\(reduceMotion, initial, transition\)/, 'the hook delegates to the pure rule');
+
+const animatedNumber = readFileSync(new URL('../src/components/AnimatedNumber.tsx', import.meta.url), 'utf8');
+assert.match(animatedNumber, /useReducedMotion/, 'the counting number reads the reduced-motion preference');
+assert.match(animatedNumber, /if \(reduceMotion\) \{[\s\S]*?mv\.set\(value\);/, 'reduced motion snaps the number instead of counting');
+
+// Every staggered or drawn entrance goes through the shared contract.
+for (const [file, label] of [
+  ['../src/components/TargetProgressRing.tsx', 'target ring'],
+  ['../src/components/ExposureGauge.tsx', 'exposure gauge'],
+  ['../src/components/StatCard.tsx', 'stat card'],
+  ['../src/components/PositionCard.tsx', 'position card'],
+  ['../src/components/HoldingsList.tsx', 'holdings list'],
+  ['../src/components/TxnList.tsx', 'transaction list'],
+  ['../src/app/exposure.tsx', 'look-through stock row'],
+  ['../src/app/cashflows.tsx', 'cashflow row'],
+  ['../src/app/share.tsx', 'share page'],
+]) {
+  const source = readFileSync(new URL(file, import.meta.url), 'utf8');
+  assert.match(source, /useEnterMotion\(\)/, `${label} uses the shared entrance contract`);
+  assert.match(source, /\{\.\.\.enter\(/, `${label} spreads the degraded entrance props`);
+  assert.doesNotMatch(source, /transition=\{\{[^}]*delay:/, `${label} keeps no ungated stagger delay`);
+}
+
+const dashboardShared = readFileSync(new URL('../src/app/dashboard/shared.tsx', import.meta.url), 'utf8');
+assert.match(dashboardShared, /isAnimationActive=\{!reduceMotion\}/, 'the shared spark chart stops drawing itself under reduced motion');
 
 console.log('UI behavior checks passed');

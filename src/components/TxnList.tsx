@@ -15,6 +15,7 @@ import { LOCAL_MODE } from '@/lib/localMode';
 import type { Database } from '@/lib/database.types';
 import { transactionCashAmount, transactionCashEffect, transactionFee } from '@/lib/calc/transactionAmounts';
 import { coordinateEtfHoldings } from '@/lib/etfHoldings';
+import { useEnterMotion } from '@/hooks/useEnterMotion';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
 
@@ -24,6 +25,7 @@ interface Props {
 }
 
 export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
+  const enter = useEnterMotion();
   const qc = useQueryClient();
   const [editing, setEditing] = useState<TxnRow | null>(null);
   const [deleting, setDeleting] = useState<TxnRow | null>(null);
@@ -67,10 +69,9 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
               <motion.div
                 key={t.id}
                 layout
-                initial={{ opacity: 0, y: 4 }}
+                {...enter({ opacity: 0, y: 4 }, { delay: i * 0.02 })}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, x: -8 }}
-                transition={{ delay: i * 0.02 }}
                 className="border-b px-4 py-3 text-sm last:border-b-0"
               >
                 {/* Desktop: horizontal row */}

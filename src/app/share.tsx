@@ -19,6 +19,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Kicker } from '@/components/Kicker';
 import { EquitySpark } from '@/app/dashboard/shared';
+import { useEnterMotion } from '@/hooks/useEnterMotion';
 import { supabase } from '@/lib/supabase';
 import { pct, signedPct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -47,6 +48,7 @@ const SHARE_SECTOR_BY_TICKER: Record<string, string> = {
 };
 
 export function SharePage() {
+  const enter = useEnterMotion();
   const etfHoldings = useEtfHoldings();
   const { token } = useParams<{ token: string }>();
   const shareToken = isValidShareToken(token) ? token : null;
@@ -440,9 +442,8 @@ export function SharePage() {
               {shareRows.map((p, i) => (
                 <motion.div
                   key={p.ticker}
-                  initial={{ opacity: 0, y: 4 }}
+                  {...enter({ opacity: 0, y: 4 }, { delay: i * 0.03 })}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.03 }}
                   className="grid grid-cols-[minmax(48px,62px)_minmax(0,1fr)_52px] items-center gap-2 px-3 py-3 sm:grid-cols-[96px_minmax(0,1fr)_96px_96px] sm:gap-3 sm:px-4"
                 >
                   <div className="min-w-0">
@@ -453,9 +454,8 @@ export function SharePage() {
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-elevated ring-1 ring-border/60">
                         <motion.div
-                          initial={{ width: 0 }}
+                          {...enter({ width: 0 }, { duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 * i })}
                           animate={{ width: `${clampPercent(p.weight_pct * 100)}%` }}
-                          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.05 * i }}
                           className="h-full rounded-full bg-brand"
                         />
                       </div>
@@ -528,9 +528,8 @@ export function SharePage() {
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-surface-elevated">
                     <motion.div
-                      initial={{ width: 0 }}
+                      {...enter({ width: 0 }, { duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.04 * i })}
                       animate={{ width: `${Math.min(100, Math.max(2, s.weightNav * 100))}%` }}
-                      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.04 * i }}
                       className="h-full rounded-full bg-brand"
                     />
                   </div>
@@ -730,15 +729,15 @@ function Logo() {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-background p-4 text-foreground">
+    <main className="flex min-h-screen bg-background p-4 text-foreground">
       <div className="m-auto w-full max-w-sm rounded-lg border border-border bg-card px-5 py-6 text-center">
         <div className="flex justify-center">
           <Logo />
         </div>
-        <div className="mt-4 text-base font-semibold">分享报告</div>
+        <h1 className="mt-4 text-base font-semibold">分享报告</h1>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">{children}</p>
       </div>
-    </div>
+    </main>
   );
 }
 

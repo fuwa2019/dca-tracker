@@ -5,6 +5,7 @@ import { unrealizedPL, type Position } from '@/lib/calc/position';
 import type { Quote } from '@/lib/quote';
 import { usd, signedUsd, signedPct, pct, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { useEnterMotion } from '@/hooks/useEnterMotion';
 
 interface Props {
   positions: Position[];
@@ -67,6 +68,7 @@ export function HoldingsList(props: Props) {
 }
 
 function HoldingsTable({ rows }: { rows: Row[] }) {
+  const enter = useEnterMotion();
   return (
     <table className="hidden w-full text-sm md:table">
       <thead>
@@ -84,9 +86,8 @@ function HoldingsTable({ rows }: { rows: Row[] }) {
         {rows.map((r, i) => (
           <motion.tr
             key={r.ticker}
-            initial={{ opacity: 0, y: 4 }}
+            {...enter({ opacity: 0, y: 4 }, { delay: i * 0.02 })}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.02 }}
             className="border-b border-border last:border-0 hover:bg-surface-elevated/40"
           >
             <td className="px-4 py-3 font-semibold">{r.ticker}</td>
@@ -124,14 +125,14 @@ function HoldingsTable({ rows }: { rows: Row[] }) {
 }
 
 function HoldingsCards({ rows, basis: _basis }: { rows: Row[]; basis: 'avg' | 'fifo' }) {
+  const enter = useEnterMotion();
   return (
     <div className="divide-y divide-border md:hidden">
       {rows.map((r, i) => (
         <motion.div
           key={r.ticker}
-          initial={{ opacity: 0, y: 4 }}
+          {...enter({ opacity: 0, y: 4 }, { delay: i * 0.02 })}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.02 }}
           className="px-4 py-3"
         >
           <div className="flex items-baseline justify-between">

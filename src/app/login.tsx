@@ -64,7 +64,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex h-full items-center justify-center p-6">
+    <main className="flex h-full items-center justify-center p-6">
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -175,6 +175,6 @@ export function LoginPage() {
           只读分享视图无需登录 — 直接访问 <code className="font-mono">/share/&lt;token&gt;</code>
         </p>
       </motion.div>
-    </div>
+    </main>
   );
 }
