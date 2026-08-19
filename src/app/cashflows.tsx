@@ -9,6 +9,8 @@ import { CashflowForm } from '@/components/CashflowForm';
 import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
 import { Kicker } from '@/components/Kicker';
+import { StatusBadge } from '@/components/StatusBadge';
+import { cashEventChip } from '@/lib/ledgerEvents';
 import { useCashflows, useExchangeLoss } from '@/hooks/usePortfolio';
 import { supabase } from '@/lib/supabase';
 import { cny, usd, signedUsd, signedPct, changeColor, shortDate } from '@/lib/format';
@@ -89,8 +91,7 @@ export function CashflowsPage() {
         <Card className="overflow-hidden p-0">
           <AnimatePresence initial={false}>
             {rows.map((c, i) => {
-              const isBrokerDeposit = c.cashflow_kind === 'broker_deposit';
-              const isStockAllocation = c.cashflow_kind === 'stock_allocation';
+              const eventChip = cashEventChip(c.cashflow_kind);
               const isFxTransfer = c.cashflow_kind === 'fx_transfer';
               const cnyAmt = Number(c.cny_amount);
               const feesCny = Number(c.fees_cny) || 0;
@@ -112,32 +113,27 @@ export function CashflowsPage() {
                   {/* Desktop: horizontal row */}
                   <div className="hidden items-center gap-3 md:flex">
                     <div className="w-14 shrink-0 text-xs text-muted-foreground tnum">{shortDate(displayDate)}</div>
+                    <div className="w-20 shrink-0">
+                      <StatusBadge tone={eventChip.tone} dot className="text-[10px]">{eventChip.label}</StatusBadge>
+                    </div>
                     <div className="min-w-[180px] flex-1">
-                      {isBrokerDeposit ? (
+                      {isFxTransfer ? (
                         <>
-                          <div className="font-medium tnum">{usd.format(usdAmt)}</div>
-                          <div className="truncate text-[11px] text-muted-foreground">
-                            嘉信入金{c.source_action ? ` · ${c.source_action}` : ''}
-                            {c.source_description ? ` · ${c.source_description}` : ''}
-                          </div>
-                        </>
-                      ) : isStockAllocation ? (
-                        <>
-                          <div className="font-medium tnum">{signedUsd(usdAmt)}</div>
-                          <div className="truncate text-[11px] text-muted-foreground">
-                            个股资金划转{c.source_description ? ` · ${c.source_description}` : ''}
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="font-medium tnum">
-                            {cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}
-                          </div>
+                          <div className="font-medium tnum">{cny.format(cnyAmt)}</div>
                           <div className="text-[11px] text-muted-foreground tnum">
                             汇率 {rate.toFixed(4)} {c.note ? `· ${c.note}` : ''}
                           </div>
                         </>
+                      ) : (
+                        <div className="truncate text-xs text-muted-foreground">
+                          {cashEventDetail(c) || eventChip.label}
+                        </div>
                       )}
+                    </div>
+                    <div className={cn('w-28 shrink-0 text-right font-medium tnum', isFxTransfer ? undefined : changeColor(usdAmt))}>
+                      {isFxTransfer
+                        ? (usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>)
+                        : signedUsd(usdAmt)}
                     </div>
                     <div className={cn('w-24 shrink-0 text-right text-xs tnum', changeColor(-loss))}>
                       {isFxTransfer && usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
@@ -156,29 +152,31 @@ export function CashflowsPage() {
 
                   {/* Mobile: two-line card */}
                   <div className="flex flex-col gap-2 md:hidden">
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0 flex-1 font-medium tnum truncate">
-                        {isBrokerDeposit
-                          ? usd.format(usdAmt)
-                          : isStockAllocation
-                            ? signedUsd(usdAmt)
-                            : <>{cny.format(cnyAmt)} <span className="text-muted-foreground">→</span> {usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>}</>}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <StatusBadge tone={eventChip.tone} dot className="text-[10px]">{eventChip.label}</StatusBadge>
+                        {isFxTransfer && (
+                          <span className="min-w-0 truncate text-xs text-muted-foreground tnum">{cny.format(cnyAmt)}</span>
+                        )}
                       </div>
-                      <div className={cn('ml-2 shrink-0 text-right text-xs tnum', changeColor(-loss))}>
-                        {isBrokerDeposit
-                          ? '嘉信入金'
-                          : isStockAllocation
-                            ? '个股划转'
-                            : usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
+                      <div className={cn('shrink-0 text-right font-medium tnum', isFxTransfer ? undefined : changeColor(usdAmt))}>
+                        {isFxTransfer
+                          ? (usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>)
+                          : signedUsd(usdAmt)}
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground tnum min-w-0">
                         <span>{shortDate(displayDate)}</span>
-                        {isBrokerDeposit || isStockAllocation ? (
-                          <span className="truncate">{c.source_action}{c.source_description ? ` · ${c.source_description}` : ''}</span>
+                        {isFxTransfer ? (
+                          <>
+                            <span>汇率 {rate.toFixed(4)}</span>
+                            {usdAmt > 0 && (
+                              <span className={changeColor(-loss)}>{signedUsd(-loss)} ({signedPct(-loss / Math.max(ideal, 1e-9))})</span>
+                            )}
+                          </>
                         ) : (
-                          <span>汇率 {rate.toFixed(4)}</span>
+                          <span className="truncate">{cashEventDetail(c)}</span>
                         )}
                         {c.note && <span className="truncate">· {c.note}</span>}
                       </div>
@@ -218,8 +216,8 @@ export function CashflowsPage() {
             <DialogDescription>
               {deleting && (
                 deleting.cashflow_kind !== 'fx_transfer'
-                  ? `${deleting.usd_in_date ?? deleting.cny_out_date} · ${signedUsd(Number(deleting.usd_amount))} · ${deleting.cashflow_kind === 'broker_deposit' ? '嘉信入金' : '个股资金划转'}`
-                  : `${deleting.cny_out_date} · ${cny.format(Number(deleting.cny_amount))}`
+                  ? `${deleting.usd_in_date ?? deleting.cny_out_date} · ${cashEventChip(deleting.cashflow_kind).label} · ${signedUsd(Number(deleting.usd_amount))}`
+                  : `${deleting.cny_out_date} · ${cashEventChip(deleting.cashflow_kind).label} · ${cny.format(Number(deleting.cny_amount))}`
               )}
             </DialogDescription>
           </DialogHeader>
@@ -240,4 +238,11 @@ export function CashflowsPage() {
       </Dialog>
     </div>
   );
+}
+
+/** Source-side detail for a plain cash event; empty when the row carries none. */
+function cashEventDetail(row: CashRow): string {
+  return [row.ticker, row.source_action, row.source_description]
+    .filter((part): part is string => !!part && part.trim() !== '')
+    .join(' · ');
 }
