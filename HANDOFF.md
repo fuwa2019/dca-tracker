@@ -115,6 +115,31 @@ one personal ETF portfolio.
   and macOS rejected the universal-access domain write. No reduced-motion pass
   is claimed from that probe.
 
+## Frontend Rectification Progress (2026-08-19)
+
+- The rectification plan derived from the competitive-learning deck lives at
+  `docs/tasks/2026-08-19-competitive-learning-rectification-plan.md`; the user
+  authorized live computer-use study of the still-running Wealthfolio and
+  Portfolio Performance instances (logged as S1b in
+  `docs/research/competitive/2026-08/observations.md`) and assigned frontend
+  implementation to Claude.
+- First B4 slice is in the working tree, not yet committed:
+  `src/lib/calc/navBridge.ts` (pure account-level NAV bridge over the cached
+  series), `scripts/verify-nav-bridge.mjs` (appended to `test:finance`),
+  `src/components/NavBridgeCard.tsx`, and the Performance-page wiring that
+  renders 期初净值 + 外部净流入 + 期间盈亏 = 期末净值 for the selected chart
+  range with an identity-gap check and an explicit note that non-imported
+  dividend/interest events are excluded.
+- Verified locally: `test:finance` (incl. the new bridge fixtures), `test:ui`,
+  `test:email-reminder`, `test:quote-status`, `typecheck`, `build`,
+  `git diff --check`, plus local-mode browser checks at desktop and 390px
+  (3M sub-range anchoring confirmed: 112,660.66 + 600 + 34,892.30 =
+  148,152.96). No database, worker, or share-contract change; the share page
+  is untouched and remains percentage-only.
+- Next frontend slices per the plan: ledger table event-type chips and cash-
+  event row styling (Wealthfolio Activities reference), then import-receipt
+  four-number wording alignment.
+
 ## Current Status
 
 - SMH refresh compatibility is deployed in Quote Worker version

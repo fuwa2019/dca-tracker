@@ -1,5 +1,32 @@
 # Observation Log
 
+## 2026-08-19 Supplemental Live Session (S1b)
+
+A user-authorized computer-use session revisited the two native apps still
+running from the S1 window; the Colima Ghostfolio instance was stopped and was
+not restarted. Interaction used keyboard paths only (a multi-monitor click
+hit-test fault in the automation host blocked pointer input); this is an
+environment limitation, not product evidence. New observations:
+
+- Wealthfolio exposes a Cmd+K command palette (actions, holdings, accounts;
+  theme, quote refresh, history rebuild, record-buy entries). Its
+  Investments/Spending toggle, activities filter chips (Status/Date/Account/
+  Type/Amount/Category/Subcategory and Instrument on the investment side), a
+  `14 / 14 activities` count, color-coded event-type chips including Tax and
+  Withdrawal, synthetic ids for cash rows (`deposit-20260115-2 · Cash · USD`),
+  a `Manual` data-source badge on holdings, and a table/card view toggle plus
+  `Columns` visibility control were all confirmed live.
+- Wealthfolio's import wizard step 1 confirms the numbered stage bar
+  (Upload → Mapping → Review Assets → Review Activities → Import), numbered
+  sub-steps (01 account, 02 CSV, 03 optional saved format with parse-settings
+  auto-detect), a persistent "How to Import CSV?" help link, and a forward
+  button named for the next stage ("Configure Mapping →") that stays disabled
+  until requirements are met. No import was executed.
+- Portfolio Performance remained on the synthetic repeat-test file showing the
+  holdings donut (SMH 21.70% / VGT 18.11% / cash 60.19%); its 收益计算
+  breakdown, 报表 equation column and cash-account running-balance views were
+  re-read from the saved S1 captures rather than re-driven.
+
 Status: S1 study window closed on 2026-08-18 under the explicit no-macOS-change
 boundary. Ghostfolio 3.36.0, Wealthfolio v3.6.2 and Portfolio Performance
 0.86.0 have isolated synthetic runs. Runtime limitations are recorded as

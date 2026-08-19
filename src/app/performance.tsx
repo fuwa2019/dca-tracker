@@ -7,9 +7,11 @@ import { StatCard } from '@/components/StatCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { PerformancePanel } from '@/components/IbkrPerformancePanel';
 import { MonthlyPerformanceCalendar } from '@/components/MonthlyPerformanceCalendar';
+import { NavBridgeCard } from '@/components/NavBridgeCard';
 import { usePortfolioHistory, useSettings } from '@/hooks/usePortfolio';
 import { usePerformanceCacheStatus, useRefreshPerformanceCache } from '@/hooks/usePerformanceCache';
-import { availableRanges, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
+import { availableRanges, sliceByRange, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
+import { computeNavBridge } from '@/lib/calc/navBridge';
 import { signedPct, changeColor } from '@/lib/format';
 import { getSelectedBenchmark } from '@/lib/settings';
 
@@ -46,6 +48,10 @@ export function PerformancePage() {
 
   const ranges = useMemo(() => availableRanges(history), [history]);
   const effectiveRange = ranges.includes(range) ? range : (ranges[ranges.length - 1] ?? 'ALL');
+  const navBridge = useMemo(
+    () => computeNavBridge(history, sliceByRange(history, effectiveRange)),
+    [history, effectiveRange],
+  );
 
   const last = history[history.length - 1];
   const portfolioReturn = last?.returnPctUser ?? 0;
@@ -196,6 +202,8 @@ export function PerformancePage() {
           />
         )}
       </div>
+
+      {navBridge && <NavBridgeCard bridge={navBridge} />}
 
       <MonthlyPerformanceCalendar history={history} benchmark={selectedBenchmark} />
 

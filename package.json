@@ -11,7 +11,7 @@
     "build:dataset": "node scripts/build-local-dataset.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit && tsc --noEmit -p workers/quote && tsc --noEmit -p workers/email-cron",
-    "test:finance": "node --experimental-strip-types scripts/verify-performance-fixtures.mjs && node --experimental-strip-types scripts/verify-target-projection.mjs && node scripts/verify-ledger-performance.mjs && node scripts/verify-portfolio-performance-reconciliation.mjs",
+    "test:finance": "node --experimental-strip-types scripts/verify-performance-fixtures.mjs && node --experimental-strip-types scripts/verify-target-projection.mjs && node scripts/verify-ledger-performance.mjs && node scripts/verify-portfolio-performance-reconciliation.mjs && node scripts/verify-nav-bridge.mjs",
     "test:csv-import": "node --experimental-strip-types scripts/verify-schwab-transactions.ts",
     "test:email-reminder": "node --experimental-strip-types scripts/verify-email-reminder-dates.mjs",
     "test:nyse-calendar-sync": "node scripts/verify-nyse-calendar-sync.mjs",
