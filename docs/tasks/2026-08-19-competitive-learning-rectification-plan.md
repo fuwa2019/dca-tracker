@@ -90,10 +90,22 @@ requirements-audit）、`HANDOFF.md`（2026-08-19 已验证状态）。
   requirements-audit 当前为 partial。
 - C2 键盘全路径：每个路由 forward/reverse Tab、可见 focus、菜单可键盘
   展开，纳入 Playwright 检查（桌面 + 390px）。
+  【进度 2026-08-20】账本与导入路由完成 playwright-cli 键盘证据：
+  /transactions 桌面 24 步正向 Tab 全部命中可交互元素且焦点环可见（行级
+  按钮带 aria-label），Shift+Tab 反向对称；导入对话框可 Enter 打开、焦点
+  陷阱生效、Escape 关闭。修复一个系统性缺陷：无 DialogTrigger 的受控
+  Dialog（统一导入预览、行编辑/删除、资金删除确认）关闭后焦点掉到
+  body——已在共享 `src/components/ui/dialog.tsx` 中以 onOpenAutoFocus 记忆
+  触发元素、onCloseAutoFocus 返还修复，DialogTrigger 路径无回归；
+  `verify-ui-behavior.mjs` 增加对应源断言。其余路由的键盘证据仍待补。
 - C3 reduced-motion：应用侧提供 `prefers-reduced-motion` 降级样式并以
   emulation 断言；不再依赖 macOS 系统设置探针（该探针已明确不可用）。
 - C4 移动端反例落地：避免 PP 392px “固定侧栏裁切表格” 的失败模式，
   所有数据表在 390px 内自身滚动而非页面横向溢出。
+  【进度 2026-08-20】390px 证据：/transactions、/transactions/all 与加载
+  15 行 TradingView synthetic 预览的导入对话框均无页面横向溢出；对话框内
+  唯一 scrollWidth 超宽元素是 sr-only 文件输入（预期）；逐行结果容器自身
+  可聚焦并内部滚动。资金流水页在本地模式重定向，无法在演示数据下取证。
 
 ### D. V2 缓存与分享（Ghostfolio 外壳参考，隐私红线）
 

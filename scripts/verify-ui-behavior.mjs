@@ -238,4 +238,14 @@ assert.match(portfolioImport, /事件类型构成/, 'preview groups rows by even
 assert.match(portfolioImport, /ledgerEventChip/, 'preview rows carry a coloured event-type chip');
 assert.doesNotMatch(portfolioImport, /p_trades:\s*preview\.rows/, 'the RPC payload still sends normalized ledger items');
 
+// --- Dialog keyboard focus return (C2) ---------------------------------------
+// Controlled dialogs without a DialogTrigger (import preview, row edit/delete)
+// previously dropped keyboard focus to <body> on close. The shared primitive
+// must remember the invoker in onOpenAutoFocus, while it still holds focus,
+// and return to it in onCloseAutoFocus without clobbering call-site handlers.
+const dialogUi = readFileSync(new URL('../src/components/ui/dialog.tsx', import.meta.url), 'utf8');
+assert.match(dialogUi, /onOpenAutoFocus=\{\(event\) => \{\s*if \(document\.activeElement instanceof HTMLElement/, 'dialog remembers the invoker before Radix moves focus');
+assert.match(dialogUi, /onCloseAutoFocus=\{\(event\) => \{\s*onCloseAutoFocus\?\.\(event\);/, 'dialog runs the call-site close handler first');
+assert.match(dialogUi, /!event\.defaultPrevented && target && target\.isConnected/, 'dialog only restores focus to a still-mounted invoker');
+
 console.log('UI behavior checks passed');

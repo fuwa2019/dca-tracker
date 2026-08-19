@@ -1,6 +1,6 @@
 # Current Handoff
 
-Updated: 2026-08-19
+Updated: 2026-08-20
 
 ## Current Goal
 
@@ -137,8 +137,9 @@ one personal ETF portfolio.
   148,152.96). No database, worker, or share-contract change; the share page
   is untouched and remains percentage-only.
 - The B4 slice above is committed as `e0d506e` on `master`.
-- Second slice (ledger event-type chips) is on branch
-  `frontend-rectification-20260819`: `src/lib/ledgerEvents.ts` is a pure
+- Second slice (ledger event-type chips), delivered by the scheduled cloud
+  routine and merged to `master` as `435c1d0` via PR #1:
+  `src/lib/ledgerEvents.ts` is a pure
   label/tone/direction map from a trade side or `cashflow_kind` to a chip.
   Buy, deposit, dividend and interest use the gain tone; sell, withdrawal, tax
   and fee use the loss tone; FX transfer and stock allocation stay outside that
@@ -148,7 +149,7 @@ one personal ETF portfolio.
   event kind plus a right-aligned tabular-nums USD amount for every kind,
   including the dividend/interest/tax/fee/withdrawal rows that previously fell
   through to the FX branch.
-- Third slice (plan A2/A4) is on the same branch: `src/lib/import/receipt.ts`
+- Third slice (plan A2/A4), same PR: `src/lib/import/receipt.ts`
   derives `imported / duplicates / skipped / total` from the existing RPC
   receipt counts plus the preview's per-row statuses, with `skipped` containing
   `duplicates` to match the Wealthfolio 0/13/14/14 reading. No RPC argument or
@@ -164,12 +165,59 @@ one personal ETF portfolio.
   instead of only regex-matching component source. No database, worker, or
   share-contract change; `src/app/share.tsx` and `supabase/migrations/` are
   untouched and no dependency changed.
-- Not verified on this branch: browser/Playwright visual checks. Playwright is
-  not a project dependency and the scheduled remote session did not add one, so
-  desktop and 390px visual confirmation of the new chips is still open.
-- Next frontend slices per the plan: desktop and 390px visual confirmation of
-  the chip rows, then C2/C4 keyboard and narrow-table evidence for the ledger
-  and import routes.
+- The chip rows were visually confirmed before merge in local demo mode at
+  desktop and 390px on the ledger and all-trades routes (no horizontal
+  overflow, right-aligned amounts). The cashflow page redirects to
+  /transactions in local mode, so its chip rendering is covered by assertions
+  and typecheck only; a one-time read-only cloud view remains the suggested
+  spot check.
+- C2/C4 evidence for the ledger and import routes was collected on 2026-08-20
+  with playwright-cli against the local demo server (synthetic data only):
+  /transactions desktop forward-Tab traversal hits only interactive elements
+  with a visible focus ring across all 24 stops (row buttons carry aria-labels
+  such as `编辑 SGOV 交易`), Shift+Tab reverses symmetrically; the import
+  dialog opens with Enter, traps focus, closes with Escape; with the synthetic
+  TradingView fixture injected, mode buttons, asset selects, the focusable
+  row-list scroll container, and all dialog controls are keyboard-reachable.
+  At 390px, /transactions, /transactions/all, and the open import dialog with
+  a 15-row preview show no page horizontal overflow; the only over-wide
+  element is the intentionally hidden sr-only file input.
+- C2 defect found and fixed: controlled dialogs without a `DialogTrigger`
+  (import preview, row edit/delete, cashflow delete) dropped keyboard focus to
+  `<body>` on close. `src/components/ui/dialog.tsx` now remembers the invoker
+  in `onOpenAutoFocus` (before Radix moves focus) and restores it in
+  `onCloseAutoFocus` unless a call-site handler prevented default; the
+  `DialogTrigger` path (`手工录入`) was re-tested without regression, and
+  `verify-ui-behavior.mjs` gained source assertions for the restore contract.
+- Next frontend slices per the plan: C2 keyboard evidence for the remaining
+  routes (overview, performance, exposure, health, settings, login, share),
+  reduced-motion emulation checks (C3), and the C1 WCAG audit records.
+
+## Session Notes (2026-08-20 handoff)
+
+- Delivery flow used this window: slices are implemented either locally or by
+  a one-shot cloud routine, verified with the CI-equivalent set plus local
+  demo-mode browser checks, then merged to `master`. The cloud routine
+  `trig_0147fA6nee6ULcCnZ7zmL8tE` is one-shot and now disabled; its GitHub
+  integration is read-only (`git push` and API branch creation both returned
+  403), so its work came back as a git patch that was applied and re-verified
+  locally before PR #1. Granting `contents:write` to the Claude GitHub
+  integration (claude.ai Settings → Connectors) would let future cloud runs
+  push branches and open PRs themselves.
+- C2/C4 keyboard and narrow-table evidence was collected with playwright-cli
+  (`~/.claude/skills/playwright/scripts/playwright_cli.sh`) against
+  `npm run dev:local` on port 5174; the method is repeatable and its results
+  are recorded above and in the rectification plan's C2/C4 entries. No
+  Playwright dependency was added to the repository.
+- `competitive-learning-plan-2026-08-19.pptx` in the repo root is the meeting
+  deck this rectification plan was derived from. It is untracked on purpose;
+  decide whether to commit, relocate under `artifacts/`, or remove it.
+- The synthetic TradingView fixture surfaces 1 blocked row in the import
+  preview (visible in the 阻止 counter). This is the preview honestly
+  reporting fixture content, not a regression; adapter tests pass.
+- No database, worker, share-contract, or dependency change is pending in the
+  working tree after this session's commits. Production remains at migration
+  `0050`; no deploy was performed from this session.
 
 ## Current Status
 
