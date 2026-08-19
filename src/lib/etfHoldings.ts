@@ -6,7 +6,7 @@ export type EtfRefreshItem = {
   ticker: string;
   status: 'updated' | 'unchanged' | 'failed';
   mode?: 'live' | 'static-fallback';
-  warning?: 'provider_unavailable';
+  warning?: 'provider_unavailable' | 'provider_stale';
   asOf?: string;
   constituentCount?: number;
   error?: string;

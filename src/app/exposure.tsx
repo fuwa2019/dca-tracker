@@ -161,7 +161,7 @@ export function ExposurePage() {
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" />
           <span>
             {fallbackRefreshes.map((item) => `${item.ticker}${item.asOf ? `（截至 ${item.asOf}）` : ''}`).join('、')}
-            {' '}已采用官方静态快照；实时供应商接口暂不可达，本次仍已完成可用快照更新。
+            {' '}已采用官方静态快照；替代数据源暂不可用或数据过旧，本次仍已完成可用快照更新。
           </span>
         </div>
       )}

@@ -48,6 +48,7 @@ import {
   fetchEtfHoldingSnapshotWithFallback,
   SUPPORTED_ETFS,
   type EtfHoldingFetchMode,
+  type EtfHoldingFetchWarning,
   type SupportedEtf,
 } from './etfHoldings.js';
 
@@ -188,7 +189,7 @@ type EtfRefreshItem = {
   ticker: SupportedEtf;
   status: 'updated' | 'unchanged' | 'failed';
   mode?: EtfHoldingFetchMode;
-  warning?: 'provider_unavailable';
+  warning?: EtfHoldingFetchWarning;
   asOf?: string;
   constituentCount?: number;
   error?: string;
@@ -265,7 +266,7 @@ async function refreshEtfHoldings(env: Env, tickers: SupportedEtf[]): Promise<Et
         ticker,
         status: replaced.status ?? 'updated',
         mode: fetched.mode,
-        ...(fetched.mode === 'static-fallback' ? { warning: 'provider_unavailable' as const } : {}),
+        ...(fetched.warning ? { warning: fetched.warning } : {}),
         asOf: replaced.as_of ?? snapshot.asOf,
         constituentCount: replaced.constituent_count ?? snapshot.holdings.length,
       });

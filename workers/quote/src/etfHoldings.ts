@@ -8,17 +8,19 @@ export interface EtfConstituentRow {
 
 export interface EtfHoldingSnapshot {
   etfTicker: SupportedEtf;
-  provider: 'vanguard' | 'vaneck' | 'invesco';
+  provider: 'vanguard' | 'vaneck' | 'invesco' | 'stockanalysis';
   sourceUrl: string;
   asOf: string;
   holdings: EtfConstituentRow[];
 }
 
 export type EtfHoldingFetchMode = 'live' | 'static-fallback';
+export type EtfHoldingFetchWarning = 'provider_unavailable' | 'provider_stale';
 
 export interface EtfHoldingFetchResult {
   snapshot: EtfHoldingSnapshot;
   mode: EtfHoldingFetchMode;
+  warning?: EtfHoldingFetchWarning;
 }
 
 type EtfHoldingSource = {
@@ -27,15 +29,14 @@ type EtfHoldingSource = {
   headers?: Record<string, string>;
 };
 
-const VANECK_SMH_PAGE_URL = 'https://www.vaneck.com/us/en/investments/semiconductor-etf-smh/';
+const VANECK_SMH_DATA_URL = 'https://www.vaneck.com/Main/HoldingsBlock/GetDataset/?blockId=144458&pageId=233107&ticker=SMH';
 
 const SOURCES: Record<SupportedEtf, EtfHoldingSource> = {
   VOO: { provider: 'vanguard', url: 'https://investor.vanguard.com/vmf/api/VOO/portfolio-holding/stock.json?start=1&count=20000&asOfType=DAILY' },
   VGT: { provider: 'vanguard', url: 'https://investor.vanguard.com/vmf/api/VGT/portfolio-holding/stock.json?start=1&count=20000&asOfType=DAILY' },
   SMH: {
-    provider: 'vaneck',
-    url: 'https://www.vaneck.com/Main/HoldingsBlock/GetDataset/?blockId=144458&pageId=233107&ticker=SMH',
-    headers: { Referer: VANECK_SMH_PAGE_URL, 'X-Requested-With': 'XMLHttpRequest' },
+    provider: 'stockanalysis',
+    url: 'https://stockanalysis.com/etf/smh/holdings/',
   },
   QQQ: { provider: 'invesco', url: 'https://dng-api.invesco.com/cache/v1/accounts/en_US/shareclasses/QQQ/holdings/fund?idType=ticker&productType=ETF' },
   QQQM: { provider: 'invesco', url: 'https://dng-api.invesco.com/cache/v1/accounts/en_US/shareclasses/46138G649/holdings/fund?idType=cusip&productType=ETF' },
@@ -95,12 +96,18 @@ export async function fetchEtfHoldingSnapshot(etfTicker: SupportedEtf): Promise<
  */
 export async function fetchEtfHoldingSnapshotWithFallback(etfTicker: SupportedEtf): Promise<EtfHoldingFetchResult> {
   try {
-    return { snapshot: await fetchEtfHoldingSnapshot(etfTicker), mode: 'live' };
+    const snapshot = await fetchEtfHoldingSnapshot(etfTicker);
+    const fallback = staticEtfHoldingSnapshot(etfTicker);
+    if (fallback && snapshot.asOf < fallback.asOf) {
+      console.warn(`[etf-holdings] ${etfTicker} alternate provider is stale (${snapshot.asOf}); keeping ${fallback.asOf}`);
+      return { snapshot: fallback, mode: 'static-fallback', warning: 'provider_stale' };
+    }
+    return { snapshot, mode: 'live' };
   } catch (error) {
     const fallback = staticEtfHoldingSnapshot(etfTicker);
     if (!fallback || !isProviderTransportFailure(error)) throw error;
     console.warn(`[etf-holdings] ${etfTicker} using static official snapshot after provider transport failure`);
-    return { snapshot: fallback, mode: 'static-fallback' };
+    return { snapshot: fallback, mode: 'static-fallback', warning: 'provider_unavailable' };
   }
 }
 
@@ -109,7 +116,7 @@ export function staticEtfHoldingSnapshot(etfTicker: SupportedEtf): EtfHoldingSna
   return {
     etfTicker,
     provider: 'vaneck',
-    sourceUrl: SOURCES.SMH.url,
+    sourceUrl: VANECK_SMH_DATA_URL,
     asOf: SMH_STATIC_FALLBACK_AS_OF,
     holdings: SMH_STATIC_FALLBACK_HOLDINGS.map((row) => ({ ...row })),
   };
@@ -274,6 +281,7 @@ function extractAsOf(body: string): string {
   const patterns = [
     /(?:holdings|portfolio composition)[\s\S]{0,160}?as of\s+(\d{1,2}\/\d{1,2}\/\d{4})/i,
     /as of\s+(\d{1,2}\/\d{1,2}\/\d{4})/i,
+    /as of[\s\S]{0,160}?([A-Za-z]{3,9}\s+\d{1,2},\s+\d{4})/i,
     /"(?:asOf|asOfDate|as_of|effectiveDate)"\s*:\s*"(\d{4}-\d{2}-\d{2})/i,
     /(?:asOf|asOfDate|as_of|effectiveDate)[^\d]{0,10}(\d{4}-\d{2}-\d{2})/i,
     /"(?:asOf|asOfDate|as_of|effectiveDate)"\s*:\s*"(\d{1,2}\/\d{1,2}\/\d{4})/i,
@@ -282,6 +290,11 @@ function extractAsOf(body: string): string {
     const match = body.match(pattern)?.[1];
     if (!match) continue;
     if (/^\d{4}-/.test(match)) return match;
+    if (/^[A-Za-z]/.test(match)) {
+      const parsed = Date.parse(`${match} 00:00:00 UTC`);
+      if (!Number.isNaN(parsed)) return new Date(parsed).toISOString().slice(0, 10);
+      continue;
+    }
     const [month, day, year] = match.split('/');
     return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }

@@ -8,6 +8,7 @@
 | Schwab Developer Portal | Provider documentation | https://developer.schwab.com/ | Primary market-data API | 2026-07-27 |
 | Vanguard ETF profiles | Provider data | https://investor.vanguard.com/investment-products/etfs/ | VOO/VGT official portfolio holdings | 2026-08-05 |
 | VanEck SMH | Provider data | https://www.vaneck.com/us/en/investments/semiconductor-etf-smh/ | SMH official daily holdings and page-backed JSON dataset | 2026-08-18 |
+| StockAnalysis SMH | Aggregated provider data | https://stockanalysis.com/etf/smh/holdings/ | SMH public HTML holdings fallback; page identifies Finnhub as data source | 2026-08-19 |
 | Invesco ETFs | Provider data | https://www.invesco.com/us/financial-products/etfs/ | QQQ/QQQM official portfolio holdings | 2026-08-05 |
 | Resend documentation | Provider documentation | https://resend.com/docs | Reminder email delivery | 2026-07-27 |
 | NYSE hours and calendars | Exchange calendar | https://www.nyse.com/markets/hours-calendars | Trading-day and holiday maintenance | 2026-07-27 |

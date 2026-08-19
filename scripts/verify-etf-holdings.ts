@@ -35,6 +35,24 @@ const htmlResult = parseEtfHoldingSource('SMH', 'vaneck', 'https://example.test/
 assert.equal(htmlResult.holdings.length, 5);
 assert.ok(Math.abs(htmlResult.holdings.reduce((sum, row) => sum + row.weight, 0) - 0.9995) < 1e-10);
 
+const stockAnalysisHtml = `
+<div>As of Jul 30, 2026</div><table>
+<tr><th>Symbol</th><th>Description</th><th>% Portfolio Weight</th></tr>
+<tr><td>NVDA</td><td>Nvidia</td><td>21.70%</td></tr>
+<tr><td>TSM</td><td>Taiwan Semi</td><td>9.51%</td></tr>
+<tr><td>AVGO</td><td>Broadcom</td><td>6.73%</td></tr>
+<tr><td>AMD</td><td>AMD</td><td>5.43%</td></tr>
+<tr><td>ASML</td><td>ASML</td><td>5.12%</td></tr>
+<tr><td>MU</td><td>Micron</td><td>15.00%</td></tr>
+<tr><td>TXN</td><td>Texas Instruments</td><td>12.00%</td></tr>
+<tr><td>ADI</td><td>Analog Devices</td><td>10.00%</td></tr>
+<tr><td>AMAT</td><td>Applied Materials</td><td>10.00%</td></tr>
+<tr><td>QCOM</td><td>Qualcomm</td><td>5.00%</td></tr>
+</table>`;
+const stockAnalysisResult = parseEtfHoldingSource('SMH', 'stockanalysis', 'https://example.test/smh/holdings', stockAnalysisHtml);
+assert.equal(stockAnalysisResult.asOf, '2026-07-30');
+assert.equal(stockAnalysisResult.holdings.length, 10);
+
 const vaneckFixture = await readFile(new URL('../tests/fixtures/etf-holdings/vaneck-smh-current.json', import.meta.url), 'utf8');
 const vaneckResult = parseEtfHoldingSource('SMH', 'vaneck', 'https://example.test/smh.json', vaneckFixture);
 assert.equal(vaneckResult.asOf, '2026-08-14');
@@ -52,9 +70,7 @@ globalThis.fetch = async (input, init) => {
 try {
   const fetchedVaneck = await fetchEtfHoldingSnapshot('SMH');
   assert.equal(fetchedVaneck.holdings.length, 25);
-  assert.match(vaneckRequest?.url ?? '', /HoldingsBlock\/GetDataset/);
-  assert.equal(vaneckRequest?.headers.get('x-requested-with'), 'XMLHttpRequest');
-  assert.equal(vaneckRequest?.headers.get('referer'), 'https://www.vaneck.com/us/en/investments/semiconductor-etf-smh/');
+  assert.match(vaneckRequest?.url ?? '', /stockanalysis\.com\/etf\/smh\/holdings/);
 } finally {
   globalThis.fetch = originalFetch;
 }
@@ -67,8 +83,19 @@ globalThis.fetch = async () => { throw new TypeError('fetch failed'); };
 try {
   const fallback = await fetchEtfHoldingSnapshotWithFallback('SMH');
   assert.equal(fallback.mode, 'static-fallback');
+  assert.equal(fallback.warning, 'provider_unavailable');
   assert.equal(fallback.snapshot.asOf, '2026-08-18');
   assert.equal(fallback.snapshot.holdings.length, 25);
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
+globalThis.fetch = async () => new Response(vaneckFixture, { status: 200, headers: { 'content-type': 'application/json' } });
+try {
+  const stale = await fetchEtfHoldingSnapshotWithFallback('SMH');
+  assert.equal(stale.mode, 'static-fallback');
+  assert.equal(stale.warning, 'provider_stale');
+  assert.equal(stale.snapshot.asOf, '2026-08-18');
 } finally {
   globalThis.fetch = originalFetch;
 }
