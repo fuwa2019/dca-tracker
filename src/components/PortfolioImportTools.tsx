@@ -31,9 +31,13 @@ import { searchSymbols } from '@/lib/quote';
 import { normalizeSymbol } from '@/lib/symbols';
 import { classifySchwabSymbol, type SchwabSymbolClassification } from '@/lib/schwabTransactions';
 import etfHoldings from '@/data/etf-holdings.json';
+import { ledgerEventChip } from '@/lib/ledgerEvents';
 import { buildReconciliation } from '@/lib/import/common.ts';
 import {
+  countLedgerEventKinds,
   detectPortfolioImportAdapter,
+  retainedRowReasons,
+  summarizeImportReceipt,
   type ImportMode,
   type ImportPreview,
   type ImportPreviewRow,
@@ -298,7 +302,7 @@ export function PortfolioImportTools({ transactions }: Props) {
           </DialogHeader>
 
           {result ? (
-            <ImportReceipt result={result} notice={notice} onReset={() => {
+            <ImportReceipt result={result} preview={preview} notice={notice} onReset={() => {
               clearState();
               if (inputRef.current) inputRef.current.value = '';
             }} />
@@ -400,6 +404,7 @@ export function PortfolioImportTools({ transactions }: Props) {
                   )}
 
                   <StatusCounts preview={preview} />
+                  <EventKindSummary rows={preview.rows} />
                   <ReconciliationSummary reconciliation={preview.reconciliation} />
 
                   {(preview.errors.length > 0 || preview.warnings.length > 0) && (
@@ -497,6 +502,30 @@ function StatusCounts({ preview }: { preview: ImportPreview }) {
   );
 }
 
+function EventKindSummary({ rows }: { rows: ImportPreviewRow[] }) {
+  const counts = countLedgerEventKinds(rows, ['import', 'duplicate']);
+  if (counts.length === 0) return null;
+  return (
+    <section className="space-y-2" aria-labelledby="portfolio-import-event-kinds-title">
+      <div className="flex items-center justify-between gap-2">
+        <h3 id="portfolio-import-event-kinds-title" className="text-sm font-semibold">事件类型构成</h3>
+        <span className="text-xs text-muted-foreground">待导入与重复行</span>
+      </div>
+      <div className="flex flex-wrap gap-1.5 rounded-lg border border-border bg-surface-elevated px-3 py-2.5">
+        {counts.map(({ kind, count }) => {
+          const chip = ledgerEventChip(kind);
+          return (
+            <StatusBadge key={kind} tone={chip.tone} dot>
+              {chip.label}
+              <span className="font-num tabular-nums">{count}</span>
+            </StatusBadge>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function ReconciliationSummary({ reconciliation }: { reconciliation: ImportReconciliation }) {
   const holdings = Object.entries(reconciliation.ending_shares);
   return (
@@ -560,12 +589,20 @@ function ImportRows({ rows }: { rows: ImportPreviewRow[] }) {
 function ImportRow({ row }: { row: ImportPreviewRow }) {
   const meta = STATUS_META[row.status];
   const Icon = meta.icon;
+  const eventKind = row.item ? ('side' in row.item ? row.item.side : row.item.event_type) : null;
   return (
     <div role="row" className="grid grid-cols-[3.25rem_minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 border-b border-border px-3 py-2.5 last:border-b-0 sm:grid-cols-[3.5rem_8rem_5rem_minmax(12rem,1fr)_minmax(10rem,1fr)] sm:items-center sm:gap-2">
       <span role="cell" className="tnum text-muted-foreground">{row.source_index || '文件'}</span>
       <span role="cell" className="min-w-0 truncate" title={row.action}>{row.action || '未知'}</span>
       <span role="cell"><StatusBadge tone={meta.tone} dot>{meta.label}</StatusBadge></span>
-      <span role="cell" className="col-span-2 min-w-0 break-words leading-5 text-muted-foreground sm:col-span-1 sm:truncate" title={itemSummary(row)}>{itemSummary(row)}</span>
+      <span role="cell" className="col-span-2 flex min-w-0 flex-wrap items-center gap-1.5 leading-5 text-muted-foreground sm:col-span-1">
+        {eventKind && (
+          <StatusBadge tone={ledgerEventChip(eventKind).tone} className="shrink-0">
+            {ledgerEventChip(eventKind).label}
+          </StatusBadge>
+        )}
+        <span className="min-w-0 break-words tnum sm:truncate" title={itemSummary(row)}>{itemSummary(row)}</span>
+      </span>
       <span role="cell" className={cn('col-span-2 min-w-0 break-words leading-5 sm:col-span-1', row.status === 'block' ? 'text-loss' : 'text-muted-foreground')}>
         {row.reason ?? '可写入'}
       </span>
@@ -578,30 +615,85 @@ function itemSummary(row: ImportPreviewRow): string {
   const item = row.item;
   if (!item) return row.category === 'error' ? '无法归一化' : '未保留为 ETF 账本';
   if ('side' in item) {
-    return `${item.side === 'buy' ? '买入' : '卖出'} ${item.ticker} ${item.shares} 股 · ${item.usd_amount} USD`;
+    return `${item.ticker} ${item.shares} 股 · ${item.usd_amount} USD`;
   }
-  return `${item.event_type}${item.ticker ? ` · ${item.ticker}` : ''} · ${item.usd_amount} USD`;
+  return `${item.ticker ? `${item.ticker} · ` : ''}${item.usd_amount} USD`;
 }
 
 function ImportReceipt({
   result,
+  preview,
   notice,
   onReset,
 }: {
   result: PortfolioLedgerImportResult;
+  preview: ImportPreview | null;
   notice: string | null;
   onReset: () => void;
 }) {
+  const summary = preview
+    ? summarizeImportReceipt({
+      result,
+      status_counts: preview.status_counts,
+      total_rows: preview.rows.length,
+    })
+    : null;
+  const retainedReasons = preview ? retainedRowReasons(preview.rows) : [];
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-base font-semibold"><CheckCircle2 className="h-5 w-5 text-gain" />导入回执</div>
       {notice && <p className="text-sm text-muted-foreground" aria-live="polite">{notice}</p>}
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
-        <ReceiptMetric label="新增交易" value={result.transactions_added} />
-        <ReceiptMetric label="新增现金事件" value={result.cashflows_added} />
-        <ReceiptMetric label="重复保留" value={result.unchanged} />
-        <ReceiptMetric label="移除记录" value={result.removed} />
-      </div>
+
+      {summary && (
+        <section className="space-y-2" aria-labelledby="portfolio-import-receipt-summary-title">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 id="portfolio-import-receipt-summary-title" className="text-sm font-semibold">源文件行汇总</h3>
+            <span className="text-xs text-muted-foreground">skipped 含 duplicates</span>
+          </div>
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
+            <ReceiptMetric label="已导入 imported" value={summary.imported} />
+            <ReceiptMetric label="重复 duplicates" value={summary.duplicates} />
+            <ReceiptMetric label="未写入 skipped" value={summary.skipped} />
+            <ReceiptMetric label="源文件总行 total" value={summary.total} />
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            源文件 {summary.total} 行中写入 {summary.imported} 行；其余 {summary.skipped} 行包含 {summary.duplicates} 行重复、
+            {summary.ignored} 行按资产策略忽略、{summary.blocked} 行被阻止。四数由数据库回执与预览逐行状态推导，未改变 RPC 契约。
+          </p>
+        </section>
+      )}
+
+      <section className="space-y-2" aria-labelledby="portfolio-import-receipt-records-title">
+        <h3 id="portfolio-import-receipt-records-title" className="text-sm font-semibold">写入的账本记录</h3>
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
+          <ReceiptMetric label="新增交易" value={result.transactions_added} />
+          <ReceiptMetric label="新增现金事件" value={result.cashflows_added} />
+          <ReceiptMetric label="重复保留" value={result.unchanged} />
+          <ReceiptMetric label="移除记录" value={result.removed} />
+        </div>
+      </section>
+
+      {retainedReasons.length > 0 && (
+        <section className="space-y-2" aria-labelledby="portfolio-import-receipt-reasons-title">
+          <h3 id="portfolio-import-receipt-reasons-title" className="text-sm font-semibold">未写入行的原因</h3>
+          <p className="text-xs text-muted-foreground">这些行按原因保留展示，不做静默修正。</p>
+          <ul className="max-h-40 space-y-1 overflow-auto rounded-lg border border-border bg-surface-elevated px-3 py-2 text-xs leading-5">
+            {retainedReasons.slice(0, 20).map((entry) => (
+              <li key={`${entry.source_index}-${entry.status}-${entry.reason}`} className="flex flex-wrap items-baseline gap-x-2">
+                <span className="tnum text-muted-foreground">第 {entry.source_index} 行</span>
+                <StatusBadge tone={STATUS_META[entry.status].tone} dot>{STATUS_META[entry.status].label}</StatusBadge>
+                <span className={cn('min-w-0 break-words', entry.status === 'block' ? 'text-loss' : 'text-muted-foreground')}>
+                  {entry.reason}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {retainedReasons.length > 20 && (
+            <p className="text-xs text-muted-foreground">还有 {retainedReasons.length - 20} 行保留了原因文本。</p>
+          )}
+        </section>
+      )}
+
       <div className="flex flex-wrap justify-end gap-2">
         <Button type="button" onClick={onReset}><RefreshCw className="h-4 w-4" />读取另一文件</Button>
       </div>
@@ -757,9 +849,9 @@ async function resolveClassifications(
 
 function ReceiptMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-surface px-3 py-2.5">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 font-num text-lg font-semibold">{value}</div>
+    <div className="min-w-0 bg-surface px-3 py-2.5">
+      <div className="truncate text-xs text-muted-foreground" title={label}>{label}</div>
+      <div className="mt-1 font-num text-lg font-semibold tabular-nums">{value}</div>
     </div>
   );
 }

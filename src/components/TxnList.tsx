@@ -6,6 +6,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { TxnForm } from '@/components/TxnForm';
+import { StatusBadge } from '@/components/StatusBadge';
+import { tradeEventChip } from '@/lib/ledgerEvents';
 import { supabase } from '@/lib/supabase';
 import { usd, shortDate, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -60,7 +62,7 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
             const cashEffect = transactionCashEffect(t);
             const fee = transactionFee(t);
             const isLump = t.kind === 'lumpsum';
-            const isSell = t.side === 'sell';
+            const eventChip = tradeEventChip(t.side);
             return (
               <motion.div
                 key={t.id}
@@ -76,14 +78,9 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                   <div className="w-14 shrink-0 text-xs text-muted-foreground tnum">{shortDate(t.trade_date)}</div>
                   <div className="w-16 shrink-0 font-semibold">{t.ticker}</div>
                   <div className="hidden w-16 shrink-0 sm:block">
-                    <span
-                      className={cn(
-                        'inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium',
-                        isSell ? 'bg-loss-soft' : 'bg-gain-soft',
-                      )}
-                    >
-                      {isSell ? '卖出' : '买入'}
-                    </span>
+                    <StatusBadge tone={eventChip.tone} dot className="text-[10px]">
+                      {eventChip.label}
+                    </StatusBadge>
                   </div>
                   <div className="hidden w-16 shrink-0 lg:block">
                     <span
@@ -117,16 +114,11 @@ export function TxnList({ rows, emptyText = '暂无交易' }: Props) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">{t.ticker}</span>
-                      <span
-                        className={cn(
-                          'inline-flex rounded-md px-2 py-0.5 text-[10px] font-medium',
-                          isSell ? 'bg-loss-soft' : 'bg-gain-soft',
-                        )}
-                      >
-                        {isSell ? '卖出' : '买入'}
-                      </span>
+                      <StatusBadge tone={eventChip.tone} dot className="text-[10px]">
+                        {eventChip.label}
+                      </StatusBadge>
                     </div>
-                    <div className={cn('text-base font-medium tnum', changeColor(cashEffect))}>
+                    <div className={cn('shrink-0 text-right text-base font-medium tnum', changeColor(cashEffect))}>
                       {usd.format(cashEffect)}
                     </div>
                   </div>

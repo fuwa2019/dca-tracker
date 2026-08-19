@@ -136,9 +136,40 @@ one personal ETF portfolio.
   (3M sub-range anchoring confirmed: 112,660.66 + 600 + 34,892.30 =
   148,152.96). No database, worker, or share-contract change; the share page
   is untouched and remains percentage-only.
-- Next frontend slices per the plan: ledger table event-type chips and cash-
-  event row styling (Wealthfolio Activities reference), then import-receipt
-  four-number wording alignment.
+- The B4 slice above is committed as `e0d506e` on `master`.
+- Second slice (ledger event-type chips) is on branch
+  `frontend-rectification-20260819`: `src/lib/ledgerEvents.ts` is a pure
+  label/tone/direction map from a trade side or `cashflow_kind` to a chip.
+  Buy, deposit, dividend and interest use the gain tone; sell, withdrawal, tax
+  and fee use the loss tone; FX transfer and stock allocation stay outside that
+  pair because they move existing money. An unrecognized kind renders a visible
+  `未知事件` chip instead of being relabelled. `TxnList` and the cashflow ledger
+  now render the shared chip through `StatusBadge`; the cashflow page shows the
+  event kind plus a right-aligned tabular-nums USD amount for every kind,
+  including the dividend/interest/tax/fee/withdrawal rows that previously fell
+  through to the FX branch.
+- Third slice (plan A2/A4) is on the same branch: `src/lib/import/receipt.ts`
+  derives `imported / duplicates / skipped / total` from the existing RPC
+  receipt counts plus the preview's per-row statuses, with `skipped` containing
+  `duplicates` to match the Wealthfolio 0/13/14/14 reading. No RPC argument or
+  response field changed. The receipt keeps the original four ledger-record
+  counts in a separate block, adds an event-type composition strip to the
+  preview, and lists the retained blocked/ignored row reasons so nothing is
+  silently corrected.
+- Verified on the branch after `npm ci` (root plus both workers):
+  `test:finance`, `test:ui`, `test:csv-import`, `test:portfolio-import`,
+  `test:email-reminder`, `test:quote-status`, `typecheck`, `build`, and
+  `git diff --check`. `test:ui` now runs `verify-ui-behavior.mjs` under
+  `--experimental-strip-types` so it asserts the two new pure modules directly
+  instead of only regex-matching component source. No database, worker, or
+  share-contract change; `src/app/share.tsx` and `supabase/migrations/` are
+  untouched and no dependency changed.
+- Not verified on this branch: browser/Playwright visual checks. Playwright is
+  not a project dependency and the scheduled remote session did not add one, so
+  desktop and 390px visual confirmation of the new chips is still open.
+- Next frontend slices per the plan: desktop and 390px visual confirmation of
+  the chip rows, then C2/C4 keyboard and narrow-table evidence for the ledger
+  and import routes.
 
 ## Current Status
 

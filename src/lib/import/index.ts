@@ -5,6 +5,14 @@ import type { ImportInput, PortfolioImportAdapter } from './types.ts';
 
 export * from './types.ts';
 export { buildReconciliation } from './common.ts';
+export {
+  countLedgerEventKinds,
+  retainedRowReasons,
+  summarizeImportReceipt,
+  type ImportReceiptSummary,
+  type LedgerEventKindCount,
+  type LedgerImportReceiptCounts,
+} from './receipt.ts';
 export { ibkrImportAdapter } from './ibkr.ts';
 export { schwabImportAdapter } from './schwab.ts';
 export { tradingViewImportAdapter } from './tradingview.ts';
