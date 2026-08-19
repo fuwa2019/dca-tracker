@@ -132,6 +132,12 @@ one personal ETF portfolio.
   200, and an unauthenticated refresh returned 401. No authenticated/private
   portfolio access was performed, so a real SMH refresh through the deployed
   Worker remains unverified.
+- On 2026-08-19, the local static fallback `src/data/etf-holdings.json` was
+  updated from VanEck's official SMH holdings page as of 2026-08-18: 25 equity
+  constituents totaling 99.93%, with cash rows excluded. Direct Mac `curl`
+  requests to the VanEck page and JSON endpoint still reset the connection.
+  No database row or deployment was changed; normal cloud mode still prefers
+  the remote `etf_holdings` snapshot over this static fallback.
 - Repository: `/Users/junxihuo/Documents/dca_system`, branch `master` tracking
   `origin/master`.
 - Append-only migrations `0048_etf_holdings_refresh.sql`,
