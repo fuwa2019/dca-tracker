@@ -10,10 +10,19 @@ data. The current editorial dashboard is a useful implementation baseline, but
 the research phase may replace its navigation, visual hierarchy, and dashboard
 composition.
 
-The design target is not to imitate Ghostfolio, Wealthfolio, or Portfolio
-Performance. Research may borrow information architecture and interaction
-patterns only. Brand, wording, visual assets, and distinctive styling remain
-independent.
+Superseded on 2026-08-20 by
+`docs/decisions/2026-08-20-wealthfolio-ui-alignment.md`: the frontend now
+follows Wealthfolio's interface language as closely as practical — information
+architecture, interaction, composition, and the spacing/radius/type/color
+scales — reimplemented in this repository rather than copied. Wealthfolio's
+AGPL-licensed code and assets, its name, and its logo stay out of this
+project, and the Flexoki palette is taken from its own MIT upstream with
+attribution. Ghostfolio and Portfolio Performance remain reference-only. The
+measured mapping lives in `docs/design/wealthfolio-ui-teardown.md`.
+
+The accessibility gate below is unchanged and outranks visual fidelity: where a
+reference value fails it, this project keeps the accessible value and records
+the divergence.
 
 ## Information Architecture
 

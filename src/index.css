@@ -3,50 +3,66 @@
 @tailwind utilities;
 
 @layer base {
+  /* ---------------------------------------------------------------------
+   * Palette: Flexoki by Steph Ango — https://stephango.com/flexoki (MIT).
+   * Values are taken from the upstream Flexoki ramps, not from any product
+   * that also uses them. Where a Flexoki pair misses the WCAG 2.2 AA text
+   * floor on our surfaces, the `-ink` token steps to the next accessible
+   * value in the same Flexoki ramp; those steps are listed with their
+   * measured ratio in docs/design/wealthfolio-ui-teardown.md.
+   * ------------------------------------------------------------------- */
   :root,
   [data-theme='light'] {
-    /* Surfaces — neutral workbench */
-    --background: 220 20% 97%;
-    --surface: 0 0% 100%;
-    --surface-elevated: 220 18% 94%;
-    --foreground: 222 28% 13%;
-    --muted-foreground: 220 10% 42%;
-    --border: 220 15% 86%;
-    --input: 220 15% 84%;
-    --ring: 351 75% 43%;
+    /* Surfaces — Flexoki paper / base-50 / base-100 */
+    --background: 48 100% 97%;
+    --surface: 51 33% 92%;
+    --surface-elevated: 51 21% 88%;
+    --foreground: 0 3% 6%;
+    --muted-foreground: 45 2% 33%;
+    --border: 51 21% 88%;
+    --input: 51 21% 88%;
+    /* Flexoki's own ring is base-200; ink keeps the focus ring visible. */
+    --ring: 0 3% 6%;
 
-    /* Brand & semantic — restrained red with explicit result colors */
-    --brand: 351 75% 43%;
-    --brand-foreground: 0 0% 100%;
-    --gain: 158 62% 30%;
-    --loss: 5 72% 46%;
-    --warn: 32 90% 44%;
-    --info: 211 72% 42%;
-    --night: 222 68% 46%;
-    --benchmark: 220 12% 48%;
-    /* Soft chips paint the tone at 12–14% alpha; the tone itself is then too
-       light to read on that fill. These inks keep chip text at WCAG AA
-       (>= 4.5:1) over both --surface and --surface-elevated, without moving
-       the chart/series colors. */
-    --gain-ink: 158 62% 26%;
-    --loss-ink: 5 72% 34%;
-    --warn-ink: 32 90% 30%;
-    --night-ink: 222 68% 34%;
-    --brand-ink: 351 75% 34%;
-    --benchmark-ink: 220 12% 34%;
-    --chart-grid: 220 15% 88%;
-    --chart-axis: 220 10% 42%;
-    --crosshair: 222 30% 40%;
+    /* Actions are ink, not a brand hue. */
+    --brand: 0 3% 6%;
+    --brand-foreground: 48 100% 97%;
 
-    /* Editorial accent hues for the two dashboard variants */
-    --accent-rose: 351 75% 43%;
-    --accent-amber: 33 92% 44%;
+    /* Result colors — Flexoki 600 for fills and charts. */
+    --gain: 73 84% 27%;
+    --loss: 3 62% 42%;
+    --warn: 45 99% 34%;
+    --info: 212 68% 39%;
+    --night: 259 42% 43%;
+    --benchmark: 43 3% 52%;
 
-    /* Atmospheric tints used by the body backdrop (kept faint on paper) */
-    --halo-a: 220 20% 80%;
-    --halo-b: 351 40% 78%;
-    --elevation: 222 28% 13%;
-    --shadow-card: 0 1px 2px hsl(var(--elevation) / 0.04), 0 8px 24px -18px hsl(var(--elevation) / 0.18);
+    /* Readable text on a 12–14% tint of the same hue (AA on every surface). */
+    --gain-ink: 73 83% 16%;
+    --loss-ink: 3 63% 36%;
+    --warn-ink: 45 98% 20%;
+    --night-ink: 259 42% 37%;
+    --brand-ink: 0 3% 6%;
+    --benchmark-ink: 45 2% 33%;
+
+    /* Chart series — Flexoki accents at 600, muted and distinguishable. */
+    --chart-1: 212 68% 39%;
+    --chart-2: 73 84% 27%;
+    --chart-3: 45 99% 34%;
+    --chart-4: 259 42% 43%;
+    --chart-5: 175 57% 33%;
+    --chart-6: 22 80% 41%;
+    --chart-grid: 51 21% 88%;
+    --chart-axis: 50 3% 42%;
+    --crosshair: 45 2% 33%;
+
+    /* Legacy accent aliases kept for the archived dashboard variants. */
+    --accent-rose: 3 62% 42%;
+    --accent-amber: 45 99% 34%;
+
+    --halo-a: 51 21% 88%;
+    --halo-b: 45 99% 34%;
+    --elevation: 0 3% 6%;
+    --shadow-card: 0 1px 2px hsl(var(--elevation) / 0.04), 0 8px 24px -18px hsl(var(--elevation) / 0.14);
 
     /* shadcn back-compat aliases */
     --card: var(--surface);
@@ -61,48 +77,57 @@
     --accent: var(--surface-elevated);
     --accent-foreground: var(--foreground);
     --destructive: var(--loss);
-    --destructive-foreground: 0 0% 100%;
+    --destructive-foreground: 48 100% 97%;
 
-    --radius: 0.5rem;
+    /* Reference geometry: 10px base radius with the derived sm/md/lg/xl steps. */
+    --radius: 0.625rem;
   }
 
   [data-theme='dark'] {
-    --background: 222 18% 7%;
-    --surface: 222 16% 10%;
-    --surface-elevated: 222 14% 14%;
-    --foreground: 220 22% 93%;
-    --muted-foreground: 220 10% 66%;
-    --border: 222 10% 21%;
-    --input: 222 10% 21%;
-    --ring: 351 84% 68%;
+    /* Flexoki black / base-950 / base-900 — warm near-black, not blue-black. */
+    --background: 0 3% 6%;
+    --surface: 30 4% 11%;
+    --surface-elevated: 30 3% 15%;
+    --foreground: 55 10% 79%;
+    --muted-foreground: 47 4% 61%;
+    --border: 30 3% 15%;
+    --input: 40 3% 20%;
+    --ring: 55 10% 79%;
 
-    --brand: 351 84% 68%;
-    /* The dark brand is a pale pink; white on it is 2.96:1, so ink it dark. */
-    --brand-foreground: 222 39% 11%;
-    --gain: 156 70% 52%;
-    --loss: 6 90% 68%;
-    --warn: 40 94% 64%;
-    --info: 211 85% 68%;
-    --night: 218 80% 68%;
-    --benchmark: 222 10% 60%;
-    /* On the dark chip fill the tones themselves already clear AA. */
-    --gain-ink: var(--gain);
-    --loss-ink: var(--loss);
-    --warn-ink: var(--warn);
-    --night-ink: var(--night);
-    --brand-ink: var(--brand);
-    --benchmark-ink: var(--benchmark);
-    --chart-grid: 222 10% 21%;
-    --chart-axis: 220 10% 66%;
-    --crosshair: 222 60% 78%;
+    --brand: 55 10% 79%;
+    --brand-foreground: 0 3% 6%;
 
-    --accent-rose: 348 86% 66%;
-    --accent-amber: 36 94% 60%;
+    --gain: 72 46% 41%;
+    --loss: 5 61% 54%;
+    --warn: 45 82% 45%;
+    --info: 208 49% 50%;
+    --night: 251 40% 64%;
+    --benchmark: 47 4% 61%;
 
-    --halo-a: 348 74% 56%;
-    --halo-b: 38 58% 48%;
-    --elevation: 222 40% 1%;
-    --shadow-card: 0 1px 0 hsl(0 0% 100% / 0.03) inset, 0 1px 2px hsl(var(--elevation) / 0.5), 0 16px 40px -20px hsl(var(--elevation) / 0.8);
+    --gain-ink: 70 36% 51%;
+    --loss-ink: 9 89% 76%;
+    --warn-ink: 45 82% 45%;
+    --night-ink: 254 37% 71%;
+    --brand-ink: 55 10% 79%;
+    --benchmark-ink: 49 7% 70%;
+
+    --chart-1: 208 49% 50%;
+    --chart-2: 72 46% 41%;
+    --chart-3: 45 82% 45%;
+    --chart-4: 251 40% 64%;
+    --chart-5: 175 49% 45%;
+    --chart-6: 23 70% 51%;
+    --chart-grid: 30 3% 15%;
+    --chart-axis: 43 3% 52%;
+    --crosshair: 49 7% 70%;
+
+    --accent-rose: 5 61% 54%;
+    --accent-amber: 45 82% 45%;
+
+    --halo-a: 30 3% 15%;
+    --halo-b: 45 82% 45%;
+    --elevation: 0 0% 0%;
+    --shadow-card: 0 1px 0 hsl(55 10% 79% / 0.03) inset, 0 1px 2px hsl(var(--elevation) / 0.5), 0 16px 40px -20px hsl(var(--elevation) / 0.8);
 
     --card: var(--surface);
     --card-foreground: var(--foreground);
@@ -116,7 +141,7 @@
     --accent: var(--surface-elevated);
     --accent-foreground: var(--foreground);
     --destructive: var(--loss);
-    --destructive-foreground: 220 39% 11%;
+    --destructive-foreground: 0 3% 6%;
   }
 }
 
@@ -138,6 +163,8 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: theme('fontFamily.sans');
+    /* Reference base size: 14px, so unsized copy matches the component scale. */
+    font-size: 0.875rem;
     font-feature-settings: 'tnum', 'ss01', 'cv05';
     -webkit-tap-highlight-color: transparent;
     overflow-x: hidden;
@@ -227,7 +254,7 @@
     overflow: hidden;
     margin-top: 1rem;
     border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
+    border-radius: var(--radius);
     background: hsl(var(--border));
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -247,7 +274,7 @@
   .workbench-panel {
     min-width: 0;
     border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
+    border-radius: var(--radius);
     background: hsl(var(--surface));
     padding: 1rem;
   }
@@ -299,7 +326,7 @@
     gap: 1rem;
     margin-top: 1rem;
     border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
+    border-radius: var(--radius);
     background: hsl(var(--surface));
     padding: 1.25rem;
   }
@@ -412,13 +439,13 @@
     animation: sheen 2.4s ease-in-out;
   }
   .text-gain {
-    color: hsl(var(--gain));
+    color: hsl(var(--gain-ink));
   }
   .text-loss {
-    color: hsl(var(--loss));
+    color: hsl(var(--loss-ink));
   }
   .text-warn {
-    color: hsl(var(--warn));
+    color: hsl(var(--warn-ink));
   }
   .bg-gain-soft {
     background-color: hsl(var(--gain) / 0.12);

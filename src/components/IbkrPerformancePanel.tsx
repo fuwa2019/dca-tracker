@@ -19,7 +19,7 @@ import type { HistoryPoint, RangeKey } from '@/lib/calc/history';
 const MAX_CHART_POINTS = 720;
 
 // Chart line colors come from CSS variables so dark/light themes pick up automatically.
-const PORTFOLIO_STROKE = 'hsl(var(--brand))';
+const PORTFOLIO_STROKE = 'hsl(var(--chart-1))';
 const BENCHMARK_STROKE = 'hsl(var(--benchmark))';
 const GRID_STROKE = 'hsl(var(--chart-grid))';
 const AXIS_FILL = 'hsl(var(--chart-axis))';

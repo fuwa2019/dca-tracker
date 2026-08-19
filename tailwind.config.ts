@@ -18,7 +18,8 @@ export default {
     extend: {
       fontFamily: {
         sans: [
-          '"Hanken Grotesk"',
+          '"Inter Variable"',
+          'Inter',
           '-apple-system',
           'BlinkMacSystemFont',
           'system-ui',
@@ -30,7 +31,8 @@ export default {
           'sans-serif',
         ],
         display: [
-          '"Hanken Grotesk"',
+          '"Inter Variable"',
+          'Inter',
           '-apple-system',
           'BlinkMacSystemFont',
           '"Noto Sans SC"',
@@ -87,19 +89,22 @@ export default {
         // Semantic colors used as text/bg utilities throughout the app.
         // success/danger/warning are legacy names kept for back-compat with
         // existing className strings (text-success, text-danger, text-warning).
-        success: 'hsl(var(--gain))',
-        danger: 'hsl(var(--loss))',
-        warning: 'hsl(var(--warn))',
-        gain: 'hsl(var(--gain))',
-        loss: 'hsl(var(--loss))',
-        warn: 'hsl(var(--warn))',
-        night: 'hsl(var(--night))',
-        benchmark: 'hsl(var(--benchmark))',
+        // These back text utilities almost everywhere, so they resolve to the
+        // readable ink step. Vivid fills/strokes use hsl(var(--gain)) etc.
+        success: 'hsl(var(--gain-ink))',
+        danger: 'hsl(var(--loss-ink))',
+        warning: 'hsl(var(--warn-ink))',
+        gain: 'hsl(var(--gain-ink))',
+        loss: 'hsl(var(--loss-ink))',
+        warn: 'hsl(var(--warn-ink))',
+        night: 'hsl(var(--night-ink))',
+        benchmark: 'hsl(var(--benchmark-ink))',
         // Per-variant editorial accents (theme-aware).
         'accent-rose': 'hsl(var(--accent-rose))',
         'accent-amber': 'hsl(var(--accent-amber))',
       },
       borderRadius: {
+        xl: 'calc(var(--radius) + 4px)',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',

@@ -153,7 +153,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
                   <XAxis dataKey="date" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickLine={false} axisLine={false} minTickGap={36} />
                   <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickLine={false} axisLine={false} width={52} tickFormatter={(value: number) => usd0.format(value)} />
                   <Tooltip
-                    cursor={{ stroke: 'hsl(var(--brand))', strokeDasharray: '3 3' }}
+                    cursor={{ stroke: 'hsl(var(--chart-1))', strokeDasharray: '3 3' }}
                     content={({ active, payload }) => active && payload?.[0]?.payload ? (
                       <div className="workbench-tooltip">
                         <div className="text-muted-foreground">{payload[0].payload.date}</div>
@@ -161,7 +161,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
                       </div>
                     ) : null}
                   />
-                  <Line type="monotone" dataKey="value" stroke="hsl(var(--brand))" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: 'hsl(var(--brand))' }} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="value" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: 'hsl(var(--chart-1))' }} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
