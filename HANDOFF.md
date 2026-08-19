@@ -252,9 +252,12 @@ one personal ETF portfolio.
   `npm run dev:local` on port 5174; the method is repeatable and its results
   are recorded above and in the rectification plan's C2/C4 entries. No
   Playwright dependency was added to the repository.
-- `competitive-learning-plan-2026-08-19.pptx` in the repo root is the meeting
-  deck this rectification plan was derived from. It is untracked on purpose;
-  decide whether to commit, relocate under `artifacts/`, or remove it.
+- `competitive-learning-plan-2026-08-19.pptx` was the meeting deck this
+  rectification plan was derived from. It was never tracked, and on the user's
+  instruction it was moved out of the repository root to the macOS Trash on
+  2026-08-20 rather than committed or relocated. Its conclusions live on in
+  `docs/tasks/2026-08-19-competitive-learning-rectification-plan.md`; recover
+  the file from the Trash if the original slides are needed again.
 - Accessibility evidence method (repeatable, documented in
   `docs/accessibility/probes/README.md`): `playwright-cli` `run-code` snippets
   against `npm run dev:local` on 5174. `/login` redirects to `/` in local mode,
