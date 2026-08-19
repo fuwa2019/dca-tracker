@@ -153,7 +153,7 @@ one personal ETF portfolio.
   `0050_portfolio_ledger_import.sql` are applied to production.
   The latter removes inherited `REFERENCES/TRIGGER` grants so `anon` and
   `authenticated` have only `SELECT` on both ETF snapshot tables.
-- Quote Worker version `23f51a7b-cc60-416d-9c3d-a95fe4a34671` is deployed with
+- Quote Worker version `8d63a31a-2d64-4997-a039-a95dee51816e` is deployed with
   authenticated `POST /api/etf-holdings/refresh` and weekly Sunday refresh.
   UTC 04:10 and 05:10 daily runs use one equivalent comma-list Cron expression
   to stay within the account's five-trigger limit without dropping a run.
