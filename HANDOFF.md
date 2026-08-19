@@ -118,15 +118,15 @@ one personal ETF portfolio.
 ## Current Status
 
 - SMH refresh compatibility is deployed in Quote Worker version
-  `ecc88916-3df4-492e-9895-727942b9f518` from commit `9b51b04`. The Worker reads
-  VanEck's page-backed `HoldingsBlock/GetDataset` JSON endpoint with its expected
-  request context and parses percentage strings plus US-formatted JSON as-of
-  dates. If VanEck returns a transport/edge failure, it writes the verified
-  official SMH static snapshot as of 2026-08-18 and returns a
-  `static-fallback` warning instead of reporting a partial refresh failure.
-  Parser/schema and database write errors still fail. `test:etf-holdings`, the
-  CI-equivalent tests, `typecheck`, Worker dry-run, `build`, and
-  `git diff --check` pass.
+  `8d63a31a-2d64-4997-a039-a95dee51816e` from commit `7b981f5`. The primary
+  SMH channel is now StockAnalysis' public HTML holdings page, which is
+  reachable from the Worker and parses 25 equity rows. Its page date is checked
+  against the verified 2026-08-18 official snapshot: an older response is not
+  allowed to overwrite newer data. Network/edge failures or stale alternate
+  data return the newer official snapshot with a `static-fallback` warning
+  instead of reporting a partial refresh failure. Parser/schema and database
+  write errors still fail. `test:etf-holdings`, the CI-equivalent tests,
+  `typecheck`, Worker dry-run, `build`, and `git diff --check` pass.
 - Current read-only probing reproduced VanEck resetting direct local connections
   to both the marketing page and XLSX endpoint. The official page and JSON
   dataset were independently reachable through the web retrieval path. The
@@ -138,10 +138,14 @@ one personal ETF portfolio.
   updated from VanEck's official SMH holdings page as of 2026-08-18: 25 equity
   constituents totaling 99.93%, with cash rows excluded. Direct Mac `curl`
   requests to the VanEck page and JSON endpoint still reset the connection.
--  The fallback is bundled in the frontend and Worker; normal cloud mode still
+- The fallback is bundled in the frontend and Worker; normal cloud mode still
   prefers the remote `etf_holdings` snapshot, which is now refreshed from this
   snapshot when the live provider is unavailable. No private portfolio data was
   read during the fix or deployment.
+- StockAnalysis was read-only probed on 2026-08-19: HTTP 200, no challenge page,
+  25 equity rows, `as_of=2026-07-30`, and parsed weight total `0.9991`. Because
+  that date is older than the local official snapshot, production keeps the
+  2026-08-18 data while treating the refresh as successful.
 - Repository: `/Users/junxihuo/Documents/dca_system`, branch `master` tracking
   `origin/master`.
 - Append-only migrations `0048_etf_holdings_refresh.sql`,
