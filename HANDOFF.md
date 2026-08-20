@@ -409,7 +409,17 @@ one personal ETF portfolio.
 
 ## Production State
 
-- 2026-08-20 frontend release: `master` was pushed to `origin/master` at
+- 2026-08-20 UI-alignment release: `master` was pushed to `origin/master` at
+  `d094c5b` with explicit user authorization (deploy after phase 1b), and the
+  Git-backed Pages project rebuilt automatically within about 15 seconds.
+  Canonical `https://dca-tracker-git.pages.dev` now serves bundle
+  `index-BdRGUPZm.js` with stylesheet `index-e-WDLDRA.css`. Post-deploy checks:
+  the live stylesheet contains the Flexoki paper value `48 100% 97%`, the HTML
+  links Inter and no longer links Hanken Grotesk, `/`, `/performance`,
+  `/transactions`, `/transactions/all`, `/health`, `/settings` and an invalid
+  `/share/<token>` all return 200, and the production login route renders with
+  no console output. No login was attempted and no private data was read.
+- 2026-08-20 earlier frontend release: `master` was pushed to `origin/master` at
   `2c93d45` with explicit user authorization, and the Git-backed Cloudflare
   Pages project rebuilt automatically. Canonical
   `https://dca-tracker-git.pages.dev` now serves bundle `index-DCYExNkH.js`
