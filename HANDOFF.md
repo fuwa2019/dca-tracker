@@ -236,6 +236,46 @@ one personal ETF portfolio.
   record). Accessibility follow-ups are the screen-reader pass, 2.4.11, and
   auditing the cloud-only routes when a cloud session is authorized.
 
+## Wealthfolio UI Alignment (2026-08-20)
+
+- The owner directed the frontend to follow Wealthfolio `v3.6.2` as closely as
+  practical, interaction and interface. That reverses a recorded boundary, so
+  it is written up in `docs/decisions/2026-08-20-wealthfolio-ui-alignment.md`,
+  and the superseded rows in `docs/research/competitive/2026-08/decisions.md`
+  and `DESIGN.md` now point at it.
+- Licensing facts established before accepting the direction: Wealthfolio is
+  **AGPL-3.0**, so none of its code, stylesheets or assets may enter this
+  repository; its `TRADEMARKS.md` rules out its name and logo; and its palette
+  is **Flexoki** (Steph Ango, **MIT**, attribution requested), which this
+  project therefore takes from Flexoki's own upstream ramps. Everything shipped
+  is reimplemented here from measured values and screen captures.
+- The measured reference, the per-surface mapping and the delivery order live
+  in `docs/design/wealthfolio-ui-teardown.md`.
+- **Phase 1a `7c1a6e3`** — token layer: Flexoki surfaces and accents in both
+  themes, actions are ink instead of brand red, a six-hue chart series set,
+  10px base radius with derived steps, 14px base size, Inter in place of
+  Hanken Grotesk. Four Flexoki pairs miss the AA text floor on our card fill,
+  so colored and muted *text* resolves to the next accessible step in the same
+  ramp while fills, gauge arcs and chart strokes keep the vivid 600/400 values;
+  the focus ring is ink rather than Flexoki's base-200. Divergences are
+  tabulated in the teardown doc.
+- **Phase 1b `f655c5c`** — shell: 70px icon rail (the 200px labelled column is
+  now opt-in), page identity moved from per-route banners into a pill tab group
+  on the toolbar row, and the route name kept as a single `sr-only` `h1` in the
+  shell. The rail switches sections (分析 / 账本 / 维护) and the tabs switch
+  views inside one, so the two never repeat a name.
+- Accessibility baseline held through both slices: axe-core 0 violations across
+  eight routes x desktop/390px x light/dark (32 scans), every Tab stop
+  interactive with a visible focus ring, reduced motion still opacity-only,
+  0 page overflow at 390px and 320px, no target under 24x24.
+- Remaining phases, in order: ledger tables (row anatomy, two-line numeric
+  cells, filter chips, row overflow menu, column chooser), the import takeover
+  with its stepper and per-row fixing, then the overview — the last one needs
+  one more live capture of Wealthfolio's Overview tab, which was never
+  screenshotted in the 2026-08-18 run.
+- No calculation, import, share-contract, worker or database change came out of
+  either slice.
+
 ## Session Notes (2026-08-20 handoff)
 
 - Delivery flow used this window: slices are implemented either locally or by
