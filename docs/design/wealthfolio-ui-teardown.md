@@ -154,6 +154,23 @@ text resolves to the ink step. The focus ring is ink rather than Flexoki's
 base-200, which would not have been visible enough against the paper surface.
 2. **Ledger tables** — `/transactions`, `/transactions/all`: row anatomy,
    two-line numeric cells, filter chips, row overflow menu, column chooser.
+   - **landed 2026-08-20**: the row list became a real table with a tinted
+     header band, hairline separators and no vertical rules; each row opens
+     with a rounded ticker mark, the ticker and its strategy line; quantity,
+     price and cash effect render as value-over-unit cells; row actions moved
+     from inline pencil/trash buttons into a trailing overflow menu; the date,
+     ticker and cash-effect headers sort; a column chooser hides 事件 / 数量 /
+     价格 and reveals the opt-in 备注 column.
+     `/transactions/all` replaced its segmented filter with add-a-filter chips
+     (类型 / 策略 / 标的, multi-select, with a clear-all) beside the search box.
+     Ordering moved into the pure `src/lib/ledgerSort.ts` and is owned by the
+     paginated page, so a header click reorders all 726 rows rather than the
+     50 on screen — verified by keyboard: ascending date reaches 2016.
+     A new `src/components/ui/dropdown-menu.tsx` backs the row menu, the
+     chooser and the chips; each opens on Enter, highlights its first item and
+     returns focus to its trigger on Escape.
+     Re-verified: axe 0 violations over 32 scans, 0 overflow at 390px and
+     320px, no target under 24x24, reduced motion unchanged.
 3. **Import** — takeover layout, stepper, banner, per-row review and fixing on
    top of the existing preview and receipt contract.
 4. **Overview** — after one more live capture of the Overview tab.

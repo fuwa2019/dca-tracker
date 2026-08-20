@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { cashEventChip, ledgerEventChip, tradeEventChip, LEDGER_EVENT_KINDS } from '../src/lib/ledgerEvents.ts';
 import { countLedgerEventKinds, retainedRowReasons, summarizeImportReceipt } from '../src/lib/import/receipt.ts';
 import { enterMotionProps } from '../src/lib/motionPrefs.ts';
+import { DEFAULT_TXN_SORT, nextSort, sortTransactions } from '../src/lib/ledgerSort.ts';
 
 function calculateRefreshInterval(symbolCount, config) {
   const count = Math.max(0, Math.floor(symbolCount));
@@ -302,5 +303,51 @@ for (const [file, label] of [
 
 const dashboardShared = readFileSync(new URL('../src/app/dashboard/shared.tsx', import.meta.url), 'utf8');
 assert.match(dashboardShared, /isAnimationActive=\{!reduceMotion\}/, 'the shared spark chart stops drawing itself under reduced motion');
+
+// --- Ledger table ordering and row affordances (UI alignment phase 2) --------
+// The header must reorder the whole filtered set, so the ordering rule is pure
+// and shared with the paginated caller instead of living inside the table.
+const ledgerRows = [
+  { ticker: 'QQQ', trade_date: '2026-01-05', cash: -100 },
+  { ticker: 'AAPL', trade_date: '2024-06-01', cash: 250 },
+  { ticker: 'SMH', trade_date: '2025-03-09', cash: -40 },
+];
+const cash = (row) => row.cash;
+
+assert.deepEqual(DEFAULT_TXN_SORT, { key: 'date', direction: 'desc' }, 'the ledger opens newest-first');
+assert.deepEqual(
+  sortTransactions(ledgerRows, { key: 'date', direction: 'asc' }, cash).map((row) => row.trade_date),
+  ['2024-06-01', '2025-03-09', '2026-01-05'],
+  'ascending date ordering spans every row it is given',
+);
+assert.deepEqual(
+  sortTransactions(ledgerRows, { key: 'ticker', direction: 'desc' }, cash).map((row) => row.ticker),
+  ['SMH', 'QQQ', 'AAPL'],
+  'descending ticker ordering is alphabetical',
+);
+assert.deepEqual(
+  sortTransactions(ledgerRows, { key: 'amount', direction: 'asc' }, cash).map((row) => row.cash),
+  [-100, -40, 250],
+  'amount ordering uses the cash effect, not the raw price',
+);
+assert.deepEqual(sortTransactions(ledgerRows, DEFAULT_TXN_SORT, cash) !== ledgerRows, true, 'sorting does not mutate its input');
+assert.deepEqual(nextSort({ key: 'date', direction: 'desc' }, 'date'), { key: 'date', direction: 'asc' }, 'the same column flips direction');
+assert.deepEqual(nextSort({ key: 'date', direction: 'asc' }, 'ticker'), { key: 'ticker', direction: 'desc' }, 'a new column starts descending');
+
+const allTrades = readFileSync(new URL('../src/app/transactions-all.tsx', import.meta.url), 'utf8');
+assert.match(allTrades, /sortLedgerRows\(filtered, sort\)/, 'the paginated page sorts the filtered set');
+assert.match(allTrades, /ordered\.slice\(pageStart, pageEnd\)/, 'pagination slices the sorted set, not the raw one');
+assert.match(allTrades, /FilterChip/, 'filters read as add-a-filter chips');
+assert.match(allTrades, /aria-label=\{active \? `\$\{label\} 筛选，已选 \$\{count\} 项`/, 'a filter chip announces how many values are selected');
+
+assert.match(txnList, /aria-sort=\{ariaSort\}/, 'sortable headers expose aria-sort');
+assert.match(txnList, /role="region"[\s\S]*?aria-label="交易表格"/, 'the sideways-scrolling table is a focusable named region');
+assert.match(txnList, /aria-label=\{`\$\{row\.ticker\} \$\{shortDate\(row\.trade_date\)\} 交易操作`\}/, 'each row menu names its row');
+assert.match(txnList, /NumericCell/, 'numbers render as value-over-unit cells');
+assert.match(txnList, /DEFAULT_HIDDEN/, 'the note column is opt-in');
+
+const dropdown = readFileSync(new URL('../src/components/ui/dropdown-menu.tsx', import.meta.url), 'utf8');
+assert.match(dropdown, /DropdownMenuPrimitive\.Portal/, 'menus render in a portal so table overflow cannot clip them');
+assert.match(dropdown, /data-\[highlighted\]:bg-surface-elevated/, 'menu items show a keyboard highlight');
 
 console.log('UI behavior checks passed');
