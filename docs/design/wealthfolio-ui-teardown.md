@@ -16,8 +16,10 @@ Two evidence channels, both read-only:
   captures (`wealthfolio-t02-review-activities`, `t06-holdings`,
   `t07-performance`, `t03-*`), all produced with synthetic data.
 
-Not yet captured: the Overview (dashboard) tab and the settings surfaces. Their
-mapping below is inference until one more live pass is run.
+The Overview tab was captured live on 2026-08-20 (window-only capture of the
+running app, after dismissing its update prompt with Escape — the pinned study
+version was not upgraded). The settings surfaces are still uncaptured, so any
+future mapping for them stays inference.
 
 ## 1. Token layer
 
@@ -194,7 +196,26 @@ base-200, which would not have been visible enough against the paper surface.
      a bad row in place; here a blocked row still keeps its reason and has to
      be fixed in the source file. That is a real feature, not a restyle, and
      it touches what gets written, so it stays a separate slice.
-4. **Overview** — after one more live capture of the Overview tab.
+4. **Overview** — **landed 2026-08-20**, against the live capture.
+   What the capture showed: pill tabs top-left with small icon actions
+   top-right; one hero figure whose cents are muted, and under it a single
+   inline line of absolute change, percent change and the period label; a
+   full-bleed area curve with no axes, no gridlines and a fill that fades out;
+   a centered range selector under the curve; then a two-column section grid,
+   accounts on the left, holdings and goals stacked on the right, each section
+   introduced by a small title row with a trailing `View All ›`.
+   What shipped here: the four-up metric strip became a hero figure with muted
+   cents; the change line reads over the selected range (`+34.34% 近 1 年`,
+   `-1.68% 近 3 个月`) instead of a fixed day-over-day number; the chart left
+   its card and became a full-bleed area with no grid and no axes, with a
+   centered range selector under it; the grid is now holdings on the left with
+   summary, ledger state and target progress stacked on the right. The three
+   secondary figures (今日盈亏 / 总收益 / 现金余额) moved into that stack
+   rather than being dropped.
+   Divergence: the curve respects the page padding instead of bleeding past
+   it, which keeps the narrow layouts intact.
+   Re-verified: axe 0 violations over 32 scans, 0 overflow at 390px and 320px,
+   no target under 24x24, every Tab stop interactive with a visible ring.
 
 Out of scope throughout: multi-account scoping, budgeting and liabilities, the
 add-on marketplace, and anything else on the product reject list. Where a

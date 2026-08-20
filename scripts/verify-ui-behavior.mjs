@@ -371,4 +371,19 @@ assert.match(portfolioImport, /step === 'commit'[\s\S]*?confirmScope/, 'the dest
 assert.match(portfolioImport, /role="region"[\s\S]*?aria-label=\{`导入步骤：/, 'the scrolling takeover body is a focusable named region');
 assert.match(portfolioImport, /aria-label="逐行结果，可滚动"/, 'the row list scroll container is reachable by keyboard');
 
+// --- Overview composition (UI alignment phase 4) -----------------------------
+// The reference overview leads with one hero figure over a full-bleed curve and
+// a centered range selector; the change line reads over the selected range.
+const overview = readFileSync(new URL('../src/app/dashboard/WorkbenchDashboard.tsx', import.meta.url), 'utf8');
+assert.match(overview, /function HeroValue/, 'the overview leads with a hero figure');
+assert.match(overview, /const \[whole, cents\] = text\.split\('\.'\)/, 'the hero mutes its cents');
+assert.match(overview, /OVERVIEW_RANGES = \['1M', '3M', '6M', 'YTD', '1Y', 'ALL'\]/, 'the overview offers the shared range vocabulary');
+assert.match(overview, /sliceByRange\(source, range\)/, 'the curve follows the selected range');
+assert.match(overview, /rangeChange/, 'the change line is computed over the selected range');
+assert.match(overview, /RANGE_LABELS\[range\]/, 'the change line names the range it covers');
+assert.match(overview, /AreaChart/, 'the overview curve is a filled area, not a gridded line chart');
+assert.doesNotMatch(overview, /CartesianGrid/, 'the overview curve drops the chart grid');
+assert.match(overview, /组合摘要/, 'the secondary figures keep a place in the section stack');
+assert.match(overview, /aria-labelledby="summary-title"/, 'the summary section is labelled');
+
 console.log('UI behavior checks passed');
