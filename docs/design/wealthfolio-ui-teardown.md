@@ -173,6 +173,27 @@ base-200, which would not have been visible enough against the paper surface.
      320px, no target under 24x24, reduced motion unchanged.
 3. **Import** — takeover layout, stepper, banner, per-row review and fixing on
    top of the existing preview and receipt contract.
+   - **landed 2026-08-20**: the preview dialog became a full-screen takeover
+     with its own header, a labelled `取消` close, a numbered stepper
+     (上传 → 方式 → 证券 → 逐行核对 → 导入; the 证券 step only exists when the
+     file carries symbols) and a sticky footer with 上一步 / 重新选择 /
+     下一步 · 确认并导入. The review step opens with a problem banner that
+     counts the rows needing attention and reports importable-versus-total,
+     which reproduces the reference's "13 of 14 rows are valid" semantics on
+     our own fixture. The destructive-scope confirmation moved onto the commit
+     step, immediately before the write.
+     Walked with the synthetic TradingView fixture: upload auto-advances,
+     每 step renders, 上一步 steps rather than closing, Escape closes and
+     returns focus to the 导入预览 button.
+     Audited with the takeover open on the review step: axe 0 violations at
+     desktop light/dark and 390px, focus never escapes the takeover across 30
+     Tab presses, and 0 page overflow at 390px. Two scroll containers that had
+     no keyboard path (the takeover body and the per-row result list) are now
+     focusable named regions.
+   - **still open**: per-row inline fixing. The reference lets a reader repair
+     a bad row in place; here a blocked row still keeps its reason and has to
+     be fixed in the source file. That is a real feature, not a restyle, and
+     it touches what gets written, so it stays a separate slice.
 4. **Overview** — after one more live capture of the Overview tab.
 
 Out of scope throughout: multi-account scoping, budgeting and liabilities, the

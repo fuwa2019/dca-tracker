@@ -2,6 +2,8 @@ import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
   Ban,
   Check,
   CheckCircle2,
@@ -79,6 +81,16 @@ const STATUS_META: Record<ImportPreviewRow['status'], { label: string; tone: Sta
   block: { label: '阻止', tone: 'bad', icon: AlertTriangle },
 };
 
+type ImportStep = 'upload' | 'mode' | 'assets' | 'review' | 'commit';
+
+const STEP_LABELS: Record<ImportStep, string> = {
+  upload: '上传',
+  mode: '方式',
+  assets: '证券',
+  review: '逐行核对',
+  commit: '导入',
+};
+
 export function PortfolioImportTools({ transactions }: Props) {
   const qc = useQueryClient();
   const { data: cashflows = [], isLoading: cashflowsLoading, isError: cashflowsError } = useCashflows();
@@ -99,6 +111,7 @@ export function PortfolioImportTools({ transactions }: Props) {
   const [result, setResult] = useState<PortfolioLedgerImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [step, setStep] = useState<ImportStep>('upload');
 
   const existingKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -134,6 +147,7 @@ export function PortfolioImportTools({ transactions }: Props) {
     setError(null);
     setNotice(null);
     setParsing(false);
+    setStep('upload');
   }
 
   function rebuildPreview(nextMode: ImportMode) {
@@ -177,6 +191,7 @@ export function PortfolioImportTools({ transactions }: Props) {
         { mode: 'append', existing_import_keys: keysForSource(adapter.source) },
       );
       setPreview(nextPreview);
+      setStep('mode');
       const descriptions = new Map<string, string>();
       for (const transaction of transactions) {
         if (transaction.source_description) descriptions.set(normalizeSymbol(transaction.ticker), transaction.source_description);
@@ -246,6 +261,24 @@ export function PortfolioImportTools({ transactions }: Props) {
     }
   }
 
+  const hasAssetRows = !!preview
+    && preview.rows.some((row) => row.item && ('side' in row.item || ('event_type' in row.item && !!row.item.ticker)));
+
+  const steps: ImportStep[] = hasAssetRows
+    ? ['upload', 'mode', 'assets', 'review', 'commit']
+    : ['upload', 'mode', 'review', 'commit'];
+  const stepIndex = Math.max(0, steps.indexOf(step));
+  const goNext = () => setStep(steps[Math.min(stepIndex + 1, steps.length - 1)]);
+  const goBack = () => setStep(steps[Math.max(stepIndex - 1, 0)]);
+  const canAdvance = step === 'upload'
+    ? !!preview && !parsing
+    : step === 'assets'
+      ? !classifying
+      : true;
+
+  const blockedRows = preview?.status_counts.block ?? 0;
+  const importableRows = preview?.status_counts.import ?? 0;
+
   const canCommit = !!preview
     && preview.can_commit
     && preview.status_counts.import > 0
@@ -290,24 +323,42 @@ export function PortfolioImportTools({ transactions }: Props) {
           }
         }}
       >
-        <DialogContent className="max-w-5xl min-w-0 overflow-x-hidden">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <DatabaseIcon className="h-5 w-5 text-brand" />
+        <DialogContent
+          closeLabel="取消"
+          className="left-0 top-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 grid-rows-[auto_1fr_auto] gap-0 rounded-none border-0 p-0 sm:rounded-none"
+        >
+          <DialogHeader className="border-b border-border px-4 py-3 sm:px-6">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <DatabaseIcon className="h-4 w-4" />
               统一导入预览
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs">
               文件只在此设备解析。确认前不会写入数据库，每一行都会显示导入、重复、忽略或阻止状态。
             </DialogDescription>
+            {!result && (
+              <div className="pt-3">
+                <ImportStepper steps={steps} current={step} />
+              </div>
+            )}
           </DialogHeader>
 
+          {/* The takeover body scrolls, and most steps are read-only content, so
+              it must be reachable and scrollable from the keyboard (WCAG 2.1.1). */}
+          <div
+            className="min-h-0 overflow-y-auto px-4 py-5 sm:px-6"
+            tabIndex={0}
+            role="region"
+            aria-label={`导入步骤：${STEP_LABELS[step]}`}
+          >
+            <div className="mx-auto w-full max-w-4xl min-w-0 space-y-5">
           {result ? (
             <ImportReceipt result={result} preview={preview} notice={notice} onReset={() => {
               clearState();
               if (inputRef.current) inputRef.current.value = '';
             }} />
           ) : (
-            <div className="min-w-0 space-y-5">
+            <>
+              {step === 'upload' && (
               <div className="space-y-2">
                 <Label htmlFor="portfolio-ledger-file">选择交易文件</Label>
                 <input
@@ -341,11 +392,8 @@ export function PortfolioImportTools({ transactions }: Props) {
                     <span className="hidden sm:inline">{fileInfo ? '更换文件' : '选择文件'}</span>
                   </span>
                 </label>
-              </div>
-
-              {preview && (
-                <>
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
+                {preview && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 py-2">
                     <div className="flex min-w-0 items-center gap-2">
                       <StatusBadge tone={preview.detection.supported ? 'ok' : 'bad'} dot>
                         {sourceLabel}
@@ -354,7 +402,11 @@ export function PortfolioImportTools({ transactions }: Props) {
                     </div>
                     <span className="text-xs text-muted-foreground">表头第 {preview.detection.header_row ?? '未知'} 行</span>
                   </div>
+                )}
+              </div>
+              )}
 
+              {preview && step === 'mode' && (
                   <div className="space-y-2">
                     <Label>导入方式</Label>
                     <SegmentedControl
@@ -386,8 +438,9 @@ export function PortfolioImportTools({ transactions }: Props) {
                       </p>
                     )}
                   </div>
+              )}
 
-                  {preview.rows.some((row) => row.item && ('side' in row.item || ('event_type' in row.item && !!row.item.ticker))) && (
+              {preview && step === 'assets' && hasAssetRows && (
                     <AssetReview
                       rows={preview.rows}
                       classifications={classifications}
@@ -401,36 +454,28 @@ export function PortfolioImportTools({ transactions }: Props) {
                         setPreview(applyAssetPolicy(preview, classifications, next));
                       }}
                     />
-                  )}
+              )}
 
+              {preview && step === 'review' && (
+                <>
+                  <ImportProblemBanner
+                    blocked={blockedRows}
+                    importable={importableRows}
+                    total={preview.rows.length}
+                    errors={preview.errors}
+                    warnings={preview.warnings}
+                  />
                   <StatusCounts preview={preview} />
                   <EventKindSummary rows={preview.rows} />
                   <ReconciliationSummary reconciliation={preview.reconciliation} />
-
-                  {(preview.errors.length > 0 || preview.warnings.length > 0) && (
-                    <div className="space-y-2" aria-live="polite">
-                      {preview.errors.length > 0 && (
-                        <div className="rounded-lg border border-loss/30 bg-loss-soft px-3 py-2.5 text-sm">
-                          <div className="flex items-center gap-2 font-medium"><AlertTriangle className="h-4 w-4" />阻止导入</div>
-                          <ul className="mt-1.5 space-y-1 text-xs leading-5">
-                            {preview.errors.slice(0, 8).map((message) => <li key={message}>{message}</li>)}
-                          </ul>
-                          {preview.errors.length > 8 && <p className="mt-1 text-xs">还有 {preview.errors.length - 8} 行阻止。</p>}
-                        </div>
-                      )}
-                      {preview.warnings.length > 0 && (
-                        <div className="rounded-lg border border-warn/30 bg-warn-soft px-3 py-2.5 text-sm">
-                          <div className="flex items-center gap-2 font-medium"><AlertTriangle className="h-4 w-4" />需要留意</div>
-                          <ul className="mt-1.5 space-y-1 text-xs leading-5">
-                            {preview.warnings.slice(0, 6).map((message) => <li key={message}>{message}</li>)}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   <ImportRows rows={preview.rows} />
+                </>
+              )}
 
+              {preview && step === 'commit' && (
+                <>
+                  <StatusCounts preview={preview} />
+                  <ReconciliationSummary reconciliation={preview.reconciliation} />
                   {mode !== 'append' && (
                     <label className={cn(
                       'flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 text-sm transition-colors',
@@ -449,33 +494,156 @@ export function PortfolioImportTools({ transactions }: Props) {
                       </span>
                     </label>
                   )}
-
-                  {error && <p className="text-xs text-loss" role="alert">{error}</p>}
-                  {notice && <p className="text-xs text-muted-foreground" aria-live="polite">{notice}</p>}
-
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
-                    <p className="text-xs text-muted-foreground">
-                      {LOCAL_MODE ? '本地演示模式不会写入数据库。' : '写入由认证 RPC 在同一事务中完成。'}
-                    </p>
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Button type="button" variant="ghost" onClick={clearState} disabled={importing}>重新选择</Button>
-                      <Button
-                        type="button"
-                        disabled={!canCommit}
-                        onClick={() => void runImport()}
-                      >
-                        {importing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
-                        {importing ? '正在导入' : LOCAL_MODE ? '查看写入边界' : '确认并导入'}
-                      </Button>
-                    </div>
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {LOCAL_MODE ? '本地演示模式不会写入数据库。' : '写入由认证 RPC 在同一事务中完成。'}
+                  </p>
                 </>
               )}
+
+              {error && <p className="text-xs text-loss" role="alert">{error}</p>}
+              {notice && <p className="text-xs text-muted-foreground" aria-live="polite">{notice}</p>}
+            </>
+          )}
+            </div>
+          </div>
+
+          {!result && (
+            <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 sm:px-6">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={stepIndex === 0 || importing}
+                onClick={goBack}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                上一步
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="ghost" onClick={clearState} disabled={importing || !preview}>
+                  重新选择
+                </Button>
+                {step === 'commit' ? (
+                  <Button type="button" disabled={!canCommit} onClick={() => void runImport()}>
+                    {importing ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <FileCheck2 className="h-4 w-4" />}
+                    {importing ? '正在导入' : LOCAL_MODE ? '查看写入边界' : '确认并导入'}
+                  </Button>
+                ) : (
+                  <Button type="button" disabled={!canAdvance} onClick={goNext}>
+                    下一步
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/** Numbered stepper: done steps fill in with a check, the current one rings. */
+function ImportStepper({ steps, current }: { steps: ImportStep[]; current: ImportStep }) {
+  const currentIndex = Math.max(0, steps.indexOf(current));
+  return (
+    <ol className="flex min-w-0 items-center gap-1 overflow-x-auto" aria-label="导入步骤">
+      {steps.map((id, index) => {
+        const done = index < currentIndex;
+        const active = index === currentIndex;
+        return (
+          <li key={id} className="flex min-w-0 items-center gap-1">
+            <span
+              className="flex shrink-0 items-center gap-1.5"
+              aria-current={active ? 'step' : undefined}
+            >
+              <span
+                className={cn(
+                  'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold',
+                  done && 'border-foreground bg-foreground text-background',
+                  active && 'border-foreground text-foreground',
+                  !done && !active && 'border-border text-muted-foreground',
+                )}
+              >
+                {done ? <Check className="h-3 w-3" /> : index + 1}
+              </span>
+              <span
+                className={cn(
+                  'whitespace-nowrap text-[11px]',
+                  active ? 'font-medium text-foreground' : 'text-muted-foreground',
+                )}
+              >
+                {STEP_LABELS[id]}
+                {done && <span className="sr-only">（已完成）</span>}
+              </span>
+            </span>
+            {index < steps.length - 1 && <span className="h-px w-4 shrink-0 bg-border sm:w-8" aria-hidden />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
+ * Problem banner: how many rows need attention, one explanatory line, and the
+ * counts as chips. Blocked rows keep their own reasons in the row list — the
+ * banner summarizes, it never rewrites them.
+ */
+function ImportProblemBanner({
+  blocked,
+  importable,
+  total,
+  errors,
+  warnings,
+}: {
+  blocked: number;
+  importable: number;
+  total: number;
+  errors: ReadonlyArray<string>;
+  warnings: ReadonlyArray<string>;
+}) {
+  const tone = blocked > 0 ? 'block' : warnings.length > 0 ? 'warn' : 'ok';
+  if (tone === 'ok') {
+    return (
+      <div className="flex items-start gap-3 rounded-lg border border-gain/30 bg-gain-soft px-3 py-2.5 text-sm" aria-live="polite">
+        <FileCheck2 className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0">
+          <p className="font-medium">{total} 行全部可以导入</p>
+          <p className="mt-0.5 text-xs leading-5">确认前不会写入数据库；重复行会在写入时被跳过。</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-3 rounded-lg border px-3 py-2.5 text-sm',
+        tone === 'block' ? 'border-loss/30 bg-loss-soft' : 'border-warn/30 bg-warn-soft',
+      )}
+      aria-live="polite"
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="font-medium">
+          {tone === 'block' ? `${blocked} 行需要处理` : `${warnings.length} 条需要留意`}
+        </p>
+        <p className="mt-0.5 text-xs leading-5">
+          {total} 行中 {importable} 行可以导入。
+          {tone === 'block' ? '被阻止的行保留原因，不做静默修正——修好源文件再重新选择。' : '这些行仍会导入，但语义可能被降级。'}
+        </p>
+        <ul className="mt-1.5 space-y-1 text-xs leading-5">
+          {(tone === 'block' ? errors : warnings).slice(0, 6).map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+        {(tone === 'block' ? errors : warnings).length > 6 && (
+          <p className="mt-1 text-xs">还有 {(tone === 'block' ? errors : warnings).length - 6} 条。</p>
+        )}
+      </div>
+      <span className="shrink-0 rounded-md border border-current/30 px-1.5 py-0.5 font-num text-[11px]">
+        {tone === 'block' ? `${blocked} 阻止` : `${warnings.length} 提示`}
+      </span>
+    </div>
   );
 }
 
@@ -570,7 +738,12 @@ function ImportRows({ rows }: { rows: ImportPreviewRow[] }) {
         <h3 id="portfolio-import-rows-title" className="text-sm font-semibold">逐行结果</h3>
         <span className="text-xs text-muted-foreground">{rows.length} 行</span>
       </div>
-      <div className="max-h-[18rem] min-w-0 overflow-auto rounded-lg border border-border">
+      <div
+        className="max-h-[18rem] min-w-0 overflow-auto rounded-lg border border-border"
+        tabIndex={0}
+        role="region"
+        aria-label="逐行结果，可滚动"
+      >
         <div role="table" aria-label="导入逐行结果" className="text-xs">
           <div role="row" className="hidden grid-cols-[3.5rem_8rem_5rem_minmax(12rem,1fr)_minmax(10rem,1fr)] gap-2 border-b border-border bg-surface-elevated px-3 py-2 font-medium text-muted-foreground sm:grid">
             <span role="columnheader">行</span>
@@ -677,7 +850,10 @@ function ImportReceipt({
         <section className="space-y-2" aria-labelledby="portfolio-import-receipt-reasons-title">
           <h3 id="portfolio-import-receipt-reasons-title" className="text-sm font-semibold">未写入行的原因</h3>
           <p className="text-xs text-muted-foreground">这些行按原因保留展示，不做静默修正。</p>
-          <ul className="max-h-40 space-y-1 overflow-auto rounded-lg border border-border bg-surface-elevated px-3 py-2 text-xs leading-5">
+          <ul
+            className="max-h-40 space-y-1 overflow-auto rounded-lg border border-border bg-surface-elevated px-3 py-2 text-xs leading-5"
+            tabIndex={0}
+          >
             {retainedReasons.slice(0, 20).map((entry) => (
               <li key={`${entry.source_index}-${entry.status}-${entry.reason}`} className="flex flex-wrap items-baseline gap-x-2">
                 <span className="tnum text-muted-foreground">第 {entry.source_index} 行</span>

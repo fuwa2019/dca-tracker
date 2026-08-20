@@ -25,8 +25,11 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 export const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    /** Visible text beside the close control, e.g. a takeover's "取消". */
+    closeLabel?: string;
+  }
+>(({ className, children, onOpenAutoFocus, onCloseAutoFocus, closeLabel, ...props }, ref) => {
   // Controlled dialogs without a DialogTrigger lose keyboard focus to <body>
   // on close; remember the invoker while it still holds focus and return to it.
   const returnFocusRef = React.useRef<HTMLElement | null>(null);
@@ -56,9 +59,9 @@ export const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+      <DialogPrimitive.Close className="absolute right-4 top-4 inline-flex min-h-6 items-center gap-1.5 rounded-sm text-sm text-muted-foreground ring-offset-background transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
         <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
+        {closeLabel ? <span>{closeLabel}</span> : <span className="sr-only">Close</span>}
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>

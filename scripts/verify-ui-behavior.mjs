@@ -350,4 +350,25 @@ const dropdown = readFileSync(new URL('../src/components/ui/dropdown-menu.tsx', 
 assert.match(dropdown, /DropdownMenuPrimitive\.Portal/, 'menus render in a portal so table overflow cannot clip them');
 assert.match(dropdown, /data-\[highlighted\]:bg-surface-elevated/, 'menu items show a keyboard highlight');
 
+// --- Import takeover (UI alignment phase 3) ----------------------------------
+// The import flow became a full-screen, stepped takeover. The staging must not
+// weaken the contract: the file is still parsed locally, blocked rows keep
+// their reasons, and destructive modes still need an explicit confirmation
+// right before the write.
+assert.match(portfolioImport, /type ImportStep = 'upload' \| 'mode' \| 'assets' \| 'review' \| 'commit'/, 'the import flow is staged');
+assert.match(portfolioImport, /closeLabel="取消"/, 'the takeover names its close control');
+assert.match(portfolioImport, /h-\[100dvh\][\s\S]*?max-w-none/, 'the import dialog fills the viewport instead of floating');
+assert.match(portfolioImport, /ImportStepper/, 'the takeover shows a numbered stepper');
+assert.match(portfolioImport, /aria-current=\{active \? 'step' : undefined\}/, 'the current step is exposed to assistive tech');
+assert.match(portfolioImport, /aria-label="导入步骤"/, 'the stepper is a named list');
+assert.match(portfolioImport, /steps: ImportStep\[\] = hasAssetRows/, 'the asset step only exists when the file carries symbols');
+assert.match(portfolioImport, /ImportProblemBanner/, 'the review step leads with a problem banner');
+assert.match(portfolioImport, /行需要处理/, 'the banner counts the rows that need attention');
+assert.match(portfolioImport, /行中 \{importable\} 行可以导入/, 'the banner reports importable versus total rows');
+assert.match(portfolioImport, /上一步/, 'the takeover footer can step back');
+assert.match(portfolioImport, /下一步/, 'the takeover footer can step forward');
+assert.match(portfolioImport, /step === 'commit'[\s\S]*?confirmScope/, 'the destructive-scope confirmation sits on the commit step');
+assert.match(portfolioImport, /role="region"[\s\S]*?aria-label=\{`导入步骤：/, 'the scrolling takeover body is a focusable named region');
+assert.match(portfolioImport, /aria-label="逐行结果，可滚动"/, 'the row list scroll container is reachable by keyboard');
+
 console.log('UI behavior checks passed');
