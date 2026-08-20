@@ -111,15 +111,14 @@ export function ExposurePage() {
         className="workbench-intro"
       >
         <div>
-          <div className="workbench-eyebrow">Look-through exposure</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">穿透敞口</h1>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <p className="workbench-lede">看穿 ETF 成分，得到真实的单票权重与监控线余量。</p>
           {priceStale && (
-            <StatusBadge tone="warn" dot>
-              <Wifi className="h-3 w-3" /> 行情缺失·按成本估
-            </StatusBadge>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <StatusBadge tone="warn" dot>
+                <Wifi className="h-3 w-3" /> 行情缺失·按成本估
+              </StatusBadge>
+            </div>
           )}
-          </div>
         </div>
         <div className="flex min-w-0 items-end gap-2">
           <div className="min-w-0 text-right">

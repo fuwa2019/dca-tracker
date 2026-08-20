@@ -189,15 +189,11 @@ export function DataHealthPage() {
   return (
     <div className="workbench-page space-y-5">
       <header className="workbench-intro">
-        <div>
-          <div className="workbench-eyebrow">Data health</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">数据健康</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+        <p className="workbench-lede">
           {LOCAL_MODE
             ? '本地 Debug 模式使用内置 10 年 QQQ 数据，不连接 Supabase / Quote Worker。'
             : '检查价格覆盖、业绩缓存、分享安全和计算输入状态。'}
-          </p>
-        </div>
+        </p>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

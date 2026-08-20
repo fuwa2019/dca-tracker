@@ -228,14 +228,14 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
   );
 }
 
-function PageIntro({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {
+/**
+ * The shell's tab row carries page identity now, so a route opens with its
+ * explanatory line and its actions, not with a banner.
+ */
+function PageIntro({ description, action }: { eyebrow?: string; title?: string; description: string; action?: ReactNode }) {
   return (
     <header className="workbench-intro">
-      <div>
-        <div className="workbench-eyebrow">{eyebrow}</div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{description}</p>
-      </div>
+      <p className="workbench-lede">{description}</p>
       {action}
     </header>
   );

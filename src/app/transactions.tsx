@@ -37,13 +37,9 @@ export function TransactionsPage() {
   return (
     <div className="workbench-page">
       <header className="workbench-intro">
-        <div>
-          <div className="workbench-eyebrow">Ledger</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">账本与导入</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            所有交易和现金事件都先经过预览、去重和对账，再进入组合计算。
-          </p>
-        </div>
+        <p className="workbench-lede">
+          所有交易和现金事件都先经过预览、去重和对账，再进入组合计算。
+        </p>
         <div className="flex flex-wrap gap-2">
           <Dialog open={adding} onOpenChange={setAdding}>
             <DialogTrigger asChild>

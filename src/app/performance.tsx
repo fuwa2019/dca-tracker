@@ -77,10 +77,8 @@ export function PerformancePage() {
     <div className="workbench-page space-y-5">
       <header className="workbench-intro">
         <div className="max-w-3xl">
-          <div className="workbench-eyebrow">Performance</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">绩效与对账</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">{reportLead}</p>
-          <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
+          <p className="workbench-lede">{reportLead}</p>
+          <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
             <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
               <CalendarDays className="h-3.5 w-3.5" />
               {usesTradingDays ? `${tradingCalendar} 交易日` : '日历日'}

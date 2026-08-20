@@ -124,8 +124,18 @@ accessibility probes, and updates this document with what actually landed.
      red, and the three chart strokes that borrowed `--brand` now use
      `--chart-1`. axe reports zero violations across eight routes x
      desktop/390px x light/dark (32 scans).
-   - **1b next**: icon rail, pill tab groups, toolbar row, and removing the
-     per-route serif title block.
+   - **1b landed 2026-08-20**: the labelled sidebar became a 70px icon rail
+     (200px when expanded, which is now the opt-in state), page identity moved
+     from per-route banners into a pill tab group in the toolbar row, and the
+     route name survives as a single `sr-only` `h1` in the shell.
+     The rail switches sections (分析 / 账本 / 维护) and the tabs switch views
+     inside one, so the two never repeat a name. Every route's banner block is
+     replaced by a `workbench-lede` line plus its actions.
+     Re-verified: axe 0 violations over 32 scans, every Tab stop interactive
+     with a visible ring on all five private routes, reduced motion still
+     opacity-only (the 2px settle measured on `/exposure` is data arriving —
+     nothing changes at all between 2.5s and 7.5s), 0 page overflow at 390px
+     and 320px, and no interactive target under 24x24.
 
 ### AA divergences from the reference values (1a)
 

@@ -157,11 +157,7 @@ export function SettingsPage() {
   return (
     <div className="workbench-page max-w-3xl space-y-5">
       <header className="workbench-intro">
-        <div>
-          <div className="workbench-eyebrow">Settings</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">设置</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">管理目标参数、成本口径、基准、自选和隐私分享。</p>
-        </div>
+        <p className="workbench-lede">管理目标参数、成本口径、基准、自选和隐私分享。</p>
       </header>
       <Card>
         <CardHeader className="pb-3">

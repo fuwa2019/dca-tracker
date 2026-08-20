@@ -224,19 +224,64 @@
 }
 
 @layer components {
+  /* Pill tab group — the reference puts page identity here, not in a banner. */
+  .tab-pills {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 0.125rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--surface-elevated));
+    padding: 0.1875rem;
+  }
+
+  .tab-pill {
+    display: inline-flex;
+    min-width: 0;
+    height: 2rem;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: calc(var(--radius) - 2px);
+    padding-inline: 0.625rem;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: color 120ms ease, background-color 120ms ease;
+  }
+
+  .tab-pill:hover {
+    color: hsl(var(--foreground));
+  }
+
+  .tab-pill-active {
+    background: hsl(var(--background));
+    box-shadow: 0 1px 2px hsl(var(--elevation) / 0.08);
+    color: hsl(var(--foreground));
+    outline: 1px solid hsl(var(--border));
+  }
+
   .workbench-page {
     width: min(100%, 1400px);
     margin-inline: auto;
-    padding: 1.25rem 1rem 2.5rem;
+    padding: 1rem 1rem 2.5rem;
   }
 
   .workbench-intro {
     display: flex;
-    align-items: flex-end;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
     border-bottom: 1px solid hsl(var(--border));
-    padding-bottom: 1.25rem;
+    padding-bottom: 0.875rem;
+  }
+
+  .workbench-lede {
+    max-width: 46rem;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+    line-height: 1.5rem;
   }
 
   .workbench-eyebrow {
