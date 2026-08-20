@@ -16,10 +16,12 @@ Two evidence channels, both read-only:
   captures (`wealthfolio-t02-review-activities`, `t06-holdings`,
   `t07-performance`, `t03-*`), all produced with synthetic data.
 
-The Overview tab was captured live on 2026-08-20 (window-only capture of the
-running app, after dismissing its update prompt with Escape — the pinned study
-version was not upgraded). The settings surfaces are still uncaptured, so any
-future mapping for them stays inference.
+The Overview tab and the Settings surface were captured live on 2026-08-20 —
+window-only captures of the running app, after dismissing its update prompt
+with Escape (the pinned study version was **not** upgraded). Settings was
+reached through the app's own menu bar entry, since the webview exposes no
+clickable accessibility elements. Only the General settings pane was captured;
+the sibling panes (Appearance, Accounts, …) are still uncaptured.
 
 ## 1. Token layer
 
@@ -111,6 +113,28 @@ takeover layout, and per-row fixing do not.
 Ours today: a `StatCard` grid, a six-stop range control, a single benchmark
 toggle, and the NAV bridge card. The bridge card stays — it has no Wealthfolio
 counterpart and it is what the calculation work bought us.
+
+### Settings
+
+The one surface that keeps a page title: `Settings` as a heading with a hairline
+under it, then a two-column layout.
+
+- Left: a navigation column, not tabs — icon+label rows grouped under uppercase
+  micro-labels (PREFERENCES / FINANCE / DATA / CONNECTIONS / EXTENSIONS /
+  ABOUT), the active row a filled rounded pill.
+- Right: a section title with a one-line description, then a stack of cards.
+  Each card is one concern: bold card title, muted description line, then the
+  controls; a card can carry its own primary action, either inline under the
+  controls (an ink `Save Currency` pill) or right-aligned in the card header
+  (`⊕ Add rate`).
+- Field pattern inside a card: small bold label, muted description line, then
+  the control; sibling fields are separated by a hairline rather than by
+  spacing alone.
+
+Ours today: one `max-w-3xl` column of cards with no navigation, and mixed
+label/description treatment. Mapping it would mean adding the grouped left
+column and standardizing the field pattern — a separate slice, not yet planned
+in the order below.
 
 ## 3. Delivery order
 
