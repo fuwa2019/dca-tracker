@@ -268,11 +268,23 @@ one personal ETF portfolio.
   eight routes x desktop/390px x light/dark (32 scans), every Tab stop
   interactive with a visible focus ring, reduced motion still opacity-only,
   0 page overflow at 390px and 320px, no target under 24x24.
-- Remaining phases, in order: ledger tables (row anatomy, two-line numeric
-  cells, filter chips, row overflow menu, column chooser), the import takeover
-  with its stepper and per-row fixing, then the overview — the last one needs
-  one more live capture of Wealthfolio's Overview tab, which was never
-  screenshotted in the 2026-08-18 run.
+- **Phases 2-4 landed and deployed 2026-08-20**: ledger tables (`2e2dc7f`),
+  the import takeover (`54e06bb`), and the overview hero/full-bleed curve
+  (`8ff006f`). Each shipped on its own branch with the CI-equivalent set plus
+  the accessibility probes; axe stayed at zero violations across 32 scans for
+  every one of them, and the import takeover was additionally audited with the
+  dialog open (focus never escapes across 30 Tab presses).
+- Reference captures: the Overview tab and the General settings pane were
+  captured live on 2026-08-20 with window-only screen captures, after
+  dismissing the app's update prompt with Escape — the pinned v3.6.2 study
+  build was **not** upgraded. Settings had to be opened through the app's own
+  menu bar because its webview exposes no clickable accessibility elements.
+  The captures live in the session scratchpad, not in the repository.
+- Open follow-ups, both recorded in `docs/design/wealthfolio-ui-teardown.md`:
+  per-row inline fixing in the import flow (it changes what gets written, so it
+  is a feature slice rather than a restyle), and a settings slice for the
+  grouped navigation column and the field pattern. The sibling settings panes
+  (Appearance, Accounts, …) are still uncaptured.
 - No calculation, import, share-contract, worker or database change came out of
   either slice.
 
@@ -409,7 +421,20 @@ one personal ETF portfolio.
 
 ## Production State
 
-- 2026-08-20 UI-alignment release: `master` was pushed to `origin/master` at
+- 2026-08-20 UI-alignment phases 2-4 release: `master` was pushed to
+  `origin/master` at `c52609e` with explicit user authorization, and Pages
+  rebuilt within about 30 seconds. Canonical
+  `https://dca-tracker-git.pages.dev` now serves `index-B1BhOvIP.js` with
+  `index-Gpbkcydp.css`. Post-deploy checks: the live stylesheet carries the
+  ledger table's `720px` minimum width and the overview hero's `34px` size
+  alongside the Flexoki paper value; `/`, `/performance`, `/transactions`,
+  `/transactions/all`, `/health`, `/settings` and an invalid `/share/<token>`
+  all return 200; the production login route renders with no console output.
+  Note for the next release check: the Pages edge served a cached `index.html`
+  with the previous bundle name for a few minutes after the deploy — verify
+  with a cache-busting query parameter before concluding a deploy has not
+  landed.
+- 2026-08-20 UI-alignment shell release: `master` was pushed to `origin/master` at
   `d094c5b` with explicit user authorization (deploy after phase 1b), and the
   Git-backed Pages project rebuilt automatically within about 15 seconds.
   Canonical `https://dca-tracker-git.pages.dev` now serves bundle
