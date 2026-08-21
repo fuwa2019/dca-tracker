@@ -322,8 +322,34 @@ a cache-busting query parameter.
 
 **Routine note:** the one-shot routine `trig_01FCaLBbkbvvddzviBCN2zu2` reported
 a `next_run_at` of 2026-08-21T10:28Z after being manually re-run, despite being
-a `run_once` trigger with `enabled: false`. If it fires again and opens a
-duplicate PR, disable it at https://claude.ai/code/routines.
+a `run_once` trigger with `enabled: false`. That time has since passed with no
+run — `last_fired_at` stayed at the manual 05:58Z run and `list_runs` shows only
+two sessions — so the field is stale display state, not a pending schedule. The
+routine was explicitly disabled again on 2026-08-21. The API cannot delete a
+routine; deleting requires the web UI at https://claude.ai/code/routines.
+
+**Cloud-routine lessons, for the next time one is scheduled:**
+
+1. **Check GitHub write access before scheduling.** The first run did the whole
+   job, passed every check, committed on its branch — and then could not push:
+   `403 Resource not accessible by integration`. The claude.ai "GitHub
+   Integration" connector is read-oriented (attach files, list repos, browse
+   branches); pushing needs the **Claude GitHub App** installed on the
+   repository. It was installed on 2026-08-21 for `dca-tracker` only. Its
+   declared permission set is wider than this use needs — it includes write on
+   workflows and repository hooks — so remove the installation when cloud
+   routines are no longer wanted.
+2. **A cloud sandbox outlives the run.** The stranded session was still
+   `active / idle` more than four hours after its last event. When a run
+   finishes but cannot deliver, fix the blocker and try to reach that session
+   again before rerunning from scratch — the first run's verified work was
+   discarded needlessly. Note that `ListAgents` did not surface it, so there may
+   be no way to message it from a local session; check before assuming.
+3. **State what a cloud session cannot verify, in the prompt.** The routine was
+   told it has no browser tooling and must not claim visual or accessibility
+   verification. It complied, listed the gaps, and the very first item on that
+   list turned out to be a real serious-severity defect (`aria-required-children`
+   on the inline fix form). The local probe pass is not optional.
 
 - Delivered by a scheduled cloud routine, reviewed and verified locally, then
   merged as PR #2 and deployed on 2026-08-21 (`1d475cf` + `4b21b4b`): the last
