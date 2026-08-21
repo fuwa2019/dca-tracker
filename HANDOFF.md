@@ -1,6 +1,6 @@
 # Current Handoff
 
-Updated: 2026-08-20
+Updated: 2026-08-21
 
 ## Current Goal
 
@@ -575,14 +575,35 @@ routine; deleting requires the web UI at https://claude.ai/code/routines.
 
 ## Next Steps
 
-1. Treat any future reduced-motion emulation or native focus audit as
-   supplemental research; the current study records its unavailable surfaces.
-2. Keep the synthetic-file import smoke test separate from real brokerage data.
-   Use `VITE_LEDGER_IMPORT_V2=0` only as an explicit compatibility rollback;
-   the old Schwab RPC remains available.
-3. The weighted scorecard adopts Wealthfolio as the main interaction
-   reference and keeps Portfolio Performance as the calculation reference;
-   do not treat this research decision as a production release authorization.
+Nothing is half-finished: `master` is clean, synced with `origin/master` at
+`bde260b`, and everything through the inline row fix is released. Pick up with
+whichever of these the owner wants.
+
+1. **The one open UI slice: Settings.** `docs/design/wealthfolio-ui-teardown.md`
+   describes the target — a grouped left navigation column (PREFERENCES /
+   FINANCE / DATA / …) beside a stack of concern-per-card panels, with a
+   consistent label → description → control field pattern. Only the reference's
+   General pane was captured; Appearance, Accounts and the rest are not, so a
+   faithful mapping needs one more live pass first. Reach Settings through
+   Wealthfolio's own **menu bar** (`Wealthfolio → Settings…`) — its webview
+   exposes no clickable accessibility elements, so coordinate clicks fail.
+   The pinned study build is v3.6.2; dismiss its update prompt with Escape and
+   do not upgrade it.
+2. **Longer-standing gates, unchanged by the UI work:** the `ledger_twr_v2`
+   switch still needs its B1/B2 preconditions (exact PP quote-history
+   reconciliation, full re-import, V1 regression, rollback path), and the V2
+   share cache with its privacy snapshot (D1/D2) is still the only fully
+   missing contract row in `requirements-audit.md`.
+3. **Accessibility follow-ups that remain open:** a screen-reader pass, WCAG
+   2.4.11 focus-not-obscured, and the cloud-only routes (`/cashflows`, a
+   populated `/share/<token>`, the authenticated login flow). Everything
+   locally renderable is at zero axe violations; see
+   `docs/accessibility/2026-08-20-wcag-route-audit.md`.
+4. **Standing constraints:** keep the synthetic-file import smoke test separate
+   from real brokerage data; `VITE_LEDGER_IMPORT_V2=0` is an explicit
+   compatibility rollback only; and the competitive scorecard's choice of
+   Wealthfolio as the interaction reference is a research decision, never a
+   production release authorization. Deploys are authorized one at a time.
 ## Prior SMH Follow-up
 
 1. Verify the authenticated `POST /api/etf-holdings/refresh` with a synthetic
