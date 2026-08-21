@@ -38,13 +38,18 @@ import { buildReconciliation } from '@/lib/import/common.ts';
 import {
   countLedgerEventKinds,
   detectPortfolioImportAdapter,
+  isRowFixable,
+  rebuildPreviewAfterRowFix,
   retainedRowReasons,
+  rowFieldEdits,
   summarizeImportReceipt,
   type ImportMode,
   type ImportPreview,
   type ImportPreviewRow,
   type ImportReconciliation,
+  type ImportRowField,
   type ImportSource,
+  type PortfolioImportAdapter,
 } from '@/lib/import/index.ts';
 import type {
   Database,
@@ -112,6 +117,17 @@ export function PortfolioImportTools({ transactions }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [step, setStep] = useState<ImportStep>('upload');
+  const [fixingRow, setFixingRow] = useState<number | null>(null);
+  const [fixDraft, setFixDraft] = useState<Partial<Record<ImportRowField, string>>>({});
+
+  // Re-detected from the parsed text rather than kept in state: it is only
+  // needed to re-run one row through the adapter's own rules when the user
+  // fixes it, the same re-detection `rebuildPreview` already does on a mode
+  // change.
+  const activeAdapter: PortfolioImportAdapter | null = useMemo(() => {
+    if (!rawText || !source) return null;
+    return detectPortfolioImportAdapter({ text: rawText, fileName: fileInfo?.name });
+  }, [rawText, source, fileInfo?.name]);
 
   const existingKeys = useMemo(() => {
     const keys = new Set<string>();
@@ -148,6 +164,8 @@ export function PortfolioImportTools({ transactions }: Props) {
     setNotice(null);
     setParsing(false);
     setStep('upload');
+    setFixingRow(null);
+    setFixDraft({});
   }
 
   function rebuildPreview(nextMode: ImportMode) {
@@ -162,6 +180,33 @@ export function PortfolioImportTools({ transactions }: Props) {
       { mode: nextMode, existing_import_keys: keysForSource(source) },
     );
     setPreview(applyAssetPolicy(nextPreview, classifications, classificationOverrides));
+    setFixingRow(null);
+    setFixDraft({});
+  }
+
+  function startRowFix(sourceIndex: number) {
+    setFixingRow(sourceIndex);
+    setFixDraft({});
+  }
+
+  function cancelRowFix() {
+    setFixingRow(null);
+    setFixDraft({});
+  }
+
+  function commitRowFix(sourceIndex: number) {
+    if (!preview || !source || !activeAdapter) return;
+    const rebuilt = rebuildPreviewAfterRowFix(
+      activeAdapter,
+      preview,
+      sourceIndex,
+      fixDraft,
+      { mode, existing_import_keys: keysForSource(source) },
+    );
+    if (!rebuilt) return;
+    setPreview(applyAssetPolicy(rebuilt, classifications, classificationOverrides));
+    setFixingRow(null);
+    setFixDraft({});
   }
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -468,7 +513,16 @@ export function PortfolioImportTools({ transactions }: Props) {
                   <StatusCounts preview={preview} />
                   <EventKindSummary rows={preview.rows} />
                   <ReconciliationSummary reconciliation={preview.reconciliation} />
-                  <ImportRows rows={preview.rows} />
+                  <ImportRows
+                    rows={preview.rows}
+                    adapter={activeAdapter}
+                    fixingSourceIndex={fixingRow}
+                    fixDraft={fixDraft}
+                    onStartFix={startRowFix}
+                    onCancelFix={cancelRowFix}
+                    onFieldChange={(field, value) => setFixDraft((prev) => ({ ...prev, [field]: value }))}
+                    onApplyFix={commitRowFix}
+                  />
                 </>
               )}
 
@@ -629,7 +683,7 @@ function ImportProblemBanner({
         </p>
         <p className="mt-0.5 text-xs leading-5">
           {total} 行中 {importable} 行可以导入。
-          {tone === 'block' ? '被阻止的行保留原因，不做静默修正——修好源文件再重新选择。' : '这些行仍会导入，但语义可能被降级。'}
+          {tone === 'block' ? '被阻止的行保留原因，不做静默修正——可在下方逐行核对中就地修正，或修好源文件后重新选择。' : '这些行仍会导入，但语义可能被降级。'}
         </p>
         <ul className="mt-1.5 space-y-1 text-xs leading-5">
           {(tone === 'block' ? errors : warnings).slice(0, 6).map((message) => (
@@ -731,7 +785,17 @@ function ReconciliationMetric({ label, value }: { label: string; value: string }
   );
 }
 
-function ImportRows({ rows }: { rows: ImportPreviewRow[] }) {
+interface RowFixProps {
+  adapter: PortfolioImportAdapter | null;
+  fixingSourceIndex: number | null;
+  fixDraft: Partial<Record<ImportRowField, string>>;
+  onStartFix: (sourceIndex: number) => void;
+  onCancelFix: () => void;
+  onFieldChange: (field: ImportRowField, value: string) => void;
+  onApplyFix: (sourceIndex: number) => void;
+}
+
+function ImportRows({ rows, adapter, fixingSourceIndex, fixDraft, onStartFix, onCancelFix, onFieldChange, onApplyFix }: { rows: ImportPreviewRow[] } & RowFixProps) {
   return (
     <section className="min-w-0 space-y-2" aria-labelledby="portfolio-import-rows-title">
       <div className="flex items-center justify-between gap-2">
@@ -739,7 +803,7 @@ function ImportRows({ rows }: { rows: ImportPreviewRow[] }) {
         <span className="text-xs text-muted-foreground">{rows.length} 行</span>
       </div>
       <div
-        className="max-h-[18rem] min-w-0 overflow-auto rounded-lg border border-border"
+        className="max-h-[24rem] min-w-0 overflow-auto rounded-lg border border-border"
         tabIndex={0}
         role="region"
         aria-label="逐行结果，可滚动"
@@ -752,34 +816,117 @@ function ImportRows({ rows }: { rows: ImportPreviewRow[] }) {
             <span role="columnheader">归一化值</span>
             <span role="columnheader">说明</span>
           </div>
-          {rows.map((row) => <ImportRow key={`${row.source_index}-${row.action}-${row.reason ?? ''}`} row={row} />)}
+          {rows.map((row) => (
+            <ImportRow
+              key={`${row.source_index}-${row.action}-${row.reason ?? ''}`}
+              row={row}
+              fixable={isRowFixable(adapter, row)}
+              editing={fixingSourceIndex === row.source_index}
+              fixDraft={fixDraft}
+              onStartFix={onStartFix}
+              onCancelFix={onCancelFix}
+              onFieldChange={onFieldChange}
+              onApplyFix={onApplyFix}
+            />
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-function ImportRow({ row }: { row: ImportPreviewRow }) {
+function ImportRow({ row, fixable, editing, fixDraft, onStartFix, onCancelFix, onFieldChange, onApplyFix }: {
+  row: ImportPreviewRow;
+  fixable: boolean;
+  editing: boolean;
+  fixDraft: Partial<Record<ImportRowField, string>>;
+  onStartFix: (sourceIndex: number) => void;
+  onCancelFix: () => void;
+  onFieldChange: (field: ImportRowField, value: string) => void;
+  onApplyFix: (sourceIndex: number) => void;
+}) {
   const meta = STATUS_META[row.status];
   const Icon = meta.icon;
   const eventKind = row.item ? ('side' in row.item ? row.item.side : row.item.event_type) : null;
   return (
-    <div role="row" className="grid grid-cols-[3.25rem_minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 border-b border-border px-3 py-2.5 last:border-b-0 sm:grid-cols-[3.5rem_8rem_5rem_minmax(12rem,1fr)_minmax(10rem,1fr)] sm:items-center sm:gap-2">
-      <span role="cell" className="tnum text-muted-foreground">{row.source_index || '文件'}</span>
-      <span role="cell" className="min-w-0 truncate" title={row.action}>{row.action || '未知'}</span>
-      <span role="cell"><StatusBadge tone={meta.tone} dot>{meta.label}</StatusBadge></span>
-      <span role="cell" className="col-span-2 flex min-w-0 flex-wrap items-center gap-1.5 leading-5 text-muted-foreground sm:col-span-1">
-        {eventKind && (
-          <StatusBadge tone={ledgerEventChip(eventKind).tone} className="shrink-0">
-            {ledgerEventChip(eventKind).label}
-          </StatusBadge>
-        )}
-        <span className="min-w-0 break-words tnum sm:truncate" title={itemSummary(row)}>{itemSummary(row)}</span>
-      </span>
-      <span role="cell" className={cn('col-span-2 min-w-0 break-words leading-5 sm:col-span-1', row.status === 'block' ? 'text-loss' : 'text-muted-foreground')}>
-        {row.reason ?? '可写入'}
-      </span>
-      <Icon className="sr-only" aria-hidden="true" />
+    <div className="border-b border-border last:border-b-0">
+      <div role="row" className="grid grid-cols-[3.25rem_minmax(0,1fr)_auto] gap-x-2 gap-y-1.5 px-3 py-2.5 sm:grid-cols-[3.5rem_8rem_5rem_minmax(12rem,1fr)_minmax(10rem,1fr)] sm:items-center sm:gap-2">
+        <span role="cell" className="tnum text-muted-foreground">{row.source_index || '文件'}</span>
+        <span role="cell" className="min-w-0 truncate" title={row.action}>{row.action || '未知'}</span>
+        <span role="cell"><StatusBadge tone={meta.tone} dot>{meta.label}</StatusBadge></span>
+        <span role="cell" className="col-span-2 flex min-w-0 flex-wrap items-center gap-1.5 leading-5 text-muted-foreground sm:col-span-1">
+          {eventKind && (
+            <StatusBadge tone={ledgerEventChip(eventKind).tone} className="shrink-0">
+              {ledgerEventChip(eventKind).label}
+            </StatusBadge>
+          )}
+          <span className="min-w-0 break-words tnum sm:truncate" title={itemSummary(row)}>{itemSummary(row)}</span>
+        </span>
+        <span role="cell" className={cn('col-span-2 min-w-0 break-words leading-5 sm:col-span-1', row.status === 'block' ? 'text-loss' : 'text-muted-foreground')}>
+          {row.reason ?? '可写入'}
+          {fixable && !editing && (
+            <>
+              {' '}
+              <button
+                type="button"
+                onClick={() => onStartFix(row.source_index)}
+                className="font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                修正此行
+              </button>
+            </>
+          )}
+        </span>
+        <Icon className="sr-only" aria-hidden="true" />
+      </div>
+      {editing && <RowFixForm row={row} draft={fixDraft} onFieldChange={onFieldChange} onCancel={onCancelFix} onApply={() => onApplyFix(row.source_index)} />}
+    </div>
+  );
+}
+
+/**
+ * The inline fix form for one blocked row. Every field starts pre-filled
+ * with the row's original source text (never blank), so applying without
+ * touching anything just re-runs the same validation that blocked it. The
+ * original text stays visible under each edited field — a fix is always a
+ * visible edit on top of the source row, never a silent replacement of it.
+ */
+function RowFixForm({ row, draft, onFieldChange, onCancel, onApply }: {
+  row: ImportPreviewRow;
+  draft: Partial<Record<ImportRowField, string>>;
+  onFieldChange: (field: ImportRowField, value: string) => void;
+  onCancel: () => void;
+  onApply: () => void;
+}) {
+  const edits = rowFieldEdits(row, draft);
+  return (
+    <div className="space-y-2.5 border-t border-dashed border-border bg-surface-elevated px-3 py-3">
+      <p className="text-xs text-muted-foreground">
+        修正第 {row.source_index} 行：{row.reason}。修改下方字段后应用，原始值始终保留在旁供核对。
+      </p>
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        {edits.map(({ field, label, original, current }) => (
+          <div key={field} className="min-w-0 space-y-1">
+            <Label htmlFor={`row-fix-${row.source_index}-${field}`} className="text-xs">{label}</Label>
+            <input
+              id={`row-fix-${row.source_index}-${field}`}
+              type="text"
+              value={current}
+              onChange={(event) => onFieldChange(field, event.target.value)}
+              className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            {current !== original && (
+              <p className="truncate text-[11px] text-muted-foreground" title={original}>原始值：{original || '（空）'}</p>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>取消</Button>
+        <Button type="button" size="sm" onClick={onApply}>
+          <Check className="h-3.5 w-3.5" />应用修正
+        </Button>
+      </div>
     </div>
   );
 }

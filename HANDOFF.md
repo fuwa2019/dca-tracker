@@ -280,13 +280,51 @@ one personal ETF portfolio.
   build was **not** upgraded. Settings had to be opened through the app's own
   menu bar because its webview exposes no clickable accessibility elements.
   The captures live in the session scratchpad, not in the repository.
-- Open follow-ups, both recorded in `docs/design/wealthfolio-ui-teardown.md`:
-  per-row inline fixing in the import flow (it changes what gets written, so it
-  is a feature slice rather than a restyle), and a settings slice for the
-  grouped navigation column and the field pattern. The sibling settings panes
-  (Appearance, Accounts, …) are still uncaptured.
+- Open follow-up recorded in `docs/design/wealthfolio-ui-teardown.md`: a
+  settings slice for the grouped navigation column and the field pattern. The
+  sibling settings panes (Appearance, Accounts, …) are still uncaptured.
 - No calculation, import, share-contract, worker or database change came out of
   either slice.
+
+## Import Inline Row Fixing (2026-08-21)
+
+- Delivered by a scheduled cloud routine on branch `import/inline-row-fix`
+  (not yet merged): the last open item from the import takeover slice above,
+  "per-row inline fixing", is implemented and PR'd.
+- `src/lib/import/rowFix.ts` is a new pure module: a row is fixable only when
+  it failed the adapter's own per-row parsing (`category === 'error'`) and the
+  adapter captured `source_fields` for it. `src/lib/import/tradingview.ts` and
+  `src/lib/import/ibkr.ts` were refactored so their full-file loop and the new
+  `adapter.reparseRow` both call the same per-row parsing function — no second
+  validation path. `addDuplicateOrdinals` moved from being duplicated in both
+  adapters into `common.ts`. Schwab's legacy eight-column parser keeps no
+  per-field source capture, so its blocked rows stay source-file-only,
+  honestly, rather than faking support.
+- A fix re-parses the row and hands the whole row list back into the existing
+  `buildImportPreview`, so status counts, reconciliation and the four-number
+  receipt are recomputed by the one pipeline. `source_fields` is set once at
+  parse time and never overwritten, so the review step always shows the
+  original source text beside an edited field. A fix whose corrected identity
+  would collide with another row already in the file is refused (kept
+  blocked, reason naming the collision) instead of reaching the RPC with a
+  duplicate import key.
+- `PortfolioImportTools.tsx` gained the fix affordance and form in the
+  逐行核对 step only; no other step, the takeover layout, or the stepper
+  changed.
+- Verified on the branch after `npm ci` (root plus both workers): `test:finance`,
+  `test:portfolio-import`, `test:csv-import`, `test:competitive-fixture`,
+  `test:ui`, `test:email-reminder`, `test:quote-status`, `typecheck`, `build`,
+  and `git diff --check`. New assertions cover the pure module directly
+  (fixing the synthetic TradingView fixture's one blocked row, an IBKR
+  malformed-date fix, the collision refusal, and Schwab's honest
+  non-fixability) plus source assertions in `verify-ui-behavior.mjs` for the
+  component wiring.
+- Not verified from the cloud session (no browser tool there): axe scans,
+  takeover focus-trap with the fix form open, 390px overflow, and touch-target
+  size for the new inputs/buttons. These need a local pass per
+  `docs/accessibility/probes/README.md` before this is treated as visually or
+  accessibility-verified.
+- No database, worker, share-contract, or dependency change; no migration.
 
 ## Session Notes (2026-08-20 handoff)
 

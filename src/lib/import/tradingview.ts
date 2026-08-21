@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import {
+  addDuplicateOrdinals,
   buildImportPreview,
   fixedDecimal,
   makeImportKey,
@@ -15,6 +16,7 @@ import {
 import type {
   ImportDetection,
   ImportInput,
+  ImportRowField,
   LedgerCashEvent,
   LedgerTrade,
   NormalizedLedger,
@@ -46,15 +48,80 @@ function actionKind(value: string): 'buy' | 'sell' | 'dividend' | 'interest' | '
   return null;
 }
 
-function addDuplicateOrdinals(items: Array<LedgerTrade | LedgerCashEvent>): void {
-  const counts = new Map<string, number>();
-  for (const item of items) {
-    const base = item.import_key;
-    const ordinal = (counts.get(base) ?? 0) + 1;
-    counts.set(base, ordinal);
-    item.duplicate_ordinal = ordinal;
-    item.import_key = `${base}|${ordinal}`;
+type TradingViewFields = Partial<Record<ImportRowField, string>>;
+
+/**
+ * Parses one row from its six conceptual fields. Used both by the full-file
+ * loop below and by `reparseRow`, which re-runs this on a single row's
+ * corrected values so an inline fix goes through the exact same rules.
+ */
+function parseTradingViewRow(sourceIndex: number, fields: TradingViewFields): ParsedImportRow {
+  const symbol = normalizeTradingViewSymbol(fields.symbol ?? '');
+  const actionText = String(fields.action ?? '').trim();
+  const kind = actionKind(actionText);
+  const date = parseDate(fields.date ?? '');
+  const quantity = parseDecimal(fields.quantity, 10);
+  const price = parseDecimal(fields.price, 12);
+  const commission = parseDecimal(fields.fees, 10) ?? '0';
+  const errors: string[] = [];
+  if (!date) errors.push('日期无效');
+  if (!kind) errors.push('操作类型不支持');
+  if (!symbol.currency || symbol.currency !== 'USD') errors.push('仅支持可核对为 USD 的行');
+  if (!kind) {
+    return { source_index: sourceIndex, action: actionText, category: 'error', default_status: 'block', reason: errors.join('；') };
   }
+  if (kind === 'buy' || kind === 'sell') {
+    if (!symbol.ticker) errors.push('交易缺少证券代码');
+    if (!quantity || Number(quantity) <= 0) errors.push('交易数量必须为正数');
+    if (!price || Number(price) <= 0) errors.push('成交价必须为正数');
+    if (Number(commission) < 0) errors.push('佣金不能为负数');
+    if (errors.length > 0 || !date || !quantity || !price) {
+      return { source_index: sourceIndex, action: actionText, category: 'error', default_status: 'block', reason: errors.join('；') };
+    }
+    const amount = signedTradeAmount(kind, quantity, price, commission);
+    const trade: LedgerTrade = {
+      source: 'tradingview',
+      source_index: sourceIndex,
+      effective_date: date,
+      side: kind,
+      ticker: symbol.ticker,
+      shares: fixedDecimal(quantity, 10),
+      price: fixedDecimal(price, 12),
+      fees_usd: fixedDecimal(commission, 10),
+      usd_amount: amount,
+      source_currency: symbol.currency,
+      source_action: actionText,
+      source_description: '',
+      duplicate_ordinal: 0,
+      import_key: makeImportKey(['tradingview', date, kind, symbol.ticker, quantity, price, commission]),
+    };
+    return { source_index: sourceIndex, action: actionText, category: 'trade', default_status: 'import', item: trade };
+  }
+
+  if (!quantity) errors.push('现金事件金额无效');
+  if ((kind === 'broker_deposit' || kind === 'dividend' || kind === 'interest') && quantity && Number(quantity) <= 0) {
+    errors.push('该现金事件金额必须为正数');
+  }
+  if (kind === 'broker_withdrawal' && quantity && Number(quantity) >= 0) errors.push('提款金额必须为负数');
+  if ((kind === 'tax' || kind === 'fee') && quantity && Number(quantity) >= 0) errors.push('税费金额必须为负数');
+  if (errors.length > 0 || !date || !quantity) {
+    return { source_index: sourceIndex, action: actionText, category: 'error', default_status: 'block', reason: errors.join('；') };
+  }
+  const cashEvent: LedgerCashEvent = {
+    source: 'tradingview',
+    source_index: sourceIndex,
+    effective_date: date,
+    event_type: kind,
+    ...(symbol.ticker ? { ticker: symbol.ticker } : {}),
+    source_currency: symbol.currency,
+    source_amount: fixedDecimal(quantity, 10),
+    usd_amount: fixedDecimal(quantity, 10),
+    source_action: actionText,
+    source_description: '',
+    duplicate_ordinal: 0,
+    import_key: makeImportKey(['tradingview', date, actionText, symbol.ticker, quantity, symbol.currency]),
+  };
+  return { source_index: sourceIndex, action: actionText, category: 'cash_event', default_status: 'import', item: cashEvent };
 }
 
 function parseInput(input: ImportInput): TradingViewParsedImport {
@@ -99,78 +166,18 @@ function parseInput(input: ImportInput): TradingViewParsedImport {
     const sourceIndex = index + 1;
     const row = table.rows[index];
     if (row.every((cell) => cell.trim() === '')) continue;
-    const symbol = normalizeTradingViewSymbol(row[0] ?? '');
-    const actionText = String(row[1] ?? '').trim();
-    const kind = actionKind(actionText);
-    const date = parseDate(row[5] ?? '');
-    const quantity = parseDecimal(row[2], 10);
-    const price = parseDecimal(row[3], 12);
-    const commission = parseDecimal(row[4], 10) ?? '0';
-    const errors: string[] = [];
-    if (!date) errors.push('日期无效');
-    if (!kind) errors.push('操作类型不支持');
-    if (!symbol.currency || symbol.currency !== 'USD') errors.push('仅支持可核对为 USD 的行');
-    if (!kind) {
-      rows.push({ source_index: sourceIndex, action: actionText, category: 'error', default_status: 'block', reason: errors.join('；') });
-      continue;
-    }
-    if (kind === 'buy' || kind === 'sell') {
-      if (!symbol.ticker) errors.push('交易缺少证券代码');
-      if (!quantity || Number(quantity) <= 0) errors.push('交易数量必须为正数');
-      if (!price || Number(price) <= 0) errors.push('成交价必须为正数');
-      if (Number(commission) < 0) errors.push('佣金不能为负数');
-      if (errors.length > 0 || !date || !quantity || !price) {
-        rows.push({ source_index: sourceIndex, action: actionText, category: 'error', default_status: 'block', reason: errors.join('；') });
-        continue;
-      }
-      const amount = signedTradeAmount(kind, quantity, price, commission);
-      const trade: LedgerTrade = {
-        source: 'tradingview',
-        source_index: sourceIndex,
-        effective_date: date,
-        side: kind,
-        ticker: symbol.ticker,
-        shares: fixedDecimal(quantity, 10),
-        price: fixedDecimal(price, 12),
-        fees_usd: fixedDecimal(commission, 10),
-        usd_amount: amount,
-        source_currency: symbol.currency,
-        source_action: actionText,
-        source_description: '',
-        duplicate_ordinal: 0,
-        import_key: makeImportKey(['tradingview', date, kind, symbol.ticker, quantity, price, commission]),
-      };
-      items.push(trade);
-      rows.push({ source_index: sourceIndex, action: actionText, category: 'trade', default_status: 'import', item: trade });
-      continue;
-    }
-
-    if (!quantity) errors.push('现金事件金额无效');
-    if ((kind === 'broker_deposit' || kind === 'dividend' || kind === 'interest') && quantity && Number(quantity) <= 0) {
-      errors.push('该现金事件金额必须为正数');
-    }
-    if (kind === 'broker_withdrawal' && quantity && Number(quantity) >= 0) errors.push('提款金额必须为负数');
-    if ((kind === 'tax' || kind === 'fee') && quantity && Number(quantity) >= 0) errors.push('税费金额必须为负数');
-    if (errors.length > 0 || !date || !quantity) {
-      rows.push({ source_index: sourceIndex, action: actionText, category: 'error', default_status: 'block', reason: errors.join('；') });
-      continue;
-    }
-    const cashEvent: LedgerCashEvent = {
-      source: 'tradingview',
-      source_index: sourceIndex,
-      effective_date: date,
-      event_type: kind,
-      ...(symbol.ticker ? { ticker: symbol.ticker } : {}),
-      source_currency: symbol.currency,
-      source_amount: fixedDecimal(quantity, 10),
-      usd_amount: fixedDecimal(quantity, 10),
-      source_action: actionText,
-      source_description: '',
-      duplicate_ordinal: 0,
-      import_key: makeImportKey(['tradingview', date, actionText, symbol.ticker, quantity, symbol.currency]),
+    const fields: TradingViewFields = {
+      symbol: row[0] ?? '',
+      action: row[1] ?? '',
+      quantity: row[2] ?? '',
+      price: row[3] ?? '',
+      fees: row[4] ?? '',
+      date: row[5] ?? '',
     };
-    items.push(cashEvent);
-    rows.push({ source_index: sourceIndex, action: actionText, category: 'cash_event', default_status: 'import', item: cashEvent });
+    const parsedRow = parseTradingViewRow(sourceIndex, fields);
+    parsedRow.source_fields = fields;
+    if (parsedRow.item) items.push(parsedRow.item);
+    rows.push(parsedRow);
   }
 
   addDuplicateOrdinals(items);
@@ -203,6 +210,13 @@ export const tradingViewImportAdapter: PortfolioImportAdapter<TradingViewParsedI
   audit(input, options) {
     const parsed = parseInput(input);
     return buildImportPreview(parsed, tradingViewImportAdapter.normalize(parsed), options);
+  },
+
+  reparseRow(sourceIndex, fields) {
+    const row = parseTradingViewRow(sourceIndex, fields);
+    row.source_fields = fields;
+    if (row.item) addDuplicateOrdinals([row.item]);
+    return row;
   },
 
   export(ledger) {

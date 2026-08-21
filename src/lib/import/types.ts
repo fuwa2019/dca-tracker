@@ -29,6 +29,13 @@ export interface ImportDetection {
   delimiter?: ',' | '\t';
   header_row?: number;
   warnings: string[];
+  /**
+   * File-level parsing context an adapter's `reparseRow` needs to correctly
+   * re-derive a single row outside the full-file loop (for example, which
+   * source column an amount was read from). Adapter-specific; opaque to the
+   * shared preview and reconciliation code.
+   */
+  context?: Record<string, string>;
 }
 
 export interface LedgerTrade {
@@ -66,6 +73,23 @@ export interface LedgerCashEvent {
 
 export type LedgerItem = LedgerTrade | LedgerCashEvent;
 
+/**
+ * Conceptual per-row field names an adapter can capture from a source row for
+ * inline fixing. Not every adapter uses every field; each source only reads
+ * the subset its own file shape carries.
+ */
+export type ImportRowField =
+  | 'date'
+  | 'action'
+  | 'symbol'
+  | 'quantity'
+  | 'price'
+  | 'fees'
+  | 'amount'
+  | 'usd_amount'
+  | 'currency'
+  | 'description';
+
 export interface ParsedImportRow {
   source_index: number;
   action: string;
@@ -73,6 +97,13 @@ export interface ParsedImportRow {
   default_status: Exclude<ImportRowStatus, 'duplicate'>;
   item?: LedgerItem;
   reason?: string;
+  /**
+   * Raw per-field text as read from the source row, keyed by conceptual
+   * field name. Only adapters that support inline row fixing populate this;
+   * once set it is never overwritten by a fix, so the original source text
+   * stays visible even after the row has been corrected.
+   */
+  source_fields?: Partial<Record<ImportRowField, string>>;
 }
 
 export interface ParsedImport {
@@ -139,4 +170,16 @@ export interface PortfolioImportAdapter<Parsed extends ParsedImport = ParsedImpo
   normalize(parsed: Parsed): NormalizedLedger;
   audit(input: ImportInput, options?: AuditOptions): ImportPreview;
   export?(ledger: NormalizedLedger): string;
+  /**
+   * Re-parses one row from corrected field values, through the exact
+   * per-row rules a full-file parse runs — never a second, parallel
+   * validation path. Adapters that implement this also populate
+   * `source_fields` on every row they produce, which is what makes that row
+   * eligible for the review step's inline fix.
+   */
+  reparseRow?(
+    sourceIndex: number,
+    fields: Partial<Record<ImportRowField, string>>,
+    detection: ImportDetection,
+  ): ParsedImportRow;
 }
