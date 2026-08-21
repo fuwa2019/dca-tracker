@@ -288,8 +288,46 @@ one personal ETF portfolio.
 
 ## Import Inline Row Fixing (2026-08-21)
 
-- Delivered by a scheduled cloud routine on branch `import/inline-row-fix`
-  (not yet merged): the last open item from the import takeover slice above,
+**Local review and verification (the cloud session could not do this part):**
+
+- Code review confirmed the claimed contract: `applyRowFix` always restores the
+  pristine `source_fields`, a colliding fix is refused and the row stays
+  blocked with a reason naming the collision, and the rebuild goes through the
+  existing `buildImportPreview` rather than a parallel path.
+- `rebuildPreviewAfterRowFix` passes `warnings: []`. That is safe today only
+  because both fixable adapters (TradingView, IBKR) always return an empty
+  `ParsedImport.warnings` and keep their file-level notes in
+  `detection.warnings`, which the rebuild carries over. **If a future adapter
+  puts warnings there and becomes fixable, a fix would silently drop them.**
+- Functional test against the synthetic TradingView fixture, three passes:
+  breaking the date keeps the row blocked; a positive withdrawal amount keeps
+  it blocked with a new visible reason (`提款金额必须为负数`), proving the fix
+  re-runs the adapter's real validation instead of bypassing it; a valid
+  `-50` moves 待导入 13 → 14 and 阻止 1 → 0 with the row total unchanged at 14.
+- **One accessibility defect found and fixed** (`4b21b4b`): the fix form was
+  dropped directly into the div-based ARIA table, exposing its inputs and
+  buttons as owned children of `role="table"` (axe `aria-required-children`,
+  serious, WCAG 1.3.1) in all three configurations. Wrapped in a
+  `role="row"` / `role="cell"` pair. After the fix: axe 0 violations at desktop
+  light, desktop dark and 390px with the form open; focus stays inside the
+  takeover across 30 Tab presses; 0 page overflow at 390px; no control under
+  24x24.
+
+**Release:** `master` pushed and Pages rebuilt; the live bundle
+`index-BRboleyj.js` contains the feature's strings (`修正此行`, `原始值`,
+`提款金额必须为负数`) and `/`, `/transactions`, `/performance`, `/settings`
+all return 200. Note for future release checks: the Pages edge can serve a
+cached `index.html` naming the previous bundle for a few minutes — verify with
+a cache-busting query parameter.
+
+**Routine note:** the one-shot routine `trig_01FCaLBbkbvvddzviBCN2zu2` reported
+a `next_run_at` of 2026-08-21T10:28Z after being manually re-run, despite being
+a `run_once` trigger with `enabled: false`. If it fires again and opens a
+duplicate PR, disable it at https://claude.ai/code/routines.
+
+- Delivered by a scheduled cloud routine, reviewed and verified locally, then
+  merged as PR #2 and deployed on 2026-08-21 (`1d475cf` + `4b21b4b`): the last
+  open item from the import takeover slice above,
   "per-row inline fixing", is implemented and PR'd.
 - `src/lib/import/rowFix.ts` is a new pure module: a row is fixable only when
   it failed the adapter's own per-row parsing (`category === 'error'`) and the
