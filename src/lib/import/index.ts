@@ -13,6 +13,15 @@ export {
   type LedgerEventKindCount,
   type LedgerImportReceiptCounts,
 } from './receipt.ts';
+export {
+  IMPORT_ROW_FIELD_LABELS,
+  applyRowFix,
+  isRowFixable,
+  rebuildPreviewAfterRowFix,
+  rowFieldEdits,
+  type RowFieldEdit,
+  type RowFixResult,
+} from './rowFix.ts';
 export { ibkrImportAdapter } from './ibkr.ts';
 export { schwabImportAdapter } from './schwab.ts';
 export { tradingViewImportAdapter } from './tradingview.ts';

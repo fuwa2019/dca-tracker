@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { detectPortfolioImportAdapter, ibkrImportAdapter, schwabImportAdapter, tradingViewImportAdapter } from '../src/lib/import/index.ts';
+import {
+  applyRowFix,
+  detectPortfolioImportAdapter,
+  ibkrImportAdapter,
+  isRowFixable,
+  rebuildPreviewAfterRowFix,
+  rowFieldEdits,
+  schwabImportAdapter,
+  tradingViewImportAdapter,
+} from '../src/lib/import/index.ts';
 
 const fixtureDir = 'docs/research/competitive/2026-08/fixtures';
 const read = (name: string) => readFileSync(`${fixtureDir}/${name}`, 'utf8');
@@ -82,5 +91,77 @@ assert.equal(
 );
 assert.equal(detectPortfolioImportAdapter({ text: ibkrEnglishText })?.source, 'ibkr');
 assert.equal(detectPortfolioImportAdapter({ text: schwabText })?.source, 'schwab');
+
+// Inline row fixing: the fixture carries exactly one blocked TradingView row
+// (a Withdrawal with a non-numeric amount) alongside 13 importable rows.
+const fixablePreview = tradingViewImportAdapter.audit({ text: tradingViewText, fileName: 'tradingview-portfolio.csv' });
+assert.equal(fixablePreview.status_counts.block, 1, 'fixture keeps exactly one blocked row');
+const blockedRow = fixablePreview.rows.find((row) => row.status === 'block');
+assert.ok(blockedRow, 'fixture must produce a blocked row');
+assert.equal(blockedRow!.source_fields?.quantity, 'not-a-number', 'source_fields captures the raw offending value');
+assert.equal(isRowFixable(tradingViewImportAdapter, blockedRow!), true, 'a parse-error TradingView row is fixable');
+assert.equal(isRowFixable(schwabImportAdapter, blockedRow!), false, 'fixability is adapter-specific, not row-only');
+
+const edits = rowFieldEdits(blockedRow!);
+assert.ok(edits.some((edit) => edit.field === 'quantity' && edit.original === 'not-a-number'), 'edit view exposes the original raw text');
+
+const fixedPreview = rebuildPreviewAfterRowFix(
+  tradingViewImportAdapter,
+  fixablePreview,
+  blockedRow!.source_index,
+  { quantity: '-50' },
+  { mode: 'append' },
+);
+assert.ok(fixedPreview, 'a valid correction produces a rebuilt preview');
+assert.equal(fixedPreview!.status_counts.block, 0, 'the fixed row is no longer blocked');
+assert.equal(fixedPreview!.status_counts.import, fixablePreview.status_counts.import + 1, 'the fixed row becomes importable');
+assert.equal(fixedPreview!.rows.length, fixablePreview.rows.length, 'total row count is unchanged by a fix');
+const fixedRow = fixedPreview!.rows.find((row) => row.source_index === blockedRow!.source_index);
+assert.equal(fixedRow?.source_fields?.quantity, 'not-a-number', 'the original source text stays visible after a fix, never overwritten');
+assert.equal((fixedRow?.item as { usd_amount?: string } | undefined)?.usd_amount, '-50.0000000000');
+
+// A fix that reproduces another row's identity is refused, not silently
+// merged: the row stays blocked with a reason naming the collision.
+const collidingRow = fixablePreview.rows.find((row) => row.item && 'side' in row.item && row.item.ticker === 'VGT' && row.item.side === 'buy');
+assert.ok(collidingRow?.item, 'fixture has a VGT buy row to collide with');
+const collisionResult = applyRowFix(tradingViewImportAdapter, fixablePreview, blockedRow!.source_index, {
+  symbol: 'NASDAQ:VGT',
+  action: 'Buy',
+  quantity: (collidingRow!.item as { shares: string }).shares,
+  price: (collidingRow!.item as { price: string }).price,
+  fees: (collidingRow!.item as { fees_usd: string }).fees_usd,
+  date: '2026-01-02 09:01:00',
+});
+assert.equal(collisionResult?.collision_source_index, collidingRow!.source_index, 'a fix reproducing another row is flagged as a collision, not applied');
+assert.equal(collisionResult?.row.default_status, 'block', 'a colliding fix stays blocked rather than reaching the RPC payload');
+assert.equal(collisionResult?.row.source_fields?.quantity, 'not-a-number', 'the pristine source text survives even a refused fix');
+
+// IBKR blocked rows are fixable too, and reparseRow must honor the same
+// file-level gross-vs-net amount context a full parse used (carried on
+// ImportDetection.context, since a single row can't re-derive it).
+const badDateRow = ibkrPreview.rows.find((row) => row.status === 'block' && row.source_fields?.date === 'bad-date');
+assert.ok(badDateRow, 'IBKR fixture has a malformed-date blocked row');
+assert.equal(isRowFixable(ibkrImportAdapter, badDateRow!), true);
+const ibkrFixed = rebuildPreviewAfterRowFix(
+  ibkrImportAdapter,
+  ibkrPreview,
+  badDateRow!.source_index,
+  { date: '2026-01-16' },
+  { mode: 'append' },
+);
+assert.ok(ibkrFixed);
+const ibkrFixedRow = ibkrFixed!.rows.find((row) => row.source_index === badDateRow!.source_index);
+assert.equal(ibkrFixedRow?.status, 'import', 'a corrected date makes the IBKR row importable');
+assert.equal(ibkrFixedRow?.source_fields?.date, 'bad-date', 'the original malformed date stays visible after the fix');
+assert.equal((ibkrFixedRow?.item as { effective_date?: string } | undefined)?.effective_date, '2026-01-16');
+
+// Schwab's legacy per-row parser has no per-field source capture, so its
+// blocked rows are honestly not fixable inline — the same "fix the source
+// file" path as before this feature existed.
+const schwabBlockedRow = schwabPreview.rows.find((row) => row.status === 'block');
+assert.ok(schwabBlockedRow, 'Schwab fixture has a blocked row');
+assert.equal(schwabBlockedRow!.source_fields, undefined, 'Schwab rows never carry source_fields');
+assert.equal(isRowFixable(schwabImportAdapter, schwabBlockedRow!), false, 'Schwab blocked rows are not offered inline fixing');
+assert.equal(schwabImportAdapter.reparseRow, undefined, 'Schwab adapter does not implement reparseRow');
 
 console.log('portfolio import adapter checks passed');

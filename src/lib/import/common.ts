@@ -181,6 +181,24 @@ export function makeImportKey(parts: Array<string | number>): string {
   return parts.map((part) => String(part).trim()).join('|');
 }
 
+/**
+ * Appends a running per-key ordinal to every item's import key, so two rows
+ * that normalize to the same identity (a genuine in-file repeat, or a fixed
+ * row whose corrected content now matches another row) stay distinguishable.
+ * Always appends `|ordinal`, including `|1` for the first occurrence, to
+ * match the keys already written by earlier imports.
+ */
+export function addDuplicateOrdinals(items: Array<LedgerTrade | LedgerCashEvent>): void {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const base = item.import_key;
+    const ordinal = (counts.get(base) ?? 0) + 1;
+    counts.set(base, ordinal);
+    item.duplicate_ordinal = ordinal;
+    item.import_key = `${base}|${ordinal}`;
+  }
+}
+
 export function isUsCurrency(value: string | undefined): boolean {
   return (value ?? 'USD').trim().toUpperCase() === 'USD';
 }

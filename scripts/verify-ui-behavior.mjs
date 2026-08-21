@@ -111,6 +111,14 @@ assert.match(portfolioImport, /ETF，导入/, 'asset confirmation can explicitly
 assert.match(portfolioImport, /导入前对账/, 'preview exposes normalized reconciliation totals');
 assert.match(portfolioImport, /cash_by_kind/, 'preview exposes cash-event reconciliation categories');
 
+// --- Inline row fixing (review step) ----------------------------------------
+assert.match(portfolioImport, /isRowFixable/, 'review step decides fixability through the pure rowFix rules, not ad hoc component logic');
+assert.match(portfolioImport, /rebuildPreviewAfterRowFix/, 'a fix is recomputed through the shared buildImportPreview pipeline, not a parallel one');
+assert.match(portfolioImport, /rowFieldEdits/, 'the fix form reads editable fields from the pure rowFix view, not by hand');
+assert.match(portfolioImport, /修正此行/, 'fixable blocked rows offer an inline fix affordance');
+assert.match(portfolioImport, /原始值：/, 'the fix form keeps the original source text visible next to an edited field');
+assert.match(portfolioImport, /可在下方逐行核对中就地修正，或修好源文件后重新选择/, 'the problem banner describes both the inline fix and the source-file fallback');
+
 const localMode = readFileSync(new URL('../src/lib/localMode.ts', import.meta.url), 'utf8');
 assert.match(localMode, /VITE_LEDGER_IMPORT_V2/, 'ledger preview has an explicit rollout flag');
 

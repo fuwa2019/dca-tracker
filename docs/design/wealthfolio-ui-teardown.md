@@ -216,10 +216,29 @@ base-200, which would not have been visible enough against the paper surface.
      Tab presses, and 0 page overflow at 390px. Two scroll containers that had
      no keyboard path (the takeover body and the per-row result list) are now
      focusable named regions.
-   - **still open**: per-row inline fixing. The reference lets a reader repair
-     a bad row in place; here a blocked row still keeps its reason and has to
-     be fixed in the source file. That is a real feature, not a restyle, and
-     it touches what gets written, so it stays a separate slice.
+   - **per-row inline fixing landed 2026-08-21** (branch `import/inline-row-fix`):
+     a blocked row can now be repaired in place in the 逐行核对 step instead
+     of only being fixable by editing the source file. `src/lib/import/rowFix.ts`
+     is the pure rule set — a row is only offered a fix when it failed the
+     adapter's own per-row parsing (`category === 'error'`) and the adapter
+     captured `source_fields` for it; TradingView and IBKR both do, refactored
+     so their per-row parsing loop and the new `adapter.reparseRow` call the
+     exact same row-parsing function (no second, parallel validation path).
+     Schwab's legacy eight-column parser has no per-field source capture, so
+     its blocked rows stay source-file-only, honestly, rather than faking
+     support. Applying a fix re-parses the row through that same function and
+     hands the whole row list back into the existing `buildImportPreview`, so
+     status counts, reconciliation and the four-number receipt are always
+     recomputed by the one pipeline, never patched in place. `source_fields`
+     on a row is set once at parse time and never overwritten, so the review
+     step's fix form always shows the original source text next to an edited
+     field — no silent correction. A fix whose corrected identity would
+     collide with another row already in the file is refused (kept blocked,
+     with a reason naming the colliding row) rather than letting two rows
+     reach the RPC with the same import key. Verified against the synthetic
+     TradingView fixture's one blocked row (a `Withdrawal` with a non-numeric
+     amount): fixing it moves the block count from 1 to 0, the import count
+     from 13 to 14, and the total row count stays at 14.
 4. **Overview** — **landed 2026-08-20**, against the live capture.
    What the capture showed: pill tabs top-left with small icon actions
    top-right; one hero figure whose cents are muted, and under it a single
