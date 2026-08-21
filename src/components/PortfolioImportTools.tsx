@@ -900,7 +900,11 @@ function RowFixForm({ row, draft, onFieldChange, onCancel, onApply }: {
 }) {
   const edits = rowFieldEdits(row, draft);
   return (
-    <div className="space-y-2.5 border-t border-dashed border-border bg-surface-elevated px-3 py-3">
+    // The row list is an ARIA table, so the form has to sit in a row/cell pair.
+    // Dropped straight into the table it would expose its inputs and buttons as
+    // owned children of role="table", which is invalid (axe aria-required-children).
+    <div role="row" className="border-t border-dashed border-border bg-surface-elevated">
+      <div role="cell" className="block space-y-2.5 px-3 py-3">
       <p className="text-xs text-muted-foreground">
         修正第 {row.source_index} 行：{row.reason}。修改下方字段后应用，原始值始终保留在旁供核对。
       </p>
@@ -926,6 +930,7 @@ function RowFixForm({ row, draft, onFieldChange, onCancel, onApply }: {
         <Button type="button" size="sm" onClick={onApply}>
           <Check className="h-3.5 w-3.5" />应用修正
         </Button>
+      </div>
       </div>
     </div>
   );
