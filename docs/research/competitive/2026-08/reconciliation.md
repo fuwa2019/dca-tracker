@@ -52,11 +52,49 @@ the product's documented annualization convention. If a product cannot export
 enough information to reproduce the calculation, record `not reproducible`
 rather than treating the displayed percentage as verified.
 
-`npm run test:finance` now includes an independent daily-flow formula reference
-against the canonical ledger. This is an S3 mathematical gate aligned with the
-Portfolio Performance formula, not a claim that the fixed Portfolio Performance
-application has already been run; the application export remains pending in
-`observations.md`.
+`npm run test:finance` includes two Portfolio Performance gates.
+
+The first is an independent daily-flow formula reference against the canonical
+ledger — an S3 mathematical gate aligned with the documented formula.
+
+The second, added 2026-08-23, is the **application** gate. Portfolio Performance
+0.86.0's own saved state was decoded from the `PPPBV1` protobuf container of the
+synthetic `.portfolio` files, giving its stored integers rather than a reading
+of its screen: money in cents, shares in 1e-8 units. Those integers are pinned
+in `fixtures/portfolio-performance-stored-ledger.json`. Feeding them to the
+shipped `computeLedgerTwr` and `computeXirr` reproduces all three figures the
+application displayed in T07:
+
+| Figure | Application | Our engine on its stored ledger |
+|---|---:|---:|
+| Portfolio value | `$921.53` | `921.5322` → `$921.53` |
+| TTWROR | `2.15%` | `2.1532%` → `2.15%` |
+| IRR | `3.83%` | `3.8324%` → `3.83%` |
+
+Two behaviours had to be read correctly for this to close, and both are now
+recorded rather than inferred:
+
+- **Valuation without a quote provider.** The application values a security at
+  the gross price of its most recent transaction — net plus fees for a sale,
+  net minus fees for a purchase, over the stored share count. The canonical
+  sale of `0.5` VGT settles at `5516` cents with a `1` cent fee, so VGT is
+  carried at `110.34`, not at the frozen `111.00` close.
+- **Report period end.** The period runs from the first transaction to the run
+  date (2026-08-18), not to the last ledger date. Prices do not move after
+  2026-01-15, so TTWROR is unaffected, but the IRR annualization window is 228
+  days rather than 13. Annualizing over 13 days would have shown `81.86%`; the
+  displayed `3.83%` is what the longer window gives.
+
+The remaining difference between this run and our own `2.5527%` is therefore
+entirely the price input — `0.3994` percentage points, all of it explained by
+the missing quote history and the application's cents rounding — and not a
+disagreement about the formula. The B1 target is met by reconciling against the
+application's stored state, which is a stronger source than the CSV export that
+was originally planned for it.
+
+Not reconciled: the same report's maximum drawdown (`0.02%`) and volatility
+(`1.81%`). They are outside the B1 target and are recorded as observations
+only.
 
 TradingView's six-column format has no independent `Amount` field. Its trade
 cash is therefore a documented quantity-times-price-plus/minus-commission

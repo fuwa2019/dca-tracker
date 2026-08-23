@@ -72,6 +72,21 @@ requirements-audit）、`HANDOFF.md`（2026-08-19 已验证状态）。
 - B1 完成 PP 0.86.0 精确 quote-history TTWROR/XIRR 对账：为固定
   synthetic run 配齐报价历史与期界对齐，目标 = TWR 零差、XIRR
   亚基点差（延续现有 `test:finance` 对账门禁标准）。
+  【进度 2026-08-23】改用比"配齐报价历史再跑一遍 GUI"更强的证据通道：
+  直接解码 PP 自己保存的 `.portfolio`（`PPPBV1` protobuf 容器），拿到它
+  存储的整数——金额以分为单位、份额以 1e-8 为单位。三个保存态的账目
+  完全一致。把这些整数喂给线上引擎 `computeLedgerTwr` / `computeXirr`，
+  T07 显示的三个数字全部复现：净值 `$921.53`、TTWROR `2.15%`、
+  IRR `3.83%`。需要读对两处应用行为：未配置报价源时它按"最近一笔交易
+  的含费单价"估值（VGT 记 `110.34` 而非冻结收盘 `111.00`），以及报告
+  期界截到运行当天而非账本末日（IRR 年化窗口是 228 天不是 13 天——按
+  13 天年化会是 `81.86%`）。与我们自己 `2.5527%` 的 `0.3994pp` 差额
+  因此全部归因于价格输入，不是公式分歧。已固化为 `test:finance` 里的
+  应用门禁，fixture 在
+  `docs/research/competitive/2026-08/fixtures/portfolio-performance-stored-ledger.json`。
+  仍未对账：同一报告的最大回撤 `0.02%` 与波动率 `1.81%`（不在 B1 目标内）。
+  TTWROR 目前只对到 PP 的显示精度（两位小数）；要压到亚基点仍需一次
+  配好报价历史的运行。
 - B2 `ledger_twr_v2` 切换前置条件（全部满足才可申请授权）：
   完整重新导入通过、B1 对账通过、V1 旧数据回归不变、
   `VITE_LEDGER_IMPORT_V2=0` 回滚路径验证。

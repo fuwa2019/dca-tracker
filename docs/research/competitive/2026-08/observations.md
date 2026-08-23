@@ -257,6 +257,16 @@ pass or fail. Attach local-only screenshot/export paths through
   taxes and transfers (`$1,000` deposit and `$100` withdrawal). No historical
   quote provider was configured, so benchmark and quote-history behavior were
   not scored.
+  【2026-08-23】All three displayed figures are now reproduced from the
+  application's own saved state, decoded out of the `PPPBV1` protobuf in the
+  synthetic `.portfolio` files: value `$921.53`, TTWROR `2.15%`, IRR `3.83%`.
+  Two behaviours explain them. Without a quote provider the application values
+  a security at the gross price of its latest transaction, so VGT is carried at
+  `110.34` rather than at the frozen `111.00` close; and the report period ends
+  on the run date, so the IRR annualizes over 228 days instead of 13 — over 13
+  days the same flows would read `81.86%`. Maximum drawdown and volatility were
+  not reconciled. See `reconciliation.md` and the `test:finance` application
+  gate.
 - T08/T09: the `.portfolio` file and a Portfolio Performance XML export were
   written to the temporary fixture directory. The fixed File menu exposed only
   local binary/XML/CSV export paths, and the Online menu exposed quote updates;

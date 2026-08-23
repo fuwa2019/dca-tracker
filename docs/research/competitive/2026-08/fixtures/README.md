@@ -21,6 +21,13 @@ adapter tests. The canonical semantics live in `../reconciliation.md` and
   target with deposits, dividend, interest, withdrawal, tax and fee events.
 - `wealthfolio-incremental.csv`: one new VGT activity for the Wealthfolio T04
   append test.
+- `portfolio-performance-stored-ledger.json`: what Portfolio Performance 0.86.0
+  actually stored after importing the two CSVs above, decoded from the `PPPBV1`
+  protobuf in its saved `.portfolio` files — money in cents, shares in 1e-8
+  units, plus the T07 figures it displayed. This is an observation of the
+  application, not another shaped input: `test:finance` replays it through the
+  shipped engine and must reproduce the displayed value, TTWROR and IRR. Do not
+  edit it to make a check pass; re-decode a saved file instead.
 
 Do not replace these with a real broker export. Add a new synthetic fixture when
 a provider-specific edge case is needed.

@@ -1,0 +1,63 @@
+{
+  "fixture_id": "portfolio-performance-0.86.0-stored-ledger-v1",
+  "source": {
+    "application": "Portfolio Performance 0.86.0",
+    "files": [
+      "pp-0.86.0-repeat-test.portfolio",
+      "pp-0.86.0-repeat-test.backup.portfolio",
+      "pp-0.86.0-repeat-test.backup-after-open.portfolio"
+    ],
+    "container": "PPPBV1 protobuf, zip member data.portfolio",
+    "decoded_on": "2026-08-23",
+    "note": "Read out of the application's own saved state with a generic protobuf field walk, not re-derived from the canonical ledger. All three saved states carry an identical transaction list, so the T03 repeat-import left the ledger unchanged. The saved files live in the temporary research directory only; these integers are the durable record."
+  },
+  "protobuf_fields": {
+    "note": "Field numbers observed in the 0.86.0 container, enough to re-decode with any generic protobuf walker. The file is a zip whose data.portfolio member starts with the ASCII magic PPPBV1; the protobuf begins at byte 6, where field 1 is the format version (70).",
+    "2": "security (1 uuid, 3 name, 4 currency, 8 ticker)",
+    "3": "account (1 uuid, 2 name, 3 currency)",
+    "4": "portfolio (1 uuid, 2 name, 5 reference account uuid)",
+    "5": "transaction (2 type, 9.1 epoch seconds, 10 currency, 11 amount in cents, 12 shares in 1e-8 units, 13 note, 14 security uuid, 15 unit: 1 type / 2 amount cents / 3 currency)",
+    "transaction_types": { "0": "buy", "1": "sell", "6": "deposit", "7": "removal", "8": "dividend", "9": "interest", "11": "taxes", "13": "fees" },
+    "unit_types": { "2": "fee" }
+  },
+  "precision": {
+    "money": "integer cents",
+    "shares": "integer 1e-8 units",
+    "note": "The canonical ledger's 0.0123456789 DRIP shares store as 1234568 (8 decimals) and its 55.1566666667 sale settles as 5516 cents. The 0.0000000001 deposit stores as zero."
+  },
+  "transactions": [
+    { "note": "deposit-20260102-1", "date": "2026-01-02", "kind": "deposit", "net_cents": 100000, "shares_1e8": 0, "fee_cents": 0, "security": null },
+    { "note": "buy-vgt-20260102-1", "date": "2026-01-02", "kind": "buy", "net_cents": 20037, "shares_1e8": 200000000, "fee_cents": 12, "security": "VGT" },
+    { "note": "buy-smh-20260102-1", "date": "2026-01-02", "kind": "buy", "net_cents": 20000, "shares_1e8": 100000000, "fee_cents": 0, "security": "SMH" },
+    { "note": "dividend-vgt-20260110-1", "date": "2026-01-10", "kind": "dividend", "net_cents": 125, "shares_1e8": 0, "fee_cents": 0, "security": "VGT" },
+    { "note": "drip-vgt-20260110-1", "date": "2026-01-10", "kind": "buy", "net_cents": 125, "shares_1e8": 1234568, "fee_cents": 0, "security": "VGT" },
+    { "note": "interest-20260112-1", "date": "2026-01-12", "kind": "interest", "net_cents": 7, "shares_1e8": 0, "fee_cents": 0, "security": null },
+    { "note": "sell-vgt-20260114-1", "date": "2026-01-14", "kind": "sell", "net_cents": 5516, "shares_1e8": 50000000, "fee_cents": 1, "security": "VGT" },
+    { "note": "withdrawal-20260115-1", "date": "2026-01-15", "kind": "removal", "net_cents": 10000, "shares_1e8": 0, "fee_cents": 0, "security": null },
+    { "note": "tax-20260115-1", "date": "2026-01-15", "kind": "tax", "net_cents": 13, "shares_1e8": 0, "fee_cents": 0, "security": null },
+    { "note": "fee-20260115-1", "date": "2026-01-15", "kind": "fee", "net_cents": 7, "shares_1e8": 0, "fee_cents": 0, "security": null },
+    { "note": "deposit-20260115-2", "date": "2026-01-15", "kind": "deposit", "net_cents": 0, "shares_1e8": 0, "fee_cents": 0, "security": null }
+  ],
+  "observed": {
+    "task": "T07 performance report",
+    "run_date": "2026-08-18",
+    "quote_provider": "none configured",
+    "cash_usd": "554.66",
+    "final_value_usd": "921.53",
+    "ttwror_pct": "2.15",
+    "irr_pct": "3.83",
+    "max_drawdown_pct": "0.02",
+    "volatility_pct": "1.81",
+    "note": "Displayed values from docs/research/competitive/2026-08/observations.md. Drawdown and volatility are recorded but not reconciled; the B1 target is TWR and XIRR."
+  },
+  "valuation_model": {
+    "rule": "last_transaction_gross_price",
+    "explanation": "With no quote provider configured the application values a security at the gross price of its most recent transaction: net plus fees for a sale, net minus fees for a purchase, divided by the stored share count.",
+    "derived_prices_usd": {
+      "VGT": { "2026-01-02": "100.125", "2026-01-10": "101.2499919", "2026-01-14": "110.34" },
+      "SMH": { "2026-01-02": "200.00" }
+    },
+    "terminal_valuation_date": "2026-08-18",
+    "terminal_note": "The report period runs from the first transaction to the run date, not to the last ledger date. Prices do not move after 2026-01-15, so TTWROR is unaffected, but the IRR annualization window is 228 days rather than 13."
+  }
+}

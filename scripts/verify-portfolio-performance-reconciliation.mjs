@@ -67,6 +67,115 @@ console.log(JSON.stringify({
   xirr_difference: Math.abs(engineXirr - referenceXirr),
 }));
 
+// The block above is a mathematical gate against the documented formula. The
+// block below is the application gate: the same shipped engine, fed Portfolio
+// Performance's own stored ledger, must reproduce what the application
+// displayed. Anything left over is a formula disagreement, not a rounding one.
+const stored = JSON.parse(readFileSync(`${fixtureDir}/portfolio-performance-stored-ledger.json`, 'utf8'));
+const observed = reproduceObservedPortfolioPerformance(stored);
+assert.equal(
+  observed.final_value_display,
+  stored.observed.final_value_usd,
+  `PP final value mismatch: ${observed.final_value_display} vs ${stored.observed.final_value_usd}`,
+);
+assert.equal(
+  observed.ttwror_display,
+  stored.observed.ttwror_pct,
+  `PP TTWROR mismatch: ${observed.ttwror_display} vs ${stored.observed.ttwror_pct}`,
+);
+assert.equal(
+  observed.irr_display,
+  stored.observed.irr_pct,
+  `PP IRR mismatch: ${observed.irr_display} vs ${stored.observed.irr_pct}`,
+);
+console.log(JSON.stringify({
+  reference: 'portfolio-performance-0.86.0-application-output',
+  ...observed,
+}));
+
+/**
+ * Rebuild the application's displayed figures from its own stored integers.
+ * Money is stored in cents and shares in 1e-8 units, so this reads the
+ * application's rounding rather than re-applying the canonical fixture's
+ * full precision. With no quote provider configured the application values a
+ * security at the gross price of its latest transaction.
+ */
+function reproduceObservedPortfolioPerformance(fixture) {
+  const SHARE_UNIT = 1e-8;
+  const CASH_KINDS = {
+    deposit: 'broker_deposit',
+    removal: 'broker_withdrawal',
+    dividend: 'dividend',
+    interest: 'interest',
+    tax: 'tax',
+    fee: 'fee',
+  };
+  const SIGNED = { deposit: 1, removal: -1, dividend: 1, interest: 1, tax: -1, fee: -1 };
+
+  const storedTrades = [];
+  const storedCashEvents = [];
+  const storedPrices = new Map();
+  for (const row of fixture.transactions) {
+    const amount = row.net_cents / 100;
+    if (row.kind === 'buy' || row.kind === 'sell') {
+      const shares = row.shares_1e8 * SHARE_UNIT;
+      const grossCents = row.kind === 'buy' ? row.net_cents - row.fee_cents : row.net_cents + row.fee_cents;
+      const price = grossCents / 100 / shares;
+      storedTrades.push({
+        effective_date: row.date,
+        side: row.kind,
+        ticker: row.security,
+        shares,
+        price,
+        usd_amount: row.kind === 'buy' ? -amount : amount,
+      });
+      const daily = storedPrices.get(row.security) ?? new Map();
+      daily.set(row.date, price);
+      storedPrices.set(row.security, daily);
+      continue;
+    }
+    storedCashEvents.push({
+      effective_date: row.date,
+      event_type: CASH_KINDS[row.kind],
+      usd_amount: SIGNED[row.kind] * amount,
+    });
+  }
+
+  const ledgerEnd = fixture.transactions.map((row) => row.date).sort().at(-1);
+  const twr = computeLedgerTwr({
+    trades: storedTrades,
+    cash_events: storedCashEvents,
+    prices: storedPrices,
+    as_of_date: ledgerEnd,
+  });
+  assert.ok(twr?.complete, `PP-stored TWR must be complete: ${twr?.warnings.join('; ')}`);
+  const finalValue = twr.points.at(-1).ending_nav_usd;
+
+  // The report period ends on the run date, not on the last ledger date. No
+  // price moves in between, so only the annualization window changes.
+  const irrEvents = buildLedgerXirrEvents({
+    cashflows: storedCashEvents.map((event) => ({
+      effective_date: event.effective_date,
+      usd_amount: event.usd_amount,
+      cashflow_kind: event.event_type,
+    })),
+    currentMarketValueUsd: Math.round(finalValue * 100) / 100,
+    asOf: new Date(`${fixture.observed.run_date}T00:00:00Z`),
+  });
+  const irr = computeXirr(irrEvents);
+  assert.ok(irr != null, 'PP-stored XIRR must converge');
+
+  return {
+    final_value_usd: finalValue,
+    final_value_display: (Math.round(finalValue * 100) / 100).toFixed(2),
+    ttwror_pct: twr.cumulative_return_pct * 100,
+    ttwror_display: (twr.cumulative_return_pct * 100).toFixed(2),
+    irr_pct: irr * 100,
+    irr_display: (irr * 100).toFixed(2),
+    quote_gap_pct: (engine.cumulative_return_pct - twr.cumulative_return_pct) * 100,
+  };
+}
+
 function referenceDailyTtwr(inputTrades, inputCashEvents, priceMap) {
   const eventDates = [
     ...inputTrades.map((trade) => trade.effective_date),

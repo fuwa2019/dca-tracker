@@ -471,6 +471,50 @@ unmeasured — and it was failing, on `master` as well as on the branch.
   `test:email-reminder`, `test:quote-status`, `typecheck`, `build`,
   `git diff --check`.
 
+## Portfolio Performance Reconciliation — B1 (2026-08-23)
+
+On branch `ui/settings-panes`, committed locally, **not pushed and not
+deployed**. No database, worker or frontend behaviour changed; this is a
+verification gate plus its fixture.
+
+- B1 asked for an exact TTWROR/XIRR comparison against Portfolio Performance
+  0.86.0 with quote history configured. It was blocked on re-running the
+  application, which is not installed here any more. It was closed instead
+  through a stronger channel: the application's **own saved state**. The
+  synthetic `.portfolio` files are zip containers holding a `PPPBV1` protobuf,
+  decoded with a generic field walk to its stored integers — money in cents,
+  shares in 1e-8 units. All three saved states carry an identical ledger, so
+  the T03 repeat-import really did leave it unchanged.
+- Those integers are pinned in
+  `docs/research/competitive/2026-08/fixtures/portfolio-performance-stored-ledger.json`,
+  together with the protobuf field map so the file can be re-decoded with any
+  protobuf tool. The temporary research directory is not a durable source; this
+  fixture is.
+- `test:finance` now carries an application gate beside the existing formula
+  gate. The shipped `computeLedgerTwr` and `computeXirr`, fed PP's stored
+  ledger, reproduce **all three** figures the application displayed in T07:
+  value `$921.53` (engine `921.5322`), TTWROR `2.15%` (engine `2.1532%`), IRR
+  `3.83%` (engine `3.8324%`).
+- Two application behaviours had to be read correctly, and both are now
+  recorded rather than assumed. Without a quote provider PP values a security
+  at the **gross price of its latest transaction** — net plus fees for a sale —
+  so VGT is carried at `110.34`, not at the frozen `111.00` close. And the
+  report period ends on the **run date**, not the last ledger date, so the IRR
+  annualizes over 228 days; over 13 days the same flows read `81.86%`.
+- Consequence for the gate: the `0.3994pp` difference between PP's `2.1532%`
+  and our own `2.5527%` is entirely the price input, not a formula
+  disagreement. `requirements-audit.md` moves the V2 formula row from `partial`
+  to proved against the reference application.
+- Honest limits. TTWROR is reconciled only to PP's display precision (two
+  decimals) — the value and cash figures pin it much harder, but sub-basis-point
+  TTWROR still needs a run with quote history configured. The same report's
+  maximum drawdown (`0.02%`) and volatility (`1.81%`) are **not** reconciled;
+  they are outside the B1 target and stay recorded as observations.
+- B2 is still not satisfiable from here. Of its four preconditions, B1 now
+  passes and `VITE_LEDGER_IMPORT_V2=0` remains the documented rollback, but the
+  full re-import and the V1 regression both need authorized cloud work.
+  Switching `ledger_twr_v2` remains a separate release gate.
+
 ## Session Notes (2026-08-20 handoff)
 
 - Delivery flow used this window: slices are implemented either locally or by
@@ -672,11 +716,11 @@ Nothing is half-written. Pick up with whichever of these the owner wants.
    covers the new deep links, but they have only been exercised locally.
    The UI-alignment delivery order in `docs/design/wealthfolio-ui-teardown.md`
    now has no open phase.
-2. **Longer-standing gates, unchanged by the UI work:** the `ledger_twr_v2`
-   switch still needs its B1/B2 preconditions (exact PP quote-history
-   reconciliation, full re-import, V1 regression, rollback path), and the V2
-   share cache with its privacy snapshot (D1/D2) is still the only fully
-   missing contract row in `requirements-audit.md`.
+2. **Longer-standing gates.** B1 closed on 2026-08-23 (see above), so the
+   `ledger_twr_v2` switch is now waiting on the rest of B2: a full re-import and
+   a V1 regression, both of which need authorized cloud work. The V2 share cache
+   with its privacy snapshot (D1/D2) is still the only fully missing contract
+   row in `requirements-audit.md`.
 3. **Accessibility follow-ups that remain open:** a screen-reader pass and the
    cloud-only routes (`/cashflows`, a populated `/share/<token>`, the
    authenticated login flow). WCAG 2.4.11 is no longer on this list — it was
@@ -737,6 +781,9 @@ Nothing is half-written. Pick up with whichever of these the owner wants.
 - `src/lib/calc/transactionAmounts.ts`
 - `src/components/SchwabTransactionTools.tsx`
 - `src/app/settings/`
+- `docs/research/competitive/2026-08/reconciliation.md`
+- `docs/research/competitive/2026-08/fixtures/portfolio-performance-stored-ledger.json`
+- `scripts/verify-portfolio-performance-reconciliation.mjs`
 - `docs/design/wealthfolio-ui-teardown.md`
 - `docs/accessibility/2026-08-20-wcag-route-audit.md`
 - `supabase/migrations/0047_schwab_settled_cash_and_stock_allocations.sql`
