@@ -129,6 +129,7 @@ movement, and framer keeps opacity animating under `reducedMotion="user"`.
   checked.
 - 2.4.11 Focus Not Obscured was not measured; sticky headers and the fixed
   mobile nav are the surfaces to check when that is done.
+  **Measured on 2026-08-23 — see section 8. It was failing; it now passes.**
 - Cloud-only states are unaudited: `/cashflows` redirects in local mode, the
   populated `/share/:token` report renders only with cloud data, and the
   authenticated post-login shell was not exercised. `/login` evidence comes
@@ -170,3 +171,60 @@ contrast no longer depends on what is behind it.
 
 Section 6 is unchanged: the screen-reader pass, 2.4.11 and the cloud-only
 routes remain open.
+
+## 8. Focus Not Obscured — 2.4.11 (2026-08-23)
+
+Section 6 listed 2.4.11 as unmeasured. It is now measured, and it was failing.
+
+**Method.** For every sequential-focus stop, the focused element's box is
+compared against the page in three ways, so a single weak signal cannot decide
+the result:
+
+1. **Clipping** — intersect the box with the viewport and with every ancestor
+   that establishes a clipping box (`overflow` other than `visible`).
+2. **Geometry** — subtract the painted boxes of every `position: fixed` or
+   `sticky` element that is neither an ancestor nor a descendant of the focused
+   element. Ancestors are excluded, otherwise the toolbar's own tab pills would
+   report themselves as obscured.
+3. **Paint** — sample an 11x11 grid over the surviving box and ask
+   `elementFromPoint` whether the focused element (or a descendant) is topmost.
+
+A stop fails 2.4.11 (AA) when no part survives; a stop that survives only in
+part is recorded against 2.4.12 (AAA), which this product does not claim.
+
+14 routes — the nine from section 1 plus the six settings panes, with `/login`
+on the stubbed 5175 build — across 1280x900, 390x844 and 320x812. **691 focus
+stops.**
+
+**Before the fix: 8 AA failures and 10 partially obscured stops**, every one of
+them at 390px and every one behind the same element, the fixed bottom nav:
+
+| Route | Stops entirely hidden | Obscured by |
+|---|---|---|
+| `/transactions/all` | 7 row overflow-menu buttons | `nav.safe-bottom.fixed` |
+| `/settings/basis` | the benchmark search input | `nav.safe-bottom.fixed` |
+
+The cause is not the nav's size — `main` already reserves `pb-24` for it — but
+scroll alignment. Sequential focus scrolls a control *only just* into the
+viewport, and the viewport's bottom edge is underneath the nav, so the browser
+parks the control exactly where the nav covers it. Measured on
+`/settings/basis` at 390x844: the focused input sat at y 783-823 with the nav
+starting at y 774, i.e. entirely behind it.
+
+**Fix.** `scroll-margin-bottom` on focusable elements below `lg`, sized to the
+nav's measured 70px footprint plus breathing room and the safe-area inset
+(`src/index.css`). The same input now lands at y 722-762, fully clear.
+
+**After: 0 AA failures and 0 partially obscured stops** across all 691. The
+partial-obscuring cases disappeared with the AA ones, since both had the one
+cause.
+
+**Reading the residual numbers.** 267 stops report a paint fraction below 1
+while their geometry fraction is exactly 1. These are sampler artifacts, not
+obscuring: on a 28x28 icon button with a 10px radius, all 8 missing samples land
+on the four grid corners, outside the rounded shape, where the row behind is
+legitimately topmost. One stop on `/performance` at 320px is clipped by its own
+card by roughly a pixel and remains visible on every sample.
+
+This closes the 2.4.11 line in section 6. The screen-reader pass and the
+cloud-only routes are still open.

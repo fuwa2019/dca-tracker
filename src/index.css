@@ -441,6 +441,25 @@
   }
 }
 
+@media (max-width: 1023px) {
+  /*
+   * The bottom nav is fixed over the scroll port. Sequential focus scrolls a
+   * control only just into the viewport, which parks it exactly under the nav
+   * and hides the focus indicator entirely — WCAG 2.4.11 Focus Not Obscured.
+   * 70px is the nav's measured footprint from the bottom edge (58px tall,
+   * 12px above the edge).
+   */
+  a[href],
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [tabindex]:not([tabindex='-1']) {
+    scroll-margin-bottom: calc(70px + 0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

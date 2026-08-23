@@ -436,6 +436,41 @@ Branch `ui/settings-panes`, committed locally, **not pushed and not deployed**.
   and Playwright drove the system Chrome channel, because Playwright's own
   Chromium is not downloaded on this machine.
 
+## Focus Not Obscured — WCAG 2.4.11 (2026-08-23)
+
+On branch `ui/settings-panes`, committed locally, **not pushed and not
+deployed**. This closes a criterion the 2026-08-20 audit had listed as
+unmeasured — and it was failing, on `master` as well as on the branch.
+
+- 691 sequential-focus stops measured across 14 routes (the nine audited
+  routes plus the six settings panes, `/login` on the stubbed 5175 build) at
+  1280x900, 390x844 and 320x812.
+- **8 stops failed AA** and 10 more were partially obscured, all at 390px and
+  all behind the fixed bottom nav: the seven row overflow-menu buttons on
+  `/transactions/all` and the benchmark search input on `/settings/basis`.
+- The cause is scroll alignment, not nav size. `main` already reserves `pb-24`
+  for the nav, but sequential focus scrolls a control only just into the
+  viewport, whose bottom edge is under the nav — so the browser parks the
+  control exactly where the nav covers it. On `/settings/basis` at 390x844 the
+  focused input sat at y 783-823 with the nav starting at y 774.
+- Fix: `scroll-margin-bottom` on focusable elements below `lg`, sized to the
+  nav's measured 70px footprint plus breathing room and the safe-area inset
+  (`src/index.css`). The same input now lands at y 722-762. Re-measured:
+  **0 AA failures and 0 partially obscured stops** across all 691.
+- The residual 267 stops that report a sub-1 paint fraction are sampler
+  artifacts at rounded corners, verified on a 28x28 button with a 10px radius
+  where all 8 missing samples land on the four grid corners. Geometry says
+  fully visible for every one of them.
+- Method and numbers are recorded in
+  `docs/accessibility/2026-08-20-wcag-route-audit.md` section 8. The probe uses
+  three independent signals (clipping-ancestor intersection, geometric
+  subtraction of non-ancestor fixed/sticky boxes, `elementFromPoint` sampling)
+  so a single weak signal cannot decide a pass.
+- Re-verified after the CSS change: axe 0 violations over 28 scans, 107 Tab
+  stops all interactive with a visible ring, `test:finance`, `test:ui`,
+  `test:email-reminder`, `test:quote-status`, `typecheck`, `build`,
+  `git diff --check`.
+
 ## Session Notes (2026-08-20 handoff)
 
 - Delivery flow used this window: slices are implemented either locally or by
@@ -625,10 +660,13 @@ The Settings slice is finished and verified but lives on the local branch
 `ui/settings-panes`; `master` is still at `304ca9a` and production is unchanged.
 Nothing is half-written. Pick up with whichever of these the owner wants.
 
-1. **Release the settings panes, or don't.** The branch is committed, the full
-   local check set passes and the accessibility evidence is recorded. Merging
-   to `master` pushes a Pages rebuild, so it needs the usual one-at-a-time
-   deploy authorization. Post-deploy, check the live bundle with a
+1. **Release the branch, or don't.** `ui/settings-panes` now carries two things
+   — the settings panes and the 2.4.11 fix. The 2.4.11 fix is one CSS rule that
+   corrects a live AA failure present on `master` today, so it is worth
+   shipping even if the settings redesign is held back; it can be cherry-picked
+   onto `master` on its own. The full local check set passes and the
+   accessibility evidence is recorded. Merging to `master` pushes a Pages
+   rebuild, so it needs the usual one-at-a-time deploy authorization. Post-deploy, check the live bundle with a
    cache-busting query parameter and confirm `/settings`, `/settings/goal` …
    `/settings/account` all return 200 — the SPA `_redirects` fallback already
    covers the new deep links, but they have only been exercised locally.
@@ -639,11 +677,13 @@ Nothing is half-written. Pick up with whichever of these the owner wants.
    reconciliation, full re-import, V1 regression, rollback path), and the V2
    share cache with its privacy snapshot (D1/D2) is still the only fully
    missing contract row in `requirements-audit.md`.
-3. **Accessibility follow-ups that remain open:** a screen-reader pass, WCAG
-   2.4.11 focus-not-obscured, and the cloud-only routes (`/cashflows`, a
-   populated `/share/<token>`, the authenticated login flow). Everything
-   locally renderable — the six new settings panes included — is at zero axe
-   violations; see `docs/accessibility/2026-08-20-wcag-route-audit.md`.
+3. **Accessibility follow-ups that remain open:** a screen-reader pass and the
+   cloud-only routes (`/cashflows`, a populated `/share/<token>`, the
+   authenticated login flow). WCAG 2.4.11 is no longer on this list — it was
+   measured on 2026-08-23, found failing at 390px, fixed, and re-measured at
+   zero across 691 focus stops. Everything locally renderable — the six new
+   settings panes included — is at zero axe violations; see
+   `docs/accessibility/2026-08-20-wcag-route-audit.md` sections 7 and 8.
 4. **Standing constraints:** keep the synthetic-file import smoke test separate
    from real brokerage data; `VITE_LEDGER_IMPORT_V2=0` is an explicit
    compatibility rollback only; and the competitive scorecard's choice of
