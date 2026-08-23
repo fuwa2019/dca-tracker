@@ -34,6 +34,11 @@ one personal ETF portfolio.
   The source-neutral preview is now the default cloud path after the frontend
   workbench release; setting `VITE_LEDGER_IMPORT_V2=0` remains an explicit
   compatibility rollback to the legacy Schwab path.
+- Migration `0051_public_share_warning_projection.sql` is applied to Supabase
+  project `igwacbeojogblacektxr` as version `20260823155818`. The live
+  `shared_performance_history` definition references the sanitizer, the
+  sanitizer is not executable by `anon` or `authenticated`, and a synthetic
+  warning projection removes `nav_user`, `nav_benchmark`, and `flow`.
 - The private shell now uses a task-oriented workbench: overview, performance,
   look-through exposure, ledger/import, data health, and settings share the same
   navigation and responsive state language. The old editorial dashboard is no
@@ -517,9 +522,11 @@ verification gate plus its fixture.
 
 ## Public Share Privacy — D2/D3 and a Live Leak (2026-08-23)
 
-On branch `ui/settings-panes`, committed locally. Migration `0051` is written
-and locally verified but **NOT APPLIED**. Production still has the defect below
-until an authorized apply.
+The code and privacy gate are committed on `master`. Migration `0051` was
+applied to Supabase project `igwacbeojogblacektxr` as version
+`20260823155818` on 2026-08-23 after local verification. The live function
+definition and a synthetic projection check confirm the public boundary now
+sanitizes warning entries.
 
 **The finding.** `public.shared_performance_history` returns the cached history
 payload wholesale. The cache writer's `warnings` array has three shapes, and one
@@ -564,15 +571,16 @@ knowable from a live database. The public boundary therefore cannot trust the
 cache payload and must project it. This is worth remembering for any future
 change to that chain.
 
-**Limits.** The gate reads migration text, not the deployed database; a
-production drift check against the live definitions is still separate and
-unauthorized work. D1 proper — the V2 cache and RPC — is still unimplemented;
-the projection and the gate carry over to it. `requirements-audit.md` moves the
-D row from `missing` to `partial`.
+**Limits.** The repository gate still reads migration text, while the
+post-apply live definition and synthetic payload checks were run separately.
+D1 proper — the V2 cache and RPC — is still unimplemented; the projection and
+the gate carry over to it. `requirements-audit.md` remains `partial` for this
+row because that larger contract is not complete.
 
-**Needs a decision from the owner:** applying `0051` changes a production RPC.
-It replaces two function definitions, writes no rows, and is reversible by a
-further append-only migration.
+**Deployment result.** The migration replaces two function definitions and
+writes no rows. Supabase security and performance advisors returned only the
+project's pre-existing warnings and informational findings; no new finding
+was attributed to this migration.
 
 ## Session Notes (2026-08-20 handoff)
 
@@ -726,48 +734,20 @@ further append-only migration.
   an unauthenticated `/settings/basis` redirects to `/login` rather than
   erroring; and an invalid share token still renders only the expired-link
   message. No login was attempted and no private data was read.
-- **Migration `0051` is NOT applied — authorized but not executable from that
-  session.** The owner authorized applying it on 2026-08-23. The session had no
-  write path to the production database: the connected Supabase MCP exposes only
-  read-only `query_logs` (no `apply_migration`, no `execute_sql`), the Supabase
-  CLI is not installed, `supabase/` carries no link state, and a direct `psql`
-  connection would need production credentials, which agents in this repository
-  must not read or handle. The apply was therefore left to the owner rather than
-  worked around.
-  Production still returns `nav_user`, `nav_benchmark` and `flow` inside a public
-  share response whenever a skip warning exists. See the 2026-08-23 public-share
-  privacy section above.
-  To apply: paste `supabase/migrations/0051_public_share_warning_projection.sql`
-  into the Supabase SQL editor for project `igwacbeojogblacektxr`, or run it
-  through the CLI once linked. It replaces two function definitions and writes no
-  rows. Post-apply read-only checks:
-
-  ```sql
-  -- the boundary projects
-  select pg_get_functiondef('public.shared_performance_history(text)'::regprocedure)
-      like '%_public_share_sanitize_history%' as projects;
-
-  -- the anonymous surface is still exactly three entry points
-  select p.proname, array_agg(a.rolname order by a.rolname) as roles
-  from pg_proc p
-  join pg_namespace n on n.oid = p.pronamespace
-  join lateral (
-      select r.rolname from pg_roles r
-      where has_function_privilege(r.rolname, p.oid, 'execute')
-        and r.rolname in ('anon', 'authenticated')
-  ) a on true
-  where n.nspname = 'public' and a.rolname = 'anon'
-  group by p.proname order by p.proname;
-
-  -- the projection itself, on a synthetic payload
-  select public._public_share_sanitize_history(jsonb_build_object(
-      'series', '[]'::jsonb,
-      'warnings', jsonb_build_array(jsonb_build_object(
-          'date', '2026-01-05', 'type', 'skipped', 'nav_user', 1, 'flow', -2))
-  )) -> 'warnings';
-  ```
-- Supabase remains at migration `0050`; the Quote Worker and Email Worker were
-  not touched by this release.
+- **Migration `0051` is applied and live-verified.** Supabase project
+  `igwacbeojogblacektxr` records version `20260823155818`. Independently
+  corroborated from the project's own Postgres logs: a single transaction at
+  `2026-08-23T15:58:18.964Z` ran the repository file's SQL verbatim and
+  registered it in `supabase_migrations.schema_migrations`, so the applied text
+  and the checked-in migration are the same.
+  `shared_performance_history(text)` is still executable by `anon` and
+  `authenticated` and references `_public_share_sanitize_history(jsonb)`;
+  the sanitizer itself is not executable by either role. A synthetic warning
+  payload retained only `date`, `type`, `original_date`, and `ticker`, with
+  `nav_user`, `nav_benchmark`, and `flow` removed. No portfolio rows or cache
+  rows were written.
+- Supabase is now at migration `0051`; the Quote Worker and Email Worker were
+  not touched by this operation.
 
 ### Earlier releases
 
@@ -824,35 +804,24 @@ further append-only migration.
 ## Next Steps
 
 `master` is at `61def4e`, synced with `origin/master`, and the frontend is live
-on Pages. Nothing is half-written. The one outstanding production action is the
-unapplied migration; after that, pick up whichever of these the owner wants.
+on Pages. Nothing is half-written, and the 0051 production migration is
+complete. The remaining work is listed below.
 
-1. **Apply migration `0051`.** Authorized on 2026-08-23 but not executable from
-   that session — no write path to the production database existed (details and
-   the exact apply/verify steps are in Production State). Until it is applied,
-   an anonymous share response still carries `nav_user`, `nav_benchmark` and
-   `flow` whenever a skip warning exists. Applying it replaces two function
-   definitions, writes no rows, and needs explicit authorization for that
-   operation. `npm run test:share-privacy` guards the repository side already,
-   but it reads migration text, not the deployed database — after applying,
-   check the live definitions for drift.
-
-2. **Longer-standing gates.** B1 closed on 2026-08-23, so the `ledger_twr_v2`
+1. **Longer-standing gates.** B1 closed on 2026-08-23, so the `ledger_twr_v2`
    switch is now waiting on the rest of B2: a full re-import and a V1
    regression, both of which need authorized cloud work. D2/D3 are now gated in
-   CI and a live V1 share leak was found and fixed in migration `0051`, which is
-   **unapplied and waiting on authorization** — that is the most time-sensitive
-   item on this list, because production leaks until it lands. D1 proper (the V2
-   cache and RPC) is still unimplemented. The remaining fully missing contract
-   row is `Performance/Lighthouse/compatibility gates`, not the share cache.
-3. **Accessibility follow-ups that remain open:** a screen-reader pass and the
+   CI and the live V1 share leak was fixed and verified by migration `0051`.
+   D1 proper (the V2 cache and RPC) is still unimplemented. The remaining fully
+   missing contract row is `Performance/Lighthouse/compatibility gates`, not
+   the share cache.
+2. **Accessibility follow-ups that remain open:** a screen-reader pass and the
    cloud-only routes (`/cashflows`, a populated `/share/<token>`, the
    authenticated login flow). WCAG 2.4.11 is no longer on this list — it was
    measured on 2026-08-23, found failing at 390px, fixed, and re-measured at
    zero across 691 focus stops. Everything locally renderable — the six new
    settings panes included — is at zero axe violations; see
    `docs/accessibility/2026-08-20-wcag-route-audit.md` sections 7 and 8.
-4. **Standing constraints:** keep the synthetic-file import smoke test separate
+3. **Standing constraints:** keep the synthetic-file import smoke test separate
    from real brokerage data; `VITE_LEDGER_IMPORT_V2=0` is an explicit
    compatibility rollback only; and the competitive scorecard's choice of
    Wealthfolio as the interaction reference is a research decision, never a
