@@ -1,6 +1,6 @@
 # Current Handoff
 
-Updated: 2026-08-21
+Updated: 2026-08-23
 
 ## Current Goal
 
@@ -390,6 +390,52 @@ routine; deleting requires the web UI at https://claude.ai/code/routines.
   accessibility-verified.
 - No database, worker, share-contract, or dependency change; no migration.
 
+## Settings Panes (2026-08-23)
+
+Branch `ui/settings-panes`, committed locally, **not pushed and not deployed**.
+
+- The Wealthfolio app is no longer installed on this machine (the DMG is still
+  in the research downloads directory), so the "one more live pass" the previous
+  handoff called for was not run. The remaining Settings structure was read out
+  of the official source archive at
+  `/private/tmp/dca-competitive-20260818/wealthfolio-wealthfolio-633d3a1`
+  instead — the same measured-value channel the token layer used, and a
+  stronger one than a screenshot. It corrected three claims in the teardown:
+  the nav column is 240px (not 200), the active row is a `bg-muted` rounded-md
+  ghost button (not a filled pill), and sibling fields are separated by card
+  boundaries, not hairlines. It also surfaced a structure the captures never
+  showed: below `lg` the reference's `/settings` is a grouped **list**, and a
+  row navigates to a detail pane with a back arrow.
+- Shipped: six panes under real nested routes — 投资 (`goal`, `basis`),
+  通知 (`email`), 数据与隐私 (`share`), 偏好 (`appearance`), 账户 (`account`) —
+  with the grouped nav column at `lg` and the list/detail structure below it.
+  Only one of the two structures renders at a time, chosen by
+  `src/hooks/useMediaQuery.ts`, so control ids stay unique.
+- The single settings row still backs three panes. Its edit state lives in
+  `src/app/settings/formState.tsx` above them, each pane has its own save
+  action, and a save writes the whole row — so a pending edit survives a pane
+  switch, and the save row says when the pending change came from a sibling
+  pane. This required keying the shell's route-enter animation to `/settings`
+  for all panes (`motionKey` in `src/components/AppShell.tsx`); without it the
+  provider remounted on every pane switch and the edit was lost.
+- No database, RPC, migration, worker or deployment change. The settings write
+  path, its legacy-column retry and the tracked-symbol backfill are byte-for-byte
+  the same code, moved.
+- Verified locally: `test:finance`, `test:email-reminder`, `test:quote-status`,
+  `test:ui`, `test:migration-numbering`, `typecheck`, `build`, `git diff --check`.
+  Accessibility: axe 0 violations over 28 scans, 107 Tab stops all interactive
+  with a visible ring and none under 24x24, 0 overflow at 320px on all seven
+  routes, reduced motion pixel-stable. Recorded in
+  `docs/accessibility/2026-08-20-wcag-route-audit.md` section 7.
+- A contrast regression was introduced and fixed inside this change: the
+  revoked share row's `opacity-60` over a lighter backdrop measured 2.62:1.
+  It was confirmed to be new by re-scanning `master` in a throwaway worktree,
+  and the row now uses muted ink on a raised surface with no opacity blend.
+- Not done: the axe probe needs `axe-core` and a Chrome to drive. Neither is in
+  the repository — `axe-core@4.10.2` was installed into the session scratchpad
+  and Playwright drove the system Chrome channel, because Playwright's own
+  Chromium is not downloaded on this machine.
+
 ## Session Notes (2026-08-20 handoff)
 
 - Delivery flow used this window: slices are implemented either locally or by
@@ -575,20 +621,19 @@ routine; deleting requires the web UI at https://claude.ai/code/routines.
 
 ## Next Steps
 
-Nothing is half-finished: `master` is clean, synced with `origin/master` at
-`bde260b`, and everything through the inline row fix is released. Pick up with
-whichever of these the owner wants.
+The Settings slice is finished and verified but lives on the local branch
+`ui/settings-panes`; `master` is still at `304ca9a` and production is unchanged.
+Nothing is half-written. Pick up with whichever of these the owner wants.
 
-1. **The one open UI slice: Settings.** `docs/design/wealthfolio-ui-teardown.md`
-   describes the target — a grouped left navigation column (PREFERENCES /
-   FINANCE / DATA / …) beside a stack of concern-per-card panels, with a
-   consistent label → description → control field pattern. Only the reference's
-   General pane was captured; Appearance, Accounts and the rest are not, so a
-   faithful mapping needs one more live pass first. Reach Settings through
-   Wealthfolio's own **menu bar** (`Wealthfolio → Settings…`) — its webview
-   exposes no clickable accessibility elements, so coordinate clicks fail.
-   The pinned study build is v3.6.2; dismiss its update prompt with Escape and
-   do not upgrade it.
+1. **Release the settings panes, or don't.** The branch is committed, the full
+   local check set passes and the accessibility evidence is recorded. Merging
+   to `master` pushes a Pages rebuild, so it needs the usual one-at-a-time
+   deploy authorization. Post-deploy, check the live bundle with a
+   cache-busting query parameter and confirm `/settings`, `/settings/goal` …
+   `/settings/account` all return 200 — the SPA `_redirects` fallback already
+   covers the new deep links, but they have only been exercised locally.
+   The UI-alignment delivery order in `docs/design/wealthfolio-ui-teardown.md`
+   now has no open phase.
 2. **Longer-standing gates, unchanged by the UI work:** the `ledger_twr_v2`
    switch still needs its B1/B2 preconditions (exact PP quote-history
    reconciliation, full re-import, V1 regression, rollback path), and the V2
@@ -597,8 +642,8 @@ whichever of these the owner wants.
 3. **Accessibility follow-ups that remain open:** a screen-reader pass, WCAG
    2.4.11 focus-not-obscured, and the cloud-only routes (`/cashflows`, a
    populated `/share/<token>`, the authenticated login flow). Everything
-   locally renderable is at zero axe violations; see
-   `docs/accessibility/2026-08-20-wcag-route-audit.md`.
+   locally renderable — the six new settings panes included — is at zero axe
+   violations; see `docs/accessibility/2026-08-20-wcag-route-audit.md`.
 4. **Standing constraints:** keep the synthetic-file import smoke test separate
    from real brokerage data; `VITE_LEDGER_IMPORT_V2=0` is an explicit
    compatibility rollback only; and the competitive scorecard's choice of
@@ -651,6 +696,9 @@ whichever of these the owner wants.
 - `scripts/verify-portfolio-import-adapters.ts`
 - `src/lib/calc/transactionAmounts.ts`
 - `src/components/SchwabTransactionTools.tsx`
+- `src/app/settings/`
+- `docs/design/wealthfolio-ui-teardown.md`
+- `docs/accessibility/2026-08-20-wcag-route-audit.md`
 - `supabase/migrations/0047_schwab_settled_cash_and_stock_allocations.sql`
 - `supabase/migrations/0048_etf_holdings_refresh.sql`
 - `supabase/migrations/0049_restrict_etf_holding_table_privileges.sql`

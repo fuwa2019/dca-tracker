@@ -20,8 +20,15 @@ The Overview tab and the Settings surface were captured live on 2026-08-20 —
 window-only captures of the running app, after dismissing its update prompt
 with Escape (the pinned study version was **not** upgraded). Settings was
 reached through the app's own menu bar entry, since the webview exposes no
-clickable accessibility elements. Only the General settings pane was captured;
-the sibling panes (Appearance, Accounts, …) are still uncaptured.
+clickable accessibility elements. Only the General settings pane was captured
+that way; the sibling panes (Appearance, Accounts, …) were never captured live.
+
+On 2026-08-23 the remaining Settings structure was read out of the official
+source archive instead of re-running the app, which is the same measured-value
+channel used for the token layer. That is a stronger source than a screenshot —
+it gives the exact column width, the section inventory and the narrow-screen
+behaviour — and it corrected three claims below that had been inferred from the
+one captured pane. Nothing was copied; every value is reimplemented.
 
 ## 1. Token layer
 
@@ -117,24 +124,36 @@ counterpart and it is what the calculation work bought us.
 ### Settings
 
 The one surface that keeps a page title: `Settings` as a heading with a hairline
-under it, then a two-column layout.
+under it, then a two-column layout at `lg` and above.
 
 - Left: a navigation column, not tabs — icon+label rows grouped under uppercase
-  micro-labels (PREFERENCES / FINANCE / DATA / CONNECTIONS / EXTENSIONS /
-  ABOUT), the active row a filled rounded pill.
-- Right: a section title with a one-line description, then a stack of cards.
-  Each card is one concern: bold card title, muted description line, then the
-  controls; a card can carry its own primary action, either inline under the
-  controls (an ink `Save Currency` pill) or right-aligned in the card header
-  (`⊕ Add rate`).
-- Field pattern inside a card: small bold label, muted description line, then
-  the control; sibling fields are separated by a hairline rather than by
-  spacing alone.
+  section labels (PREFERENCES / FINANCE / DATA / CONNECTIONS / EXTENSIONS /
+  ABOUT). Measured: the column is **240px**, sticky at `top-24`, `gap-10` from
+  the content, inside a `max-w-6xl` page. The group label is `text-sm
+  font-light uppercase tracking-widest` in muted ink — quiet, not a bold
+  micro-label. The active row is a ghost button at `h-9 rounded-md px-2` filled
+  with `bg-muted`, **not** a filled brand pill.
+- Right: a pane header — heading, one muted description line, optional
+  right-aligned action, and a mobile-only back arrow — then a `Separator`, then
+  a stack of cards. Each card is one concern: bold card title, muted
+  description line, then the controls; a card can carry its own primary action,
+  either inline under the controls (an ink `Save Currency` pill) or
+  right-aligned in the card header (`⊕ Add rate`). Every card saves itself;
+  there is no page-level save bar.
+- Field pattern: `text-base font-medium` label, `text-sm` muted description,
+  then the control. Sibling fields are separated by card boundaries and
+  `space-y-6`, **not** by hairlines — the earlier hairline claim was wrong.
+  Switch rows are `justify-between`, some inside their own `rounded-lg border
+  p-3` box. A pane may skip cards entirely and render plain field groups
+  (Appearance does).
+- Below `lg` the surface is a different structure, not a reflow: `/settings`
+  itself becomes a grouped list — uppercase group label over a
+  `rounded-2xl border divide-y` card of icon / title / subtitle / chevron rows —
+  and a row navigates to a detail pane whose header carries a back arrow.
 
-Ours today: one `max-w-3xl` column of cards with no navigation, and mixed
-label/description treatment. Mapping it would mean adding the grouped left
-column and standardizing the field pattern — a separate slice, not yet planned
-in the order below.
+Ours before this slice: one `max-w-3xl` column of cards with no navigation, one
+page-level save button covering three of them, and mixed label/description
+treatment.
 
 ## 3. Delivery order
 
@@ -259,6 +278,46 @@ base-200, which would not have been visible enough against the paper surface.
    it, which keeps the narrow layouts intact.
    Re-verified: axe 0 violations over 32 scans, 0 overflow at 390px and 320px,
    no target under 24x24, every Tab stop interactive with a visible ring.
+
+5. **Settings** — **landed 2026-08-23** (branch `ui/settings-panes`): the one
+   `max-w-3xl` column of six cards became one pane per concern, reached from a
+   grouped nav column at `lg` and above and from a list below it.
+   Panes and groups: 投资 (目标与定投 / 口径与基准), 通知 (邮件提醒),
+   数据与隐私 (分享链接), 偏好 (外观), 账户 (登录身份). Each is a real nested
+   route (`/settings/goal` …), so a pane is deep-linkable and the browser back
+   button works; `/settings` resolves to the first pane on wide screens and
+   stays the list on narrow ones. Only one of the two structures is ever
+   rendered — `useMediaQuery` picks it — because rendering both would duplicate
+   every control id in the accessibility tree.
+   One settings row still backs three panes, so the edit state lives in a
+   provider above them (`src/app/settings/formState.tsx`) and each pane carries
+   its own save action that writes the whole row. Switching panes therefore
+   never drops a pending edit, and when one exists the save row says so rather
+   than letting a sibling pane's change be written silently.
+   For that to hold, the shell's route-enter animation now keys settings paths
+   to a single `/settings` — re-keying per pane remounted the provider and lost
+   the edit — which also means panes swap with no page transition, as in the
+   reference.
+   Divergences from the reference, each deliberate: the group label reuses our
+   own shipped `.workbench-eyebrow` treatment instead of the reference's
+   `font-light` 14px, so the app keeps one uppercase label style; the nav
+   column is not sticky, because the shell's route wrapper is an `overflow-x`
+   container and sticky would not resolve against the scrolling `main`; and
+   there is no visible `设置` page title, since the toolbar pill group already
+   names the route and the pane header carries identity.
+   The cost-basis `<select>` with hand-written classes became the shipped
+   `SegmentedControl`, which is what removed the last piece of the "mixed
+   label/description treatment" this slice existed to fix.
+   Verified: axe 0 violations over 28 scans (7 routes x desktop/390px x
+   light/dark), 107 Tab stops all interactive with a visible ring and none
+   under 24x24, 0 page overflow at 390px and 320px on all seven routes, and
+   reduced motion pixel-stable across a 2s hold and a pane switch.
+   One regression was caught and fixed in the same change: lifting the share
+   list out of its card put the revoked row's `opacity-60` over a lighter
+   backdrop and dropped four nodes to 2.62:1. The list went back into a card
+   with its action in the card header — which is the reference's own pattern —
+   and the revoked state is now muted ink on a raised surface instead of an
+   opacity blend, so it cannot fall under the floor on any background.
 
 Out of scope throughout: multi-account scoping, budgeting and liabilities, the
 add-on marketplace, and anything else on the product reject list. Where a

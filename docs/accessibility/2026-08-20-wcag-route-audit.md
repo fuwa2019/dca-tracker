@@ -142,3 +142,31 @@ Under the `requirements-audit.md` tri-state this moves the product side of the
 WCAG row from `missing` evidence to `partial`: automated AA coverage plus
 keyboard, reduced-motion, reflow and target-size measurement on every locally
 renderable route, with the screen-reader and cloud-only surfaces still open.
+
+## 7. Follow-up scan — settings panes (2026-08-23)
+
+The settings surface stopped being one route on 2026-08-23; it is now
+`/settings` plus six panes. Same tool versions and rule sets as section 1, with
+Chromium replaced by the system Chrome channel (Playwright's own browser
+download was not present on this machine, and was not added).
+
+- **axe-core 4.10.2**: 7 routes x {1280x900, 390x844} x {light, dark} =
+  **28 scans, 0 violations**.
+- **Keyboard**: 107 Tab stops across the seven routes. Every stop is an
+  interactive element, every stop paints a visible ring, and no focused target
+  is under 24x24.
+- **Reflow**: page horizontal overflow is 0 on all seven routes at 320x812.
+- **Reduced motion**: pixel-identical screenshots across a 2s hold on
+  `/settings`, `/settings/goal` and `/settings/basis`, and across a nav-column
+  pane switch — panes now swap with no page transition at all.
+
+One regression was found by this scan and fixed before the change shipped:
+moving the share list out of its card left the revoked row's `opacity-60`
+compositing over a lighter backdrop, which put four nodes at 2.62:1 against the
+4.5:1 floor. Baseline `/settings` on `master` was re-scanned in a throwaway
+worktree to confirm the failure was new rather than inherited. The row now
+carries muted ink on a raised surface instead of an opacity blend, so its
+contrast no longer depends on what is behind it.
+
+Section 6 is unchanged: the screen-reader pass, 2.4.11 and the cloud-only
+routes remain open.

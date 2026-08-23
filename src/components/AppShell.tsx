@@ -92,6 +92,15 @@ function pageTitle(pathname: string) {
   return activeItem(pathname).label;
 }
 
+/**
+ * Route-enter animation key. Settings panes are views inside one surface — the
+ * reference swaps them without a page transition, and re-keying here would also
+ * remount the shared settings form and drop a pending edit.
+ */
+function motionKey(pathname: string) {
+  return pathname.startsWith('/settings') ? '/settings' : pathname;
+}
+
 export function AppShell() {
   const location = useLocation();
   const scrollContainerRef = useRef<HTMLElement>(null);
@@ -108,7 +117,7 @@ export function AppShell() {
         <main ref={scrollContainerRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-24 lg:pb-10">
           <RouteErrorBoundary resetKey={location.pathname}>
             <motion.div
-              key={location.pathname}
+              key={motionKey(location.pathname)}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}

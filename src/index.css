@@ -262,6 +262,31 @@
     outline: 1px solid hsl(var(--border));
   }
 
+  /* Settings nav column — the rail's active treatment, one level in. */
+  .settings-nav-link {
+    display: inline-flex;
+    height: 2.25rem;
+    min-width: 0;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: calc(var(--radius) - 2px);
+    padding-inline: 0.5rem;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.8125rem;
+    transition: color 120ms ease, background-color 120ms ease;
+  }
+
+  .settings-nav-link:hover {
+    background: hsl(var(--surface-elevated) / 0.6);
+    color: hsl(var(--foreground));
+  }
+
+  .settings-nav-link-active {
+    background: hsl(var(--surface-elevated));
+    color: hsl(var(--foreground));
+    font-weight: 500;
+  }
+
   .workbench-page {
     width: min(100%, 1400px);
     margin-inline: auto;
