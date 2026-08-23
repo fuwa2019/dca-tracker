@@ -707,6 +707,35 @@ further append-only migration.
 
 ## Production State
 
+- 2026-08-23 release: `master` was pushed to `origin/master` at `61def4e` with
+  explicit user authorization ("提交 推送 部署上线"), and the Git-backed Pages
+  project rebuilt within about a minute. Canonical
+  `https://dca-tracker-git.pages.dev` now serves `assets/index-BY_z5fjC.js`
+  with `assets/index-CsPGIGDY.css`. Five commits shipped: the settings panes,
+  the 2.4.11 scroll-margin fix, the 2.4.11 record correction, the Portfolio
+  Performance application gate, and the public-share privacy gate.
+  Post-deploy checks, all with a cache-busting query parameter: the served
+  bundle contains the new pane strings (口径与基准, 数据与隐私, 搜索要添加的基准,
+  返回设置列表, 有未保存的修改) and the stylesheet carries both
+  `scroll-margin-bottom` and `.settings-nav-link`; `/`, `/performance`,
+  `/exposure`, `/transactions`, `/transactions/all`, `/health`, `/settings`,
+  all six `/settings/*` panes, an unknown `/settings/nonsense`, `/login` and an
+  invalid `/share/<token>` all return 200, so the SPA `_redirects` fallback
+  covers the new deep links; the production login route renders with no console
+  output, which means the Pages build still injects the public `VITE_` values;
+  an unauthenticated `/settings/basis` redirects to `/login` rather than
+  erroring; and an invalid share token still renders only the expired-link
+  message. No login was attempted and no private data was read.
+- **Migration `0051` is NOT applied.** The authorization covered the frontend
+  release; changing a production RPC is a separate operation. Production
+  therefore still returns `nav_user`, `nav_benchmark` and `flow` inside a
+  public share response whenever a skip warning exists. See the 2026-08-23
+  public-share privacy section above.
+- Supabase remains at migration `0050`; the Quote Worker and Email Worker were
+  not touched by this release.
+
+### Earlier releases
+
 - 2026-08-20 UI-alignment phases 2-4 release: `master` was pushed to
   `origin/master` at `c52609e` with explicit user authorization, and Pages
   rebuilt within about 30 seconds. Canonical
@@ -759,22 +788,19 @@ further append-only migration.
 
 ## Next Steps
 
-The Settings slice is finished and verified but lives on the local branch
-`ui/settings-panes`; `master` is still at `304ca9a` and production is unchanged.
-Nothing is half-written. Pick up with whichever of these the owner wants.
+`master` is at `61def4e`, synced with `origin/master`, and the frontend is live
+on Pages. Nothing is half-written. The one outstanding production action is the
+unapplied migration; after that, pick up whichever of these the owner wants.
 
-1. **Release the branch, or don't.** `ui/settings-panes` now carries two things
-   — the settings panes and the 2.4.11 fix. The 2.4.11 fix is one CSS rule that
-   corrects a live AA failure present on `master` today, so it is worth
-   shipping even if the settings redesign is held back; it can be cherry-picked
-   onto `master` on its own. The full local check set passes and the
-   accessibility evidence is recorded. Merging to `master` pushes a Pages
-   rebuild, so it needs the usual one-at-a-time deploy authorization. Post-deploy, check the live bundle with a
-   cache-busting query parameter and confirm `/settings`, `/settings/goal` …
-   `/settings/account` all return 200 — the SPA `_redirects` fallback already
-   covers the new deep links, but they have only been exercised locally.
-   The UI-alignment delivery order in `docs/design/wealthfolio-ui-teardown.md`
-   now has no open phase.
+1. **Apply migration `0051`, or accept the leak for now.** The frontend is
+   released (see Production State); the migration is not. Until it is applied,
+   an anonymous share response still carries `nav_user`, `nav_benchmark` and
+   `flow` whenever a skip warning exists. Applying it replaces two function
+   definitions, writes no rows, and needs explicit authorization for that
+   operation. `npm run test:share-privacy` guards the repository side already,
+   but it reads migration text, not the deployed database — after applying,
+   check the live definitions for drift.
+
 2. **Longer-standing gates.** B1 closed on 2026-08-23, so the `ledger_twr_v2`
    switch is now waiting on the rest of B2: a full re-import and a V1
    regression, both of which need authorized cloud work. D2/D3 are now gated in
