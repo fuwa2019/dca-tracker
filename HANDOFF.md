@@ -726,11 +726,46 @@ further append-only migration.
   an unauthenticated `/settings/basis` redirects to `/login` rather than
   erroring; and an invalid share token still renders only the expired-link
   message. No login was attempted and no private data was read.
-- **Migration `0051` is NOT applied.** The authorization covered the frontend
-  release; changing a production RPC is a separate operation. Production
-  therefore still returns `nav_user`, `nav_benchmark` and `flow` inside a
-  public share response whenever a skip warning exists. See the 2026-08-23
-  public-share privacy section above.
+- **Migration `0051` is NOT applied — authorized but not executable from that
+  session.** The owner authorized applying it on 2026-08-23. The session had no
+  write path to the production database: the connected Supabase MCP exposes only
+  read-only `query_logs` (no `apply_migration`, no `execute_sql`), the Supabase
+  CLI is not installed, `supabase/` carries no link state, and a direct `psql`
+  connection would need production credentials, which agents in this repository
+  must not read or handle. The apply was therefore left to the owner rather than
+  worked around.
+  Production still returns `nav_user`, `nav_benchmark` and `flow` inside a public
+  share response whenever a skip warning exists. See the 2026-08-23 public-share
+  privacy section above.
+  To apply: paste `supabase/migrations/0051_public_share_warning_projection.sql`
+  into the Supabase SQL editor for project `igwacbeojogblacektxr`, or run it
+  through the CLI once linked. It replaces two function definitions and writes no
+  rows. Post-apply read-only checks:
+
+  ```sql
+  -- the boundary projects
+  select pg_get_functiondef('public.shared_performance_history(text)'::regprocedure)
+      like '%_public_share_sanitize_history%' as projects;
+
+  -- the anonymous surface is still exactly three entry points
+  select p.proname, array_agg(a.rolname order by a.rolname) as roles
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  join lateral (
+      select r.rolname from pg_roles r
+      where has_function_privilege(r.rolname, p.oid, 'execute')
+        and r.rolname in ('anon', 'authenticated')
+  ) a on true
+  where n.nspname = 'public' and a.rolname = 'anon'
+  group by p.proname order by p.proname;
+
+  -- the projection itself, on a synthetic payload
+  select public._public_share_sanitize_history(jsonb_build_object(
+      'series', '[]'::jsonb,
+      'warnings', jsonb_build_array(jsonb_build_object(
+          'date', '2026-01-05', 'type', 'skipped', 'nav_user', 1, 'flow', -2))
+  )) -> 'warnings';
+  ```
 - Supabase remains at migration `0050`; the Quote Worker and Email Worker were
   not touched by this release.
 
@@ -792,8 +827,9 @@ further append-only migration.
 on Pages. Nothing is half-written. The one outstanding production action is the
 unapplied migration; after that, pick up whichever of these the owner wants.
 
-1. **Apply migration `0051`, or accept the leak for now.** The frontend is
-   released (see Production State); the migration is not. Until it is applied,
+1. **Apply migration `0051`.** Authorized on 2026-08-23 but not executable from
+   that session — no write path to the production database existed (details and
+   the exact apply/verify steps are in Production State). Until it is applied,
    an anonymous share response still carries `nav_user`, `nav_benchmark` and
    `flow` whenever a skip warning exists. Applying it replaces two function
    definitions, writes no rows, and needs explicit authorization for that
