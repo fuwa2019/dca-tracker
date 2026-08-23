@@ -94,8 +94,17 @@ requirements-audit）、`HANDOFF.md`（2026-08-19 已验证状态）。
   桌面/390px × 浅色/深色 共 36 次扫描：修复前 10 类违规（对比度 75 节点、
   meta-viewport 36、aria-prohibited-attr 16、scrollable-region-focusable 2
   等），修复后 0 违规。同批修掉的还有 24×24 目标尺寸（3 处）与 h1→h3 跳级。
-  仍未证明：读屏实测、2.4.11 焦点不被遮挡、云端才渲染的
-  `/cashflows`、有数据的分享页与登录成功流。
+  【进度 2026-08-23】2.4.11 已实测并已闭环，记录在同一份审计的第 8 节。
+  方法用三路互不依赖的信号判定（裁剪祖先求交、非祖先 fixed/sticky 盒的
+  几何相减、`elementFromPoint` 11×11 采样），覆盖 14 条路由 × 三种宽度共
+  691 个焦点停靠点。修复前 8 个停靠点在 390px 完全躲在固定底部导航后面
+  （`/transactions/all` 的 7 个行操作按钮、`/settings/basis` 的基准搜索
+  框），另有 10 个部分被遮；成因是顺序焦点只把控件滚到"刚好进视口"，而
+  视口底边正在导航之下。以 `lg` 以下的 `scroll-margin-bottom` 修复后重测
+  为 0 失败、0 部分被遮。同批把 settings 拆成七条路由并重扫至 0 违规
+  （第 7 节）。
+  仍未证明：读屏实测、云端才渲染的 `/cashflows`、有数据的分享页与
+  登录成功流。
 - C2 键盘全路径：每个路由 forward/reverse Tab、可见 focus、菜单可键盘
   展开，纳入 Playwright 检查（桌面 + 390px）。
   【进度 2026-08-20】账本与导入路由完成 playwright-cli 键盘证据：
