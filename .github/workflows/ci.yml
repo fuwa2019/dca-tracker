@@ -36,6 +36,9 @@ jobs:
       - name: Quote status labels
         run: npm run test:quote-status
 
+      - name: Public share privacy
+        run: npm run test:share-privacy
+
       - name: Typecheck
         run: npm run typecheck
 

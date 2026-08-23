@@ -28,7 +28,9 @@ project truth.
 - Add a new append-only migration for every database, RLS, trigger, or RPC
   change. Never rewrite an applied migration.
 - Preserve public-share privacy: no absolute amounts, cashflows, trades,
-  exchange loss, contact details, or private fields.
+  exchange loss, contact details, or private fields. `npm run test:share-privacy`
+  enforces the anonymous surface and its payload allowlist; run it after any
+  change to a `shared_*` function, an anon grant, or the history cache payload.
 - Keep the dashboard and public share performance on the same cached TWR
   contract.
 - Do not add a `Database` generic to the shared Supabase client.
@@ -46,6 +48,7 @@ Run checks proportional to the change. The default CI-equivalent set is:
 npm run test:finance
 npm run test:email-reminder
 npm run test:quote-status
+npm run test:share-privacy
 npm run typecheck
 npm run build
 ```

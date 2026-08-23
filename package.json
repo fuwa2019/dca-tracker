@@ -17,6 +17,7 @@
     "test:nyse-calendar-sync": "node scripts/verify-nyse-calendar-sync.mjs",
     "test:migration-numbering": "node scripts/verify-migration-numbering.mjs",
     "test:quote-status": "node scripts/verify-quote-status.mjs",
+    "test:share-privacy": "node scripts/verify-public-share-privacy.mjs",
     "test:etf-holdings": "node --experimental-strip-types scripts/verify-etf-holdings.ts",
     "test:competitive-fixture": "node scripts/verify-competitive-fixture.mjs",
     "test:portfolio-import": "node --experimental-strip-types scripts/verify-portfolio-import-adapters.ts",

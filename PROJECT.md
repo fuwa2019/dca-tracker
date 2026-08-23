@@ -145,6 +145,7 @@ Core verification:
 npm run test:finance
 npm run test:email-reminder
 npm run test:quote-status
+npm run test:share-privacy
 npm run typecheck
 npm run build
 ```
@@ -161,7 +162,16 @@ npm run test:schwab
 
 There is no lint script. Do not claim lint passed unless one is added and run.
 CI runs the three worker/root installs followed by finance, email-reminder,
-quote-status, typecheck, and build.
+quote-status, share-privacy, typecheck, and build.
+
+`test:share-privacy` reads the migration set and fails if the anonymous share
+surface widens, if an anonymous entry point emits a key outside its allowlist,
+if the cached history stops being projected through
+`_public_share_sanitize_history`, or if an anonymous path starts recomputing
+instead of reading cache. It cannot audit the cache writer chain —
+`_performance_history_for_user_fast_base` has no static definition, having been
+renamed in 0029 and patched in place ever since — which is exactly why the
+public boundary projects rather than trusts.
 
 ## Runtime Modes
 

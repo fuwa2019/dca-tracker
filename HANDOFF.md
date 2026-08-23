@@ -515,6 +515,65 @@ verification gate plus its fixture.
   full re-import and the V1 regression both need authorized cloud work.
   Switching `ledger_twr_v2` remains a separate release gate.
 
+## Public Share Privacy — D2/D3 and a Live Leak (2026-08-23)
+
+On branch `ui/settings-panes`, committed locally. Migration `0051` is written
+and locally verified but **NOT APPLIED**. Production still has the defect below
+until an authorized apply.
+
+**The finding.** `public.shared_performance_history` returns the cached history
+payload wholesale. The cache writer's `warnings` array has three shapes, and one
+of them carries absolute USD figures — `nav_user`, `nav_benchmark`, `flow` — for
+a day skipped because NAV net of flow fell to zero or below (a full
+liquidation, a large withdrawal, a data gap). Whenever such a warning exists, an
+anonymous share request returns portfolio NAV and a flow amount. That breaks the
+percentage-only public-share contract. It went unnoticed because the synthetic
+and normal states never produce a skip warning.
+
+**Reproduced, not inferred.** A throwaway PostgreSQL 15.19 cluster was created
+in the session scratchpad with the shipped function body and a cache row shaped
+like the writer's output. Before the fix the anonymous response contained
+`nav_user 12345.67`, `nav_benchmark 12000.00`, `flow -9000.00`; after migration
+`0051` the warning keeps only `date` and `type`, and the rest of the payload is
+byte-identical (`(before - warnings - dirty) = (after - warnings - dirty)`
+returns true). The `shared_history` alias goes through the same path.
+
+**The fix.** `supabase/migrations/0051_public_share_warning_projection.sql`
+projects the cached payload through an allowlist at the public boundary:
+a warning keeps `date`, `type`, `original_date`, `ticker`. Boundary rather than
+writer, because the owner keeps the diagnostic, the dashboard and share keep
+reading one cached TWR contract, and nothing has to be recomputed — existing
+cache rows are sanitized on read, so **the migration writes no rows**. Rationale
+and alternatives in `docs/decisions/2026-08-23-public-share-warning-projection.md`.
+
+**The gate.** `npm run test:share-privacy`
+(`scripts/verify-public-share-privacy.mjs`), added to CI and to the core check
+set in `PROJECT.md` and `AGENTS.md`. It pins the anon-executable set to the three
+documented entry points, allowlists every JSON key those entry points emit,
+rejects id-like and amount-like keys and internal identifiers in payload values,
+requires the cached payload to be projected, and forbids an anonymous path from
+calling a recompute helper. Negative-tested against three mutated copies of the
+migration set (sanitizer removed, extra anon grant, amount key added) — it fails
+on each, so it is not a vacuous check.
+
+**Why the boundary and not the writer.** `_performance_history_for_user_fast_base`
+has no static definition anywhere in the repository: migration 0029 created it by
+renaming the then-current `_performance_history_for_user_fast`, and 0037, 0043
+and 0047 each patch it in place through `pg_get_functiondef`. Its body is only
+knowable from a live database. The public boundary therefore cannot trust the
+cache payload and must project it. This is worth remembering for any future
+change to that chain.
+
+**Limits.** The gate reads migration text, not the deployed database; a
+production drift check against the live definitions is still separate and
+unauthorized work. D1 proper — the V2 cache and RPC — is still unimplemented;
+the projection and the gate carry over to it. `requirements-audit.md` moves the
+D row from `missing` to `partial`.
+
+**Needs a decision from the owner:** applying `0051` changes a production RPC.
+It replaces two function definitions, writes no rows, and is reversible by a
+further append-only migration.
+
 ## Session Notes (2026-08-20 handoff)
 
 - Delivery flow used this window: slices are implemented either locally or by
@@ -716,11 +775,14 @@ Nothing is half-written. Pick up with whichever of these the owner wants.
    covers the new deep links, but they have only been exercised locally.
    The UI-alignment delivery order in `docs/design/wealthfolio-ui-teardown.md`
    now has no open phase.
-2. **Longer-standing gates.** B1 closed on 2026-08-23 (see above), so the
-   `ledger_twr_v2` switch is now waiting on the rest of B2: a full re-import and
-   a V1 regression, both of which need authorized cloud work. The V2 share cache
-   with its privacy snapshot (D1/D2) is still the only fully missing contract
-   row in `requirements-audit.md`.
+2. **Longer-standing gates.** B1 closed on 2026-08-23, so the `ledger_twr_v2`
+   switch is now waiting on the rest of B2: a full re-import and a V1
+   regression, both of which need authorized cloud work. D2/D3 are now gated in
+   CI and a live V1 share leak was found and fixed in migration `0051`, which is
+   **unapplied and waiting on authorization** — that is the most time-sensitive
+   item on this list, because production leaks until it lands. D1 proper (the V2
+   cache and RPC) is still unimplemented. The remaining fully missing contract
+   row is `Performance/Lighthouse/compatibility gates`, not the share cache.
 3. **Accessibility follow-ups that remain open:** a screen-reader pass and the
    cloud-only routes (`/cashflows`, a populated `/share/<token>`, the
    authenticated login flow). WCAG 2.4.11 is no longer on this list — it was
@@ -784,6 +846,9 @@ Nothing is half-written. Pick up with whichever of these the owner wants.
 - `docs/research/competitive/2026-08/reconciliation.md`
 - `docs/research/competitive/2026-08/fixtures/portfolio-performance-stored-ledger.json`
 - `scripts/verify-portfolio-performance-reconciliation.mjs`
+- `scripts/verify-public-share-privacy.mjs`
+- `supabase/migrations/0051_public_share_warning_projection.sql`
+- `docs/decisions/2026-08-23-public-share-warning-projection.md`
 - `docs/design/wealthfolio-ui-teardown.md`
 - `docs/accessibility/2026-08-20-wcag-route-audit.md`
 - `supabase/migrations/0047_schwab_settled_cash_and_stock_allocations.sql`
