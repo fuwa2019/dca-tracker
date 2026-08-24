@@ -51,6 +51,7 @@ import {
   type EtfHoldingFetchWarning,
   type SupportedEtf,
 } from './etfHoldings.js';
+import { runLedgerPerformanceSync } from './ledgerPerformance';
 
 export interface Env {
   QUOTE_CACHE: KVNamespace;
@@ -181,7 +182,15 @@ export default {
       ctx.waitUntil(runEtfHoldingsSync(env));
       return;
     }
-    ctx.waitUntil(runDailyPriceSync(env));
+    // The V2 curve depends on the closes the daily sync just wrote, so it runs
+    // after that sync rather than on a trigger of its own — the account's cron
+    // trigger budget is nearly spent, and an independent schedule would race
+    // the prices it reads.
+    ctx.waitUntil(runDailyPriceSync(env).then(() => runLedgerPerformanceSync(env))
+      .then((items) => {
+        if (items.length > 0) console.log('[cron] ledger_twr_v2', JSON.stringify(items));
+      })
+      .catch((error) => console.error('[cron] ledger_twr_v2 failed', error)));
   },
 };
 

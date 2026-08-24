@@ -4,10 +4,16 @@
     "module": "ESNext",
     "lib": ["ES2022"],
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*",
+    "../../src/lib/calc/ledgerTwr.ts",
+    "../../src/lib/import/types.ts"
+  ]
 }

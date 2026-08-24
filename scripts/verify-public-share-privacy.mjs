@@ -42,6 +42,11 @@ const ALLOWED_PAYLOAD_KEYS = new Set([
   'error',
   'generated_at',
   'has_snapshot_price',
+  // The calculation method's name ('TWR' / 'ledger_twr_v2'). It is a state
+  // label, carries no amount and no identifier, and the cached payload has
+  // always contained it — 0052 just made the readers state it explicitly when
+  // the requested method has no cached row yet.
+  'method',
   'positions',
   'return_pct',
   'series',
@@ -66,6 +71,19 @@ const RECOMPUTE_HELPERS = [
   'refresh_shared_history_cache',
 ];
 
+/**
+ * Functions 0052 added for the ledger_twr_v2 cache. None may ever be reachable
+ * by `anon` or `authenticated`: the writer would let a caller shape the cached
+ * payload the public share reads, and the universe function returns raw user
+ * ids — exactly the internal identifier the public surface must never carry.
+ */
+const SERVICE_ROLE_ONLY_FUNCTIONS = [
+  'public.write_ledger_performance_cache',
+  'public.ledger_performance_refresh_universe',
+  'public._selected_performance_method_for_user',
+  'public._performance_cache_method_key',
+];
+
 /** Keys that must never reach an anonymous reader, by name. */
 const FORBIDDEN_KEY_PATTERN = /(^|_)(id|uuid|token|email|user)$|amount|usd|cny|cash_flow|cashflow|nav|invested|cost_basis|pnl|proceeds|exchange_loss|settled/i;
 
@@ -88,6 +106,9 @@ if (files.length === 0) {
 const GRANT = /grant\s+execute\s+on\s+function\s+([\w.]+)\s*\(([^)]*)\)\s+to\s+([^;]+);/gi;
 const REVOKE = /revoke\s+all\s+on\s+function\s+([\w.]+)\s*\(([^)]*)\)\s+from\s+([^;]+);/gi;
 const anonFunctions = new Set();
+/** Effective role set per function, replayed in migration order. */
+const effectiveGrants = new Map();
+const ROLE_NAMES = ['anon', 'authenticated', 'service_role', 'public'];
 
 for (const file of files) {
   const sql = readFileSync(`${MIGRATIONS}/${file}`, 'utf8');
@@ -96,6 +117,15 @@ for (const file of files) {
   for (const match of sql.matchAll(REVOKE)) events.push({ at: match.index, grant: false, fn: match[1], roles: match[3] });
   events.sort((left, right) => left.at - right.at);
   for (const event of events) {
+    const touched = ROLE_NAMES.filter((role) => new RegExp(`\\b${role}\\b`, 'i').test(event.roles));
+    if (touched.length > 0) {
+      if (!effectiveGrants.has(event.fn)) effectiveGrants.set(event.fn, new Set());
+      const roles = effectiveGrants.get(event.fn);
+      for (const role of touched) {
+        if (event.grant) roles.add(role);
+        else roles.delete(role);
+      }
+    }
     if (!/\banon\b|\bpublic\b/i.test(event.roles)) continue;
     if (event.grant) anonFunctions.add(event.fn);
     else anonFunctions.delete(event.fn);
@@ -238,16 +268,24 @@ for (const name of CACHE_RETURNING_ENTRY_POINTS) {
     continue;
   }
   const body = stripComments(definition.body);
-  const returnsCache = /\breturn\s+[^;]*\bv_(cached|legacy)\b/.test(body);
-  const projects = new RegExp(`${SANITIZER.replace('.', '\\.')}\\s*\\(`).test(body);
-  if (returnsCache && !projects) {
-    failures.push(
-      `${name}（${definition.file}）直接返回缓存负载而没有经过 ${SANITIZER}。`
-      + '缓存写入链是动态打补丁的、静态不可审计，所以公开边界必须做白名单投影。',
-    );
+  // Check EVERY return that hands back a cached payload, not just whether the
+  // sanitizer appears somewhere in the body. Since 0052 this function has more
+  // than one cache branch, and a body-level check would pass while one branch
+  // returned the cache raw.
+  const cacheReturns = [...body.matchAll(/\breturn\s+([^;]*\bv_(?:cached|legacy)\b[^;]*);/g)]
+    .map((match) => match[1]);
+  const sanitizerCall = new RegExp(`${SANITIZER.replace('.', '\\.')}\\s*\\(`);
+  if (cacheReturns.length === 0) {
+    failures.push(`${name}（${definition.file}）没有任何返回缓存的分支：请确认它仍是缓存读取路径。`);
   }
-  if (!returnsCache && !projects) {
-    failures.push(`${name}（${definition.file}）既不返回缓存也不投影：请确认它仍是缓存读取路径。`);
+  for (const statement of cacheReturns) {
+    if (!sanitizerCall.test(statement)) {
+      failures.push(
+        `${name}（${definition.file}）有一个分支直接返回缓存负载而没有经过 ${SANITIZER}：`
+        + `${statement.replace(/\s+/g, ' ').slice(0, 120)}。`
+        + '缓存写入链是动态打补丁的、静态不可审计，所以公开边界的每一条返回都必须做白名单投影。',
+      );
+    }
   }
 }
 
@@ -287,6 +325,48 @@ for (const file of files) {
 notes.push(`扫描了 ${files.length} 个迁移文件，${patchedReplacements} 处动态函数体改写。`);
 notes.push(`匿名入口：${anonList.join(', ')}`);
 notes.push(`未静态审计：_performance_history_for_user_fast_base（0029 重命名后一直原地打补丁），由公开边界的白名单投影兜底。`);
+
+// ------------------------------- the ledger_twr_v2 write surface stays private
+for (const name of SERVICE_ROLE_ONLY_FUNCTIONS) {
+  const grantedTo = effectiveGrants.get(name);
+  if (grantedTo === undefined) {
+    failures.push(`${name} 找不到授权记录：0052 之后它应当显式 revoke 再按需 grant。`);
+    continue;
+  }
+  for (const role of ['anon', 'authenticated', 'public']) {
+    if (grantedTo.has(role)) {
+      failures.push(
+        `${name} 被授予了 ${role}。V2 缓存的写入面必须只对 service_role 开放：`
+        + '写入者能决定公开分享读到的负载，universe 函数直接返回 user_id。',
+      );
+    }
+  }
+}
+
+// The writer must rebuild the payload from an allowlist rather than storing
+// whatever it was handed, otherwise an amount could reach the cache and the
+// public boundary would be the only thing standing in front of it.
+const writer = definitions.get('public.write_ledger_performance_cache');
+if (!writer) {
+  failures.push('找不到 public.write_ledger_performance_cache：V2 缓存的写入面缺失。');
+} else {
+  const body = stripComments(writer.body);
+  if (!/entry\.key\s+not\s+in\s*\(/i.test(body)) {
+    failures.push(
+      'write_ledger_performance_cache 没有对 series 的键做白名单校验：'
+      + '调用方将能把任意字段（含金额）写进公开分享读取的缓存。',
+    );
+  }
+  if (!/jsonb_build_object\s*\(/i.test(body)) {
+    failures.push('write_ledger_performance_cache 必须自行构建负载，而不是存储调用方给的对象。');
+  }
+  for (const key of ['nav_user', 'nav_benchmark', 'flow', 'usd_amount']) {
+    if (new RegExp(`'${key}'`).test(body)) {
+      failures.push(`write_ledger_performance_cache 的负载里出现了金额字段 '${key}'。`);
+    }
+  }
+}
+notes.push(`V2 写入面仅 service_role：${SERVICE_ROLE_ONLY_FUNCTIONS.join(', ')}`);
 
 if (failures.length > 0) {
   console.error('公开分享隐私校验失败：');
