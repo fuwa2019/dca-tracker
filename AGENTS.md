@@ -35,7 +35,14 @@ project truth.
   contract.
 - Do not add a `Database` generic to the shared Supabase client.
 - Preserve local-date form defaults and `public/_redirects`.
+- Import icons from `src/components/icons.tsx`, never from `lucide-react`
+  directly. A bare lucide `<svg>` has no role and no name, so a screen reader
+  announces "image" for every decorative icon and axe does not catch it; that
+  module applies `aria-hidden` by default. Icons are re-exported one by one to
+  keep tree-shaking, so a newly used icon has to be added there.
 - Do not introduce or upgrade major dependencies without a concrete need.
+- Do not run Prettier on this repository. There is no Prettier config, so it
+  reformats whole files to defaults that do not match the surrounding code.
 - For Cloudflare, Supabase, Schwab, Resend, or other external service work,
   check the project documentation and `references/index.md` before relying on
   provider behavior.
@@ -51,6 +58,7 @@ npm run test:quote-status
 npm run test:share-privacy
 npm run typecheck
 npm run build
+npm run test:release-budget
 ```
 
 There is no lint script. Use the scoped checks documented in `PROJECT.md` when
