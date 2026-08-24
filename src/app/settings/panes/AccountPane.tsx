@@ -1,4 +1,4 @@
-import { LogOut } from 'lucide-react';
+import { LogOut } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { useAuth, signOut } from '@/hooks/useAuth';
 import { LOCAL_MODE } from '@/lib/localMode';

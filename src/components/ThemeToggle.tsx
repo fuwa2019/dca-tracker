@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Laptop, Moon, Sun } from 'lucide-react';
+import { Laptop, Moon, Sun } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { applyThemeMode, readThemeMode, type ThemeMode } from '@/lib/theme';
 

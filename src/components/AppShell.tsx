@@ -12,7 +12,7 @@ import {
   PanelLeftOpen,
   Settings,
   type LucideIcon,
-} from 'lucide-react';
+} from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { MarketStatusBar } from '@/components/MarketStatusBar';

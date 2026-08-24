@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ResponsiveContainer, AreaChart, Area, YAxis, Tooltip } from 'recharts';
-import { Plus, Activity, Briefcase, TrendingUp } from 'lucide-react';
+import { Plus, Activity, Briefcase, TrendingUp } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import type { HistoryPoint } from '@/lib/calc/history';

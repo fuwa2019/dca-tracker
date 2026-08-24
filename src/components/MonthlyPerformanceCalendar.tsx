@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw } from '@/components/icons';
 import { Card } from '@/components/ui/card';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { usePerformanceDailyPnl } from '@/hooks/usePerformanceDailyPnl';

@@ -12,7 +12,7 @@ import {
   TrendingUp,
   Wifi,
   type LucideIcon,
-} from 'lucide-react';
+} from '@/components/icons';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';

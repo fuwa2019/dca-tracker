@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from '@/components/icons';
 import { unrealizedPL, type Position } from '@/lib/calc/position';
 import type { Quote } from '@/lib/quote';
 import { usd, signedUsd, signedPct, pct, changeColor } from '@/lib/format';
@@ -71,6 +71,7 @@ function HoldingsTable({ rows }: { rows: Row[] }) {
   const enter = useEnterMotion();
   return (
     <table className="hidden w-full text-sm md:table">
+      <caption className="sr-only">持仓明细</caption>
       <thead>
         <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
           <th className="px-4 py-2.5 text-left text-[11px] font-medium uppercase tracking-wider">代码</th>

@@ -1,4 +1,4 @@
-import { Calculator, AlertTriangle } from 'lucide-react';
+import { Calculator, AlertTriangle } from '@/components/icons';
 import { Card } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';

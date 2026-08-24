@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Plus, ShieldCheck, Trash2 } from 'lucide-react';
+import { Check, Copy, Plus, ShieldCheck, Trash2 } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';

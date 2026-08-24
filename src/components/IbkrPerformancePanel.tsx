@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { ChevronDown, ChevronLeft, ChevronRight, Info } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Info } from '@/components/icons';
 import { Card } from '@/components/ui/card';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { EmptyState } from '@/components/EmptyState';
@@ -334,6 +334,7 @@ function SummaryTable({
       <div className="px-4 pb-3 pt-3">
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="历史业绩表格">
           <table className="w-full min-w-[360px] border-separate border-spacing-0 text-[13px]">
+            <caption className="sr-only">历史业绩：各区间的组合与基准回报</caption>
             <thead>
               <tr className="text-muted-foreground">
                 <th className="w-40 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">
@@ -610,6 +611,7 @@ function PerformanceDetailTable({
     <div className="border-t border-border">
       <div className="overflow-x-auto">
         <table className="w-full text-[13px] sm:min-w-[520px]">
+          <caption className="sr-only">每日累计回报</caption>
           <thead>
             <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
               <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">日期</th>

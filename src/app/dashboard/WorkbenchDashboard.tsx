@@ -10,7 +10,7 @@ import {
   RefreshCw,
   WalletCards,
   type LucideIcon,
-} from 'lucide-react';
+} from '@/components/icons';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import { HoldingsList } from '@/components/HoldingsList';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -181,34 +181,43 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
         <h2 id="value-chart-title" className="sr-only">账户价值曲线</h2>
         {chartRows.length > 1 ? (
           <div className="h-56 min-w-0 sm:h-72" role="img" aria-label={`账户价值曲线，${dateRange}`}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartRows} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-                <defs>
-                  <linearGradient id="overview-value-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <YAxis hide domain={['dataMin', 'dataMax']} />
-                <Tooltip
-                  cursor={{ stroke: 'hsl(var(--crosshair))', strokeDasharray: '3 3' }}
-                  content={({ active, payload }) => active && payload?.[0]?.payload ? (
-                    <div className="workbench-tooltip">
-                      <div className="text-muted-foreground">{payload[0].payload.date}</div>
-                      <div className="font-num mt-0.5 font-semibold">{usd.format(payload[0].payload.value)}</div>
-                    </div>
-                  ) : null}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="hsl(var(--chart-2))"
-                  strokeWidth={2}
-                  fill="url(#overview-value-fill)"
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {/*
+              Recharts draws its own <svg> with an empty <title>/<desc>, which
+              Chrome exposes as a second, unnamed image inside this labelled
+              one — a screen reader reads the label and then just "image". The
+              wrapper above is the accessible presentation of the chart, so the
+              drawing itself is hidden. Found by the accessibility-tree audit.
+            */}
+            <div className="h-full w-full" aria-hidden="true">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartRows} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+                  <defs>
+                    <linearGradient id="overview-value-fill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.28} />
+                      <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <YAxis hide domain={['dataMin', 'dataMax']} />
+                  <Tooltip
+                    cursor={{ stroke: 'hsl(var(--crosshair))', strokeDasharray: '3 3' }}
+                    content={({ active, payload }) => active && payload?.[0]?.payload ? (
+                      <div className="workbench-tooltip">
+                        <div className="text-muted-foreground">{payload[0].payload.date}</div>
+                        <div className="font-num mt-0.5 font-semibold">{usd.format(payload[0].payload.value)}</div>
+                      </div>
+                    ) : null}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="hsl(var(--chart-2))"
+                    strokeWidth={2}
+                    fill="url(#overview-value-fill)"
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         ) : (
           <div className="workbench-chart-empty">历史价格不足，完成数据修复后生成曲线。</div>

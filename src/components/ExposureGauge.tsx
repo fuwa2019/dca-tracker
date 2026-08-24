@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
-import { Info } from 'lucide-react';
+import { Info } from '@/components/icons';
 import { pct as fmtPct } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { MonitorLineResult } from '@/lib/calc/lookThrough';

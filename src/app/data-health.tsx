@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   Trash2,
   TrendingUp,
-} from 'lucide-react';
+} from '@/components/icons';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
@@ -374,6 +374,7 @@ export function DataHealthPage() {
         <CardContent className="p-0 sm:px-5 sm:pb-5">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[920px] text-sm">
+              <caption className="sr-only">价格覆盖：每个代码的历史价格区间与缺失天数</caption>
               <thead>
                 <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
                   <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Ticker</th>

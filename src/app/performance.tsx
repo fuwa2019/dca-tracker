@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw, Database, AlertTriangle, CalendarDays } from 'lucide-react';
+import { RefreshCw, Database, AlertTriangle, CalendarDays } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { StatCard } from '@/components/StatCard';

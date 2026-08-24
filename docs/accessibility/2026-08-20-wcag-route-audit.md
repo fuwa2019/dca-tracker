@@ -228,3 +228,71 @@ card by roughly a pixel and remains visible on every sample.
 
 This closes the 2.4.11 line in section 6. The screen-reader pass and the
 cloud-only routes are still open.
+
+## 9. Accessibility tree — the mechanical screen-reader pass (2026-08-24)
+
+Section 6 listed "screen-reader pass" as unproved. This closes the part of it
+that can be measured mechanically, and states plainly what remains open.
+
+**Method.** `docs/accessibility/probes/ax-tree-audit.mjs` pulls the platform
+accessibility tree out of Chrome 151 (`Accessibility.getFullAXTree` over the
+DevTools Protocol, driven with Node's built-in `WebSocket` — no Playwright, no
+axe, no downloaded browser) and checks the properties a screen-reader user
+depends on. 13 routes x desktop and 390px = **26 scans**, against a
+production-mode build of the offline demo served by `vite preview`.
+
+What it asserts: every node with an interactive role has a non-empty accessible
+name; exactly one `h1` per route and no skipped heading level; exactly one
+`main`; repeated landmarks of the same role are distinguishable by name; no
+focusable element inside an `aria-hidden` subtree; data tables have accessible
+names and column headers; no `role=image` node is both exposed and unnamed.
+
+**Before: 503 findings, in two classes.**
+
+1. **Every icon in the application was an unnamed image.** `lucide-react`
+   renders a bare `<svg>`; with no role and no name Chrome maps that to
+   `role=image` with an empty name, so a screen reader announces "image" once
+   per icon — 71 times on `/transactions/all`. The 36 clean axe scans never saw
+   it, because axe's `svg-img-alt` rule only fires on `svg[role="img"]` and
+   these carry no role at all. This is the clearest case in this audit of an
+   automated pass proving less than it appears to.
+2. **No data table had an accessible name.** Five tables announced as bare
+   "table". Three already sat inside a labelled `role="region"` wrapper from the
+   2026-08-20 fixes, which names the scroll container but not the table itself.
+
+**Fixes.**
+
+- `src/components/icons.tsx` re-exports each of the 68 icons in use wrapped so
+  it defaults to `aria-hidden="true" focusable="false"`, and all 31 importing
+  modules now import from there instead of `lucide-react` directly. Every icon
+  in this application is decorative — the audit found zero unnamed interactive
+  controls, i.e. every icon-only control already carries its own label — so
+  hiding icons from the tree removes no information. Icons are re-exported one
+  by one rather than with `export *` so the bundler keeps tree-shaking them;
+  the change cost 0.9 KiB gzip, checked by `npm run test:release-budget`.
+- `<caption className="sr-only">` on the five data tables: 价格覆盖, 持仓明细,
+  交易记录, 历史业绩, 每日累计回报.
+- The overview curve kept one finding after those two: Recharts draws its own
+  `<svg>` with an empty `<title>`/`<desc>`, exposed as a second unnamed image
+  *inside* the already-labelled `role="img"` wrapper, so the reading was
+  "账户价值曲线，… image". The drawing is now `aria-hidden` inside its labelled
+  wrapper.
+
+**After: 0 findings across all 26 scans.**
+
+**No regression.** Re-ran the full existing evidence set on the same tree: axe
+0 violations over 36 scans (9 routes x desktop/390px x light/dark); every Tab
+stop interactive with a visible focus ring, forward and reverse, with 0 console
+errors; reduced motion still opacity-only on every route; 0 page overflow at
+390px and at the 320px reflow width; 0 targets under 24x24. The element-level
+over-wide boxes reported on `/health` at 390px (`395>390` on the page
+container, `920>356` on the table's own scroll container) were verified
+identical on a throwaway worktree at `6940af7`, so they predate this change and
+page overflow is 0 either way.
+
+**Still not proved, and not claimed.** Real VoiceOver/NVDA/JAWS announcement
+order, live-region timing, braille output, rotor and gesture navigation. Those
+need assistive technology driven for real, which means system settings changes
+outside what this repository's tooling does. The cloud-only routes
+(`/cashflows`, a populated `/share/<token>`, the authenticated login flow) also
+remain outside every probe here.

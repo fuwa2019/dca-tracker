@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowDown, ArrowUp, ChevronsUpDown, Columns3, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronsUpDown, Columns3, MoreVertical, Pencil, Trash2 } from '@/components/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -151,6 +151,7 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
           aria-label="交易表格"
         >
           <table className="w-full min-w-[720px] text-sm">
+            <caption className="sr-only">交易记录</caption>
             <thead>
               <tr className="border-b border-border bg-surface-elevated/60 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <SortableHeader label="日期" sortKey="date" sort={sort} onSort={setSort} className="w-28 px-4 py-2 text-left" />

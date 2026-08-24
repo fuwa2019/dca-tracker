@@ -1,4 +1,4 @@
-import { Mail, Monitor, Scale, ShieldCheck, Target, UserRound, type LucideIcon } from 'lucide-react';
+import { Mail, Monitor, Scale, ShieldCheck, Target, UserRound, type LucideIcon } from '@/components/icons';
 
 export interface SettingsPaneMeta {
   /** Path segment under `/settings`. */

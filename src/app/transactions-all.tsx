@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, PlusCircle, Search, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PlusCircle, Search, X } from '@/components/icons';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {

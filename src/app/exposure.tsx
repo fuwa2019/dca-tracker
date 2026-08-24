@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Layers, ArrowUpRight, Plus, Info, ShieldQuestion, Wifi, RefreshCw, TriangleAlert } from 'lucide-react';
+import { Layers, ArrowUpRight, Plus, Info, ShieldQuestion, Wifi, RefreshCw, TriangleAlert } from '@/components/icons';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/StatusBadge';

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Clock } from 'lucide-react';
+import { Clock } from '@/components/icons';
 import { getUsMarketSession, type Quote, type UsMarketSessionKey } from '@/lib/quote';
 import { getQuoteStatusSummary } from '@/lib/quoteStatus';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
