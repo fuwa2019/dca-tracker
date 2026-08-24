@@ -894,6 +894,31 @@ the full re-import and V1 regression.
 
 ## Production State
 
+- **2026-08-24 release: `master` pushed to `origin/master` at `336c493` with
+  explicit user authorization ("合并 master（会自动上线）").** Five commits
+  shipped: the release gates, the icon/accessibility-tree fix, and the D1 V2
+  cache work. Cloudflare Pages rebuilt in about 60 seconds; canonical
+  `https://dca-tracker-git.pages.dev` now serves `assets/index-CGIs_TbX.js`.
+  - **Frontend only. No database and no Worker change.** Supabase remains at
+    migration `0051` — `0052` shipped as a *file* and is not applied; CI runs
+    tests only and Netlify runs `npm run build`, so nothing auto-applies a
+    migration or deploys a Worker. The quote Worker is unchanged, so the V2
+    refresh code is present in the repository but not running anywhere.
+  - Post-deploy checks, all cache-busted: the served `index.html` carries
+    `rel="preload"`, the `noscript` font fallback and `registerSW.js" defer`;
+    the bundle contains the icon wrapper (`focusable:"false"`) and all four
+    table captions; `/`, `/performance`, `/exposure`, `/transactions`,
+    `/transactions/all`, `/health`, `/settings`, `/settings/basis`, `/login`
+    and an invalid `/share/<token>` all return 200.
+  - Driven headless against production: `/login` and the invalid share route
+    both render with a **silent console** (so the Pages build still injects the
+    public `VITE_` values), 0 page overflow, and **0 unnamed images in the
+    accessibility tree** — the icon fix is confirmed live, not just locally.
+  - No login was attempted and no private data was read.
+  - **`https://dca-tracker-git.netlify.app` returns 401.** That is site-level
+    protection on the Netlify entrypoint added in `9805af6` earlier the same
+    day, unrelated to this release; the Netlify target was not verified.
+
 - 2026-08-23 release: `master` was pushed to `origin/master` at `61def4e` with
   explicit user authorization ("提交 推送 部署上线"), and the Git-backed Pages
   project rebuilt within about a minute. Canonical
@@ -982,9 +1007,10 @@ the full re-import and V1 regression.
 
 ## Next Steps
 
-`master` is at `6940af7`, synced with `origin/master`, and the frontend is live
-on Pages. The 2026-08-24 work sits on `release/gates-and-ax-tree`, committed
-locally and **not pushed**. There are no fully `missing` contract rows left.
+`master` is at `336c493`, synced with `origin/master`, and live on Pages. There
+are no fully `missing` contract rows left. Supabase is still at `0051` and the
+quote Worker is unchanged, so the two concrete unblocked operations are applying
+migration `0052` and deploying the Worker — each separately authorized.
 
 1. **Finish the cross-browser row.** It is `partial` only because WebKit and
    Gecko are uncovered. WebKit needs one human action — Safari Settings →
