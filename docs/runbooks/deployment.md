@@ -12,9 +12,16 @@ npm ci
 npm run test:finance
 npm run test:email-reminder
 npm run test:quote-status
+npm run test:share-privacy
 npm run typecheck
 npm run build
+npm run test:release-budget
 ```
+
+`docs/release/README.md` carries the full release checklist, including the
+release-time Lighthouse and cross-browser probes and the post-deploy checks.
+Run the post-deploy checks with a cache-busting query parameter: the Pages edge
+can serve a cached `index.html` naming the previous bundle for a few minutes.
 
 Publish `dist/` through the existing Cloudflare Pages project or Git integration.
 Keep `public/_redirects` in the build for SPA deep links. Configure public

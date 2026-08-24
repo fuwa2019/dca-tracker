@@ -20,6 +20,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // The default injection is a plain synchronous <script src>, which
+      // Lighthouse counts as render blocking. Nothing on first paint depends on
+      // the service worker registering.
+      injectRegister: 'script-defer',
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'DCA Tracker',

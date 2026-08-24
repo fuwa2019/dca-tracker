@@ -44,3 +44,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Release performance budget
+        run: npm run test:release-budget

@@ -112,6 +112,9 @@ More detail:
 - `tests/fixtures/`: finance and long-horizon regression fixtures.
 - `docs/`: specifications, architecture, decisions, runbooks, tasks,
   migrations, archived AI notes, and X content operations.
+- `docs/release/`: the release gates — the performance budget, the Lighthouse
+  and cross-browser probes, the release checklist, and the dated measured
+  record.
 - `references/`: reviewed links to external platform and provider
   documentation.
 - `artifacts/x-content/`: dated, non-runtime X content work products.
@@ -148,7 +151,15 @@ npm run test:quote-status
 npm run test:share-privacy
 npm run typecheck
 npm run build
+npm run test:release-budget
 ```
+
+`test:release-budget` runs after `npm run build` and gates the first-load
+transfer weight of `dist/` against `docs/release/performance-budget.json`. It is
+a regression ratchet, not a ceiling: raising a number there is a deliberate act
+and belongs in the same commit as the change that needs it. It cannot see LCP,
+TBT or CLS — those are measured by the release-time probes in `docs/release/`
+and recorded, dated, in `docs/release/2026-08-24-release-gates.md`.
 
 Additional scoped checks:
 
@@ -162,7 +173,7 @@ npm run test:schwab
 
 There is no lint script. Do not claim lint passed unless one is added and run.
 CI runs the three worker/root installs followed by finance, email-reminder,
-quote-status, share-privacy, typecheck, and build.
+quote-status, share-privacy, typecheck, build, and release-budget.
 
 `test:share-privacy` reads the migration set and fails if the anonymous share
 surface widens, if an anonymous entry point emits a key outside its allowlist,

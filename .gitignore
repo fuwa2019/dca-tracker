@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-local/
 dist-ssr/
 build/
 coverage/
@@ -26,6 +27,7 @@ schwab-token.json
 .idea
 *.log
 .wrangler/
+.netlify/
 .dev.vars
 .claude/
 SESSION_LOG.md

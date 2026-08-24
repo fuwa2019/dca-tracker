@@ -18,6 +18,7 @@
     "test:migration-numbering": "node scripts/verify-migration-numbering.mjs",
     "test:quote-status": "node scripts/verify-quote-status.mjs",
     "test:share-privacy": "node scripts/verify-public-share-privacy.mjs",
+    "test:release-budget": "node scripts/verify-release-budget.mjs",
     "test:etf-holdings": "node --experimental-strip-types scripts/verify-etf-holdings.ts",
     "test:competitive-fixture": "node scripts/verify-competitive-fixture.mjs",
     "test:portfolio-import": "node --experimental-strip-types scripts/verify-portfolio-import-adapters.ts",

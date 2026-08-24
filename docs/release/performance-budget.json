@@ -1,0 +1,100 @@
+{
+  "$comment": [
+    "First-load transfer budget for the Cloudflare Pages SPA, enforced by",
+    "`npm run test:release-budget` against `dist/` after `npm run build`.",
+    "These are regression ratchets measured from a real build, not a claim that",
+    "the current numbers are good. Raising a number is a deliberate act and",
+    "belongs in the same commit as the change that needs it.",
+    "Gzip is used as the transfer-size proxy because Cloudflare Pages negotiates",
+    "brotli or gzip; brotli is smaller, so a gzip budget is the conservative one."
+  ],
+  "measured": {
+    "on": "2026-08-24",
+    "commit": "6940af7",
+    "initialJsGzipKib": 427.41,
+    "initialCssGzipKib": 10.86,
+    "initialTotalGzipKib": 438.27,
+    "largestChunkGzipKib": 181.67,
+    "initialRequests": 8,
+    "externalRenderBlockingOrigins": 1
+  },
+  "budget": {
+    "initialJsGzipKib": 450,
+    "initialCssGzipKib": 14,
+    "initialTotalGzipKib": 462,
+    "largestChunkGzipKib": 195,
+    "initialRequests": 9,
+    "externalRenderBlockingOrigins": 1
+  },
+  "lighthouse": {
+    "$comment": [
+      "Enforced by `docs/release/probes/lighthouse-budget.mjs`, not by CI: it needs a",
+      "real Chrome and takes minutes.",
+      "The composite performance score is measured over three full passes on",
+      "2026-08-24 and moved by up to 20 points between them on the same build --",
+      "42-65 on emulated mobile for `/`, 81-99 on desktop for `/settings`. It is",
+      "therefore gated only at a catastrophic-regression floor, well under the worst",
+      "*best-of-runs* value observed. The precise performance ratchet is the",
+      "deterministic first-load transfer budget above, which runs in CI.",
+      "Accessibility (100 in all 36 measurements), best practices and CLS were stable",
+      "across the same three passes, so those are gated close to what was measured.",
+      "Each combination is run `RUNS` times (default 2). Scores take the best run and",
+      "Each combination is run `RUNS` times (default 2). Performance, LCP and CLS take",
+      "the BEST run; accessibility and best practices take the worst. Interference from",
+      "other work on the machine only ever degrades a Lighthouse result, and a genuine",
+      "layout shift is deterministic, so a CLS figure that appears on one run and not",
+      "the other is measurement, not the page. The worst CLS is still printed and",
+      "warned about so a real intermittent shift stays visible -- see the 0.186 episode",
+      "in docs/release/2026-08-24-release-gates.md.",
+      "Measured against a production-mode build of the offline demo (`VITE_LOCAL_MODE=1`)",
+      "served by `vite preview`, so no Supabase project is contacted and no private",
+      "data is involved."
+    ],
+    "measured": {
+      "on": "2026-08-24",
+      "lighthouseVersion": "12.8.2",
+      "passes": 3,
+      "mobilePerformanceRange": [
+        42,
+        77
+      ],
+      "desktopPerformanceRange": [
+        81,
+        99
+      ],
+      "worstBestOfRunsMobilePerformance": 64,
+      "worstBestOfRunsDesktopPerformance": 94,
+      "accessibilityAllRoutes": 100,
+      "worstBestPractices": 96,
+      "worstCls": 0.044,
+      "worstBestOfRunsMobileLcpMs": 8937,
+      "worstBestOfRunsDesktopLcpMs": 1660,
+      "performanceClsIsolatedRuns": 40,
+      "performanceClsIsolatedMax": 0.0171
+    },
+    "routes": [
+      "/",
+      "/performance",
+      "/exposure",
+      "/transactions",
+      "/health",
+      "/settings"
+    ],
+    "thresholds": {
+      "mobile": {
+        "performance": 50,
+        "accessibility": 100,
+        "bestPractices": 95,
+        "maxCls": 0.1,
+        "maxLcpMs": 11000
+      },
+      "desktop": {
+        "performance": 80,
+        "accessibility": 100,
+        "bestPractices": 95,
+        "maxCls": 0.1,
+        "maxLcpMs": 2500
+      }
+    }
+  }
+}
