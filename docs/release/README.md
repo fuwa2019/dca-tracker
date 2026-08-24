@@ -64,5 +64,7 @@ itself.
     named route returns 200, and the login route renders with no console
     output (which is how you know the Pages build injected the public `VITE_`
     values).
-11. Record the release in `HANDOFF.md` under Production State: commit, bundle
-    and stylesheet names, what was checked, and what was not.
+11. Record the release in `HANDOFF.md` under "Verified production state":
+    commit, bundle and stylesheet names, what was checked, and what was not.
+    Keep it to current state — the chronological history belongs in
+    `docs/archive/ai/`.
