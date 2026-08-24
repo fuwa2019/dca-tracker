@@ -677,6 +677,90 @@ it reformats whole files to defaults that do not match the surrounding code; it
 was run once here by mistake on `WorkbenchDashboard.tsx` and reverted. Recorded
 in `AGENTS.md`.
 
+## D1 — the ledger_twr_v2 cache and its write surface (2026-08-24)
+
+Branch `release/gates-and-ax-tree`, committed locally. **Migration 0052 is NOT
+applied to Supabase `main`, and the quote Worker is NOT deployed.** Nothing in
+this slice has run against a real portfolio.
+
+**Design, and why.** Full rationale in
+`docs/decisions/2026-08-24-ledger-twr-v2-cache-writer.md`. Three facts drove it:
+`performance_history_cache` is already keyed `(user_id, benchmark, method)` so
+V2 can sit beside V1; the V1 engine has no static definition anywhere (0029
+renamed it, 0037/0043/0047 patch it in place) so nothing here touches that
+chain; and `src/lib/calc/ledgerTwr.ts` is already reconciled against Portfolio
+Performance 0.86.0 by `test:finance`. Porting that engine to PL/pgSQL would
+have created a second implementation free to drift with the gate covering only
+one of them, so **the quote Worker computes it under the service role and
+imports the pure module directly** — no copy, nothing to drift.
+
+**What shipped.**
+
+- `supabase/migrations/0052_ledger_performance_cache_v2.sql`:
+  `settings.performance_method` (server-side, defaults to `adjusted_proxy_v1`),
+  `write_ledger_performance_cache`, `ledger_performance_refresh_universe`, and
+  method-aware `performance_history` / `shared_performance_history`.
+- `workers/quote/src/ledgerPerformance.ts` plus the scheduled wiring. **No new
+  cron trigger** — the account is near its five-trigger limit and an independent
+  schedule would race the prices the curve reads, so it runs after the existing
+  daily price sync resolves.
+- `workers/quote/tsconfig.json` now includes the two shared calc files.
+
+**The writer is not a "store this payload" RPC.** It takes a series, a
+completeness flag and warnings, validates each against an allowlist, then
+*builds* the cached payload itself. A caller contributes values, never keys, so
+an amount cannot enter the cache at all rather than being stripped on the way
+out. Warnings use the same four-key allowlist 0051 projects to, so writer and
+boundary cannot drift.
+
+**V1 is untouched and remains the default.** Both readers keep their existing V1
+branches, including the legacy-mirror fallback. When a user is on V2 and the V2
+row is missing, neither reader falls back to V1 — they return
+`history_cache_missing` naming the method, because a silent fallback would let
+the dashboard and the share report different methods, which is the exact
+property D1 asks us to guarantee. The frontend already tolerates an empty
+series, so it degrades to an empty curve.
+
+**Units trap, now documented in both specs:** `return_pct_user` is a
+**fraction**, not a percent, in V1 (`exp(sum(ln(factor))) - 1`, migration 0026)
+and therefore in V2 too. The Worker writes the engine value unscaled.
+
+**Verified on a throwaway PostgreSQL 15.19 cluster**, all 54 migrations applied
+from scratch, then re-applied to confirm idempotency:
+- rejected: a series entry carrying `nav_user` or `flow`, a non-ISO date, a
+  string percentage, a non-array payload, and a NAV-sized `138499.04`;
+- a warning carrying `nav_user: 999.99` and `flow: -42` is reduced to `date`
+  and `type` **at write time**;
+- anon is denied the writer, the universe function and the method helper;
+- owner on V1 (default) does not see the V2 row; owner on V2 sees only V2;
+- V2 with no row for the selected benchmark returns `history_cache_missing`
+  rather than V1;
+- V1 primary and V1 legacy-mirror paths both still serve, and 0051 still strips
+  `nav_user`/`flow` on them.
+
+**`test:share-privacy` gained five assertions, all negative-tested** against
+mutated migration sets: the V2 write surface is service-role only, the writer
+keeps its key allowlist, the writer builds rather than stores, no amount key
+appears in the built payload, and — strengthened — **every** cache-returning
+branch of `shared_performance_history` projects through the sanitizer. The
+previous check was body-level and would have passed a version where one branch
+returned the cache raw while another projected; that mutation is now caught.
+
+**A finding, recorded not fixed.** The legacy `portfolio_history_cache`
+fallback branch returns `public_history` with only its *warnings* projected —
+the series is not. Injecting `nav_user` into a legacy series does reach an
+anonymous reader. It is **not a live leak**: migration 0023 truncated that table
+and no migration after it writes `public_history`, so the branch is unreachable
+in production. Fixing it would mean projecting V1 series keys, which risks
+dropping keys the frontend needs, so it is out of D1's scope. Worth closing
+deliberately if that table is ever repopulated.
+
+**Not verified, and not claimed:** no real portfolio, no applied migration, no
+deployed Worker. The Worker path is covered by typecheck and a wrangler dry-run
+that confirms `computeLedgerTwr` bundles and both RPC names appear in the
+output. Selecting `ledger_twr_v2` for a real user is still B2's gate and needs
+the full re-import and V1 regression.
+
 ## Session Notes (2026-08-20 handoff)
 
 - Delivery flow used this window: slices are implemented either locally or by
@@ -907,12 +991,13 @@ locally and **not pushed**. There are no fully `missing` contract rows left.
    高级 → 显示网页开发者功能, then 开发 → 允许远程自动化 — after which
    `node docs/release/probes/cross-browser-check.mjs` fills the row with no code
    change. Gecko needs Firefox installed, which the owner declined.
-2. **Longer-standing gates.** B1 closed on 2026-08-23, so the `ledger_twr_v2`
-   switch is now waiting on the rest of B2: a full re-import and a V1
-   regression, both of which need authorized cloud work. D2/D3 are gated in CI
-   and the live V1 share leak was fixed and verified by migration `0051`.
-   **D1 proper — the V2 cache and RPC — is still unimplemented** and is now the
-   largest open piece of product work.
+2. **Longer-standing gates.** D1's cache and RPC landed on 2026-08-24 as
+   migration `0052` plus the Worker refresh, gated by new `test:share-privacy`
+   assertions — but **0052 is not applied and the Worker is not deployed**, so
+   the next concrete step there is authorizing those two operations. B1 closed
+   on 2026-08-23, so the `ledger_twr_v2` switch itself is waiting on the rest of
+   B2: a full re-import and a V1 regression, both needing authorized cloud work.
+   D2/D3 are gated in CI and the live V1 share leak was fixed by `0051`.
 3. **Accessibility follow-ups that remain open:** a real assistive-technology
    pass (VoiceOver/NVDA announcement order, live-region timing, braille, rotor
    and gestures) and the cloud-only routes (`/cashflows`, a populated

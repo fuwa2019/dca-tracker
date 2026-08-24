@@ -57,6 +57,16 @@ uses ordinary close prices and the explicit cash ledger:
 Legacy data remains on `adjusted_proxy_v1` until a separately released database
 and cache migration changes the method field.
 
+Migration 0052 provides the storage and write surface for it:
+`settings.performance_method` selects the method per user (defaulting to
+`adjusted_proxy_v1`), V2 rows live in `performance_history_cache` under
+`method = 'ledger_twr_v2'`, and the quote Worker computes the curve under the
+service role using this same pure module. Selecting the method for a real
+portfolio remains gated on B2.
+
+Units warning: `cumulative_return_pct` here, and `return_pct_user` in the
+cache, are **fractions** (`factor - 1`), not percentages, in both V1 and V2.
+
 ## Performance Cache
 
 `performance_history_cache` stores only public-safe curve fields:

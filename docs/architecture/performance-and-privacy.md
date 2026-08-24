@@ -22,7 +22,33 @@ events, neutralize only start-of-day inflows and end-of-day outflows, and keep
 dividends, interest, trades, taxes, and fees internal. XIRR must use only
 investor cash and ETF sleeve boundary transfers. Do not switch the cache or
 public share method until the Portfolio Performance reconciliation and privacy
-snapshot gates pass.
+snapshot gates pass. As of 2026-08-24 both of those gates exist — the PP
+application gate in `test:finance` and the V2 write-surface assertions in
+`test:share-privacy` — and the storage/RPC surface is migration 0052. The
+switch itself is still B2's, and still needs a full re-import and a V1
+regression.
+
+## V2 Cache (migration 0052)
+
+`performance_history_cache` is keyed `(user_id, benchmark, method)`, so
+`ledger_twr_v2` rows sit beside the `TWR` rows rather than replacing them.
+`settings.performance_method` selects which one both readers serve, defaults to
+`adjusted_proxy_v1`, and is stored server-side — an anonymous share caller must
+never choose a method.
+
+The V2 curve is computed by the quote Worker under the service role, importing
+`src/lib/calc/ledgerTwr.ts` directly so there is only ever one engine. The
+database does not compute it: `write_ledger_performance_cache` validates a
+series against an allowlist and rebuilds the payload itself, so a caller
+contributes values and never keys. Rationale and the rejected alternatives are
+in `docs/decisions/2026-08-24-ledger-twr-v2-cache-writer.md`.
+
+Units: both methods store `return_pct_user` as a **fraction**, not a percent,
+despite the name.
+
+When a user is on V2 and the V2 row is missing, both readers return
+`history_cache_missing` naming the method. They do not fall back to V1, because
+that would let the dashboard and the share report different methods.
 
 ## Shared Cache Contract
 
