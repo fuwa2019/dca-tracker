@@ -23,7 +23,7 @@ states exactly what is missing.
 
 | Area | State |
 |---|---|
-| Frontend | Live on Pages at `b2c8fd0`, bundle `assets/index-CGIs_TbX.js` |
+| Frontend | Live on Pages at `d17831e`, entry `assets/index-VFqTamI9.js`, stylesheet `assets/index-B7RqbsaF.css` |
 | Supabase | Migrations applied through `0052`; **no user is on `ledger_twr_v2`** |
 | Quote Worker | Version `8d63a31a-2d64-4997-a039-a95dee51816e`; **does not yet include the V2 refresh code** |
 | Email Worker | Unchanged |
@@ -60,23 +60,35 @@ SQL execution, so those runtime facts are recorded as the owner's verification.
 Earlier migrations `0047`–`0051` were verified in production when applied; see
 the archive for each one's checks.
 
-### Frontend — release 2026-08-24
+### Frontend — current release
 
-`master` pushed at `336c493` (release recorded at `b2c8fd0`) with explicit
-authorization. Pages rebuilt in about 60 seconds. Checks, all cache-busted:
+`master` pushed to `d17831e` with explicit authorization; Pages rebuilt in about
+80 seconds. This release is route-level code splitting and the reserved-height
+CLS work (`1f3e027`), on top of the earlier same-day release at `336c493`.
+Checks, all cache-busted:
 
-- the served `index.html` carries `rel="preload"`, the `noscript` font fallback
-  and `registerSW.js" defer`; the bundle carries the icon wrapper
-  (`focusable:"false"`) and all four table captions;
+- the served `index.html` preloads exactly `react`, `motion`, `classnames` and
+  `supabase` — **`charts` is no longer in the document head**, which is the whole
+  point of the split — and still carries `rel="preload"` for the font
+  stylesheet, the `noscript` fallback and `registerSW.js" defer`;
+- **all 36 chunks named in the entry's `__vite__mapDeps` table are served with a
+  JavaScript content type.** This is the check code splitting adds: the SPA
+  `_redirects` fallback answers an unknown path with `index.html` and a 200, so a
+  missing route chunk would look fine to a status-code check and fail only at
+  runtime;
 - `/`, `/performance`, `/exposure`, `/transactions`, `/transactions/all`,
-  `/health`, `/settings`, `/settings/basis`, `/login` and an invalid
-  `/share/<token>` all return 200;
+  `/cashflows`, `/health`, `/settings`, `/settings/basis`, `/settings/share`,
+  `/login` and an invalid `/share/<token>` all return 200;
 - driven headless against production, `/login` and the invalid share route both
   render with a **silent console** (so the Pages build still injects the public
-  `VITE_` values), 0 page overflow, and **0 unnamed images in the accessibility
-  tree**.
+  `VITE_` values), 0 page overflow at 390 px and 320 px, and **0 unnamed images
+  in the accessibility tree**. A deep link to `/performance` while signed out
+  redirects to `/login` and renders, so the lazy chunk plus `RequireAuth` path
+  does not hang on the Suspense fallback.
 
-No login was attempted and no private data was read.
+No login was attempted and no private data was read. The authenticated routes
+and a populated `/share/<token>` are therefore **unverified in production** for
+this release, as for every previous one.
 
 **`https://dca-tracker-git.netlify.app` returns 401** — site-level protection on
 the Netlify entrypoint added in `9805af6`. That target has never been verified.
@@ -134,11 +146,19 @@ Rationale and rejected alternatives:
    order, live-region timing, braille, rotor and gesture navigation, plus the
    cloud-only routes (`/cashflows`, a populated `/share/<token>`, the
    authenticated login flow).
-5. **Performance follow-ups, recorded and not done.** Route-level code splitting
-   (emulated-mobile LCP is bound by ~672 ms of script evaluation, not the
-   network) and reserving explicit height for the performance chart and history
-   table (which would remove the intermittent CLS class described in
-   `docs/release/2026-08-24-release-gates.md`).
+5. **Performance follow-ups — done and released; two items left behind them.**
+   Route-level code splitting and the reserved-height work shipped in `1f3e027`;
+   section 5 of `docs/release/2026-08-24-release-gates.md` carries the numbers.
+   First-load JS went 427.41 → 171.65 KiB gzip with the budget ratcheted to
+   match, and emulated-mobile Lighthouse performance went 66–84 → 86–92 across
+   the six measured routes. What is still open: the intermittent 0.186 CLS class
+   on `/performance` desktop is **not proved gone** — its two deterministic
+   causes are fixed, but two runs cannot disprove a class that took a full 24-run
+   sweep to surface once, and `docs/release/probes/cls-attribution.mjs` now
+   exists to catch it if it returns; and `/transactions` still measures 0.015 on
+   emulated mobile, attributed to `<section class="workbench-next">` collapsing
+   from 43 px to 0. `supabase` (52.17 KiB gzip) is still first-load because the
+   auth check runs before any route renders.
 6. **Prior SMH follow-up.** Verify the authenticated
    `POST /api/etf-holdings/refresh` with a synthetic account, including partial
    provider failure, final-holder deletion, and re-buy refresh, and SMH access
@@ -207,7 +227,7 @@ npm run test:release-budget
 ```
 
 Release-time browser probes are not in CI and are run by hand:
-`docs/release/probes/` (Lighthouse, cross-browser) and
+`docs/release/probes/` (Lighthouse, cross-browser, layout-shift attribution) and
 `docs/accessibility/probes/` (axe, keyboard, reduced motion, reflow and target
 size, accessibility tree). `docs/release/README.md` carries the release
 checklist.
