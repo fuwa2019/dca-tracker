@@ -11,6 +11,7 @@ that ties them to an actual deploy.
 | First-load transfer budget | CI, `npm run test:release-budget` | The bundle did not get heavier and no new render-blocking third-party origin appeared |
 | Lighthouse thresholds | Local probe, `docs/release/probes/lighthouse-budget.mjs` | Field performance, accessibility and best-practices scores per route and form factor |
 | Cross-browser record | Local probe, `docs/release/probes/cross-browser-check.mjs` | The app boots, does not overflow, and its CSS/JS/date contracts hold on each covered engine |
+| Layout-shift attribution | Local probe, `docs/release/probes/cls-attribution.mjs` | Which element moved, from where, and by how much — a diagnostic for a CLS the Lighthouse gate reports but does not explain |
 | Public-share privacy | CI, `npm run test:share-privacy` | The anonymous surface did not widen |
 | Accessibility | Local probes, `docs/accessibility/probes/` | axe, keyboard, reduced motion, reflow, target size, focus-not-obscured |
 

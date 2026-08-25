@@ -93,7 +93,7 @@ Mobile LCP did not move (8.5 s → 8.6 s). After the fix it is bound by script
 evaluation, not by the network: 672 ms of script evaluation and 427 ms of style
 and layout on emulated mobile, with `react` and `motion` the two largest
 contributors. Route-level code splitting is the next lever and is recorded as
-an open item, not done here.
+an open item, not done here — **done later the same day, in section 5**.
 
 ### The CLS episode, and why the gate rule changed
 
@@ -136,7 +136,9 @@ isolated runs, identical to `6940af7`, so this change did not introduce it.
 **Follow-up worth doing, not done here:** the shift is real when the main thread
 is slow enough, which a genuinely slow phone can be. Reserving explicit height
 for the performance chart and history table so a late render cannot push content
-down would remove the class entirely. Recorded as an open item.
+down would remove the class entirely. Recorded as an open item — **done later
+the same day, in section 5, together with the tooling that would have attributed
+this spike in the first place**.
 
 So the gate's rule was wrong, not the code. CLS is now gated on the **best** run
 for the same reason performance is: a stalled main thread delays paints and
@@ -237,3 +239,145 @@ Unchanged in kind by this work, re-run against it:
 - Keyboard, reduced motion, reflow, target size — no regression; see
   `docs/accessibility/2026-08-20-wcag-route-audit.md` section 9.
 - Accessibility tree — 0 findings over 26 scans, after fixing 503. Same section.
+
+---
+
+## 5. Route-level code splitting and reserved layout
+
+Same day, after the gates above. Measured commit: `1f3e027`. This closes the two
+follow-ups sections 1 and 2 recorded as open: route-level code splitting, and
+reserving height so a late render cannot push content down. Measured on the same
+machine, the same Lighthouse 12.8.2, the same offline-demo build served by
+`vite preview`.
+
+### What changed
+
+- **Every route is a `React.lazy` chunk.** `src/App.tsx` was importing all ten
+  page modules statically, so the entry graph contained every route and
+  everything they pull in. The authenticated routes suspend against a boundary
+  in `AppShell` around the `Outlet`, which keeps the navigation and top bar
+  painted; the two shell-less routes (`/login`, `/share/:token`) suspend against
+  a boundary in `App`. The fallback is `src/components/RouteFallback.tsx`, which
+  fills the route area (`min-h-full`) rather than collapsing it.
+- **`clsx` and `tailwind-merge` got their own manual chunk.** This one is worth
+  writing down. Splitting the routes on its own moved almost nothing: the first
+  load still pulled all 385 KB of recharts. The object form of Rollup's
+  `manualChunks` pulls a listed package's own dependencies into that chunk
+  unless another entry claims them, and recharts depends on `clsx`, so `clsx`
+  landed inside `charts` — and `cn()` in `src/lib/utils.ts` imports `clsx`, so
+  every component in the entry graph imported the chunk that contained recharts.
+  First-load JS was still 275.29 KiB gzip until `classnames: ['clsx',
+  'tailwind-merge']` was added to `vite.config.ts`.
+- **The `/performance` loading states now occupy the loaded height.**
+  `NavBridgeCard` takes `bridge: NavBridge | null` and renders the same card
+  with the figures held back, so it no longer appears out of nowhere 366 px tall
+  above the calendar and the chart. `PerformancePanel` renders the same frame —
+  chart header, summary table, the chart's own `h-[340px] sm:h-[400px]` box, the
+  detail bar — with the numbers withheld, instead of a short empty state.
+- **The month calendar is always six rows.** `buildMonthCalendar` padded to a
+  whole number of weeks, so a five-row month was 76 px shorter than a six-row
+  one. The selected month moves on load, from the current month to the last
+  month with data, so that difference was a real one-row shift. It now pads to a
+  constant 42 cells.
+
+### First-load transfer, CI gate
+
+`npm run build`, gzip KiB, same measurement as section 1:
+
+| Metric | Section 1 (`6940af7`) | Now | Budget now |
+|---|---|---|---|
+| First-load JS | 427.41 | **171.65** | 182 |
+| First-load CSS | 10.86 | 10.87 | 14 |
+| First-load total | 438.27 | **182.52** | 194 |
+| Largest single chunk | 181.67 | **52.24** | 58 |
+| First-load requests | 8 | 8 | 9 |
+| Render-blocking third-party origins | 1 | 1 | 1 |
+
+The budget in `performance-budget.json` was ratcheted down to match, keeping
+roughly the previous proportional headroom. The ratchet is not vacuous: the
+intermediate build described above — routes split but recharts still reachable
+from the entry — measured 275.29 KiB of first-load JS, which the new 182 budget
+rejects.
+
+`charts` (recharts, 106.65 KiB gzip) is no longer in the document head at all.
+It is now fetched by the routes that draw charts. Workbox precaches all 42
+build outputs, so a returning visitor pays no navigation round trip for the
+route chunks.
+
+`supabase` (52.17 KiB gzip) is still first-load, because the auth check runs
+before any route renders. Not addressed here.
+
+### Lighthouse, release probe
+
+One passing sweep, each combination run twice; performance, LCP and CLS take the
+best run, accessibility and best practices the worst. Section 2's numbers are in
+brackets.
+
+| Route | Form factor | Perf | A11y | Best practices | CLS | LCP |
+|---|---|---|---|---|---|---|
+| `/` | mobile | **86** (76) | 100 | 100 | 0 (0) | **3,541** (4,157) ms |
+| `/` | desktop | 99 (97) | 100 | 100 | 0 (0) | **754** (1,235) ms |
+| `/performance` | mobile | **86** (76) | 100 | 96 | 0.001 (0) | **3,579** (4,171) ms |
+| `/performance` | desktop | 99 (98) | 100 | 100 | 0.005 (0.002) | 772 (801) ms |
+| `/exposure` | mobile | **90** (66) | 100 | 96 | 0 (0) | **3,108** (8,096) ms |
+| `/exposure` | desktop | 100 (99) | 100 | 100 | 0 (0) | 675 (821) ms |
+| `/transactions` | mobile | 88 (84) | 100 | 100 | 0.015 (0.015) | 3,400 (3,492) ms |
+| `/transactions` | desktop | 99 (99) | 100 | 100 | 0.044 (0) | 712 (700) ms |
+| `/health` | mobile | **92** (80) | 100 | 100 | 0 (0) | **2,923** (4,056) ms |
+| `/health` | desktop | 100 (99) | 100 | 100 | 0 (0) | 618 (811) ms |
+| `/settings` | mobile | **91** (83) | 100 | 96 | 0 (0) | **3,049** (3,641) ms |
+| `/settings` | desktop | 100 (100) | 100 | 100 | 0 (0) | 671 (704) ms |
+
+Accessibility was 100 in all 24 runs, as before. Best practices is unchanged,
+including the `.text-[11px]` legibility finding section 2 records and declines
+to act on.
+
+This is **one** sweep, not the three-pass noise study section 2 ran, so treat
+the composite scores as indicative and the deterministic budget above as the
+ratchet. The run-to-run spread was still visible: `/` mobile moved 25 points
+between its two runs on this same build.
+
+### The regression this exposed, and how it was attributed
+
+The first sweep after code splitting **failed the gate**: `/performance` on
+emulated mobile measured CLS 0.122, on both runs, where section 2 had measured
+0. Making the app render sooner had exposed a shift that the old, slower first
+paint had hidden.
+
+It was attributed rather than guessed at, with a new probe —
+`docs/release/probes/cls-attribution.mjs` — that reproduces Lighthouse's mobile
+emulation (412x823, 4x CPU throttling, its network profile) over the DevTools
+Protocol and installs a `PerformanceObserver` *before any page script runs*, so
+every layout-shift entry is captured with its sources and their before/after
+rectangles. Lighthouse names the element that shifted; this names what it
+shifted **from**, which is the half that identifies the render responsible.
+
+It reported one shift of 0.1294 at 6,946 ms, with the stat-card grid moving from
+y=275 to y=304 and the two header buttons moving the same 29 px. The cause: the
+performance cache status resolves after first paint, and the `更新于 …`
+timestamp appearing in the header's `flex-wrap` row pushed the two buttons onto
+a new line. The timestamp is now always rendered — showing `—` until it is
+known — and carries `basis-full sm:basis-auto`, so below `sm` it owns its own
+line and the row count no longer depends on it. Desktop layout is unchanged.
+
+After the fix, the same probe reports **CLS 0.0032** on `/performance`, and both
+remaining entries are font-swap reflows with no element movement. The gate
+passes.
+
+Pointed at `/transactions`, the probe attributes that route's long-standing
+0.015 to `<section class="workbench-next">` collapsing from 43 px to 0. Under
+the 0.1 threshold and outside this change; recorded now that it has a name.
+
+### What this does not establish
+
+- Section 2's intermittent 0.186 spike on `/performance` desktop is **not**
+  proved gone. Its deterministic causes found here — the calendar's row count
+  and the header's row count — are fixed, but two runs cannot disprove a class
+  that took a full 24-run sweep to surface once. The attribution probe now
+  exists to catch it if it returns.
+- Nothing about the authenticated cloud routes, `/cashflows`, or a populated
+  `/share/<token>`. Same limit as every other measurement on this page.
+- Nothing about a real phone. Emulated mobile is still a throttled desktop.
+- The accessibility probes in `docs/accessibility/probes/` were not re-run;
+  Lighthouse's accessibility category (100 on all 24 runs) is the coverage
+  claimed here.

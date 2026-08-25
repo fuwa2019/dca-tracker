@@ -6,11 +6,26 @@
     "the current numbers are good. Raising a number is a deliberate act and",
     "belongs in the same commit as the change that needs it.",
     "Gzip is used as the transfer-size proxy because Cloudflare Pages negotiates",
-    "brotli or gzip; brotli is smaller, so a gzip budget is the conservative one."
+    "brotli or gzip; brotli is smaller, so a gzip budget is the conservative one.",
+    "Ratcheted down on 2026-08-24 after route-level code splitting took every",
+    "route and recharts out of the entry graph. Headroom over the measured",
+    "numbers is kept at roughly the same proportion as before, so the gate still",
+    "fails on a regression rather than on build-to-build noise."
   ],
   "measured": {
     "on": "2026-08-24",
+    "commit": "1f3e027",
+    "initialJsGzipKib": 171.65,
+    "initialCssGzipKib": 10.87,
+    "initialTotalGzipKib": 182.52,
+    "largestChunkGzipKib": 52.24,
+    "initialRequests": 8,
+    "externalRenderBlockingOrigins": 1
+  },
+  "previousMeasured": {
+    "on": "2026-08-24",
     "commit": "6940af7",
+    "$comment": "Before route-level code splitting: every route and recharts were in the entry graph.",
     "initialJsGzipKib": 427.41,
     "initialCssGzipKib": 10.86,
     "initialTotalGzipKib": 438.27,
@@ -19,10 +34,10 @@
     "externalRenderBlockingOrigins": 1
   },
   "budget": {
-    "initialJsGzipKib": 450,
+    "initialJsGzipKib": 182,
     "initialCssGzipKib": 14,
-    "initialTotalGzipKib": 462,
-    "largestChunkGzipKib": 195,
+    "initialTotalGzipKib": 194,
+    "largestChunkGzipKib": 58,
     "initialRequests": 9,
     "externalRenderBlockingOrigins": 1
   },
@@ -52,6 +67,29 @@
     ],
     "measured": {
       "on": "2026-08-24",
+      "$comment": [
+        "Re-measured after route-level code splitting and the reserved-height",
+        "work; see section 4 of docs/release/2026-08-24-release-gates.md. One",
+        "passing sweep, each combination twice, so this is not the three-pass",
+        "noise study the previous block records -- the run-to-run spread it",
+        "found is why the composite score is still gated at a floor.",
+        "The 0.122 emulated-mobile CLS that the first sweep after code",
+        "splitting found on /performance was real, attributed and fixed."
+      ],
+      "lighthouseVersion": "12.8.2",
+      "passes": 1,
+      "worstBestOfRunsMobilePerformance": 86,
+      "worstBestOfRunsDesktopPerformance": 99,
+      "accessibilityAllRoutes": 100,
+      "worstBestPractices": 96,
+      "worstCls": 0.044,
+      "worstBestOfRunsMobileLcpMs": 3579,
+      "worstBestOfRunsDesktopLcpMs": 772,
+      "clsAttributionProbe": "docs/release/probes/cls-attribution.mjs"
+    },
+    "previousMeasured": {
+      "on": "2026-08-24",
+      "$comment": "Before route-level code splitting. Three full passes, which is what established the run-to-run noise.",
       "lighthouseVersion": "12.8.2",
       "passes": 3,
       "mobilePerformanceRange": [
