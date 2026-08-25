@@ -217,29 +217,36 @@ export function PerformancePanel({
           </div>
         )}
 
-        {history.length === 0 ? (
+        {history.length === 0 && loading ? (
+          // The loaded panel is roughly 780 px tall; a short spinner here would
+          // let the history arriving push everything below the card down. This
+          // renders the same frame at the same height, with the numbers held
+          // back, so the only thing that changes on arrival is the content.
+          <div aria-busy="true">
+            <ChartHeader benchmarkLabel={benchmarkLabel} />
+            <SummaryTable
+              dateLabel="正在拉取历史数据"
+              summary={summary}
+              showBenchmark={showBenchmark}
+              benchmarkLabel={benchmarkLabel}
+              pending
+            />
+            <div className="h-[340px] px-2 pb-1 pt-4 sm:h-[400px]" />
+            <div className="border-t border-border px-4 py-2.5 text-sm text-muted-foreground">
+              每日明细
+            </div>
+          </div>
+        ) : history.length === 0 ? (
           <div className="px-4 py-8">
             <EmptyState
               icon={Info}
-              title={loading ? '正在拉取历史数据...' : (emptyMessage ?? '暂无业绩数据')}
-              description={loading ? undefined : '录入交易后会自动生成时间加权收益率曲线。'}
+              title={emptyMessage ?? '暂无业绩数据'}
+              description="录入交易后会自动生成时间加权收益率曲线。"
             />
           </div>
         ) : (
           <>
-            <div className="border-b border-border px-4 py-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold tracking-tight">业绩曲线</div>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    只统计 {benchmarkLabel} 有实际日线价格的美股交易日；周末、节假日和休市日不会生成平点。
-                  </p>
-                </div>
-                <div className="rounded-md border border-border bg-surface-elevated px-2 py-1 text-[11px] text-muted-foreground">
-                  Benchmark calendar · {benchmarkLabel}
-                </div>
-              </div>
-            </div>
+            <ChartHeader benchmarkLabel={benchmarkLabel} />
             <SummaryTable dateLabel={dateLabel} summary={summary} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
             <PerformanceChart rows={chartRows} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
             <div className="border-t border-border">
@@ -313,16 +320,38 @@ function BenchmarkToggle({
   );
 }
 
+/** Shared by the loaded panel and the loading frame so the two stay the same height. */
+function ChartHeader({ benchmarkLabel }: { benchmarkLabel: string }) {
+  return (
+    <div className="border-b border-border px-4 py-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold tracking-tight">业绩曲线</div>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            只统计 {benchmarkLabel} 有实际日线价格的美股交易日；周末、节假日和休市日不会生成平点。
+          </p>
+        </div>
+        <div className="rounded-md border border-border bg-surface-elevated px-2 py-1 text-[11px] text-muted-foreground">
+          Benchmark calendar · {benchmarkLabel}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SummaryTable({
   dateLabel,
   summary,
   showBenchmark,
   benchmarkLabel,
+  pending = false,
 }: {
   dateLabel: string;
   summary: ReturnType<typeof buildSummary>;
   showBenchmark: boolean;
   benchmarkLabel: string;
+  /** Render the same rows with the numbers withheld, for the loading frame. */
+  pending?: boolean;
 }) {
   const headers = ['本月', '本季', '本年'];
   return (
@@ -349,11 +378,11 @@ function SummaryTable({
             </thead>
             <tbody>
               {showBenchmark && (
-                <SummaryRow name={`${benchmarkLabel} 基准`} swatch={BENCHMARK_STROKE} values={summary.spy.slice(0, 3)} muted />
+                <SummaryRow name={`${benchmarkLabel} 基准`} swatch={BENCHMARK_STROKE} values={summary.spy.slice(0, 3)} muted pending={pending} />
               )}
-              <SummaryRow name="组合 NAV" swatch={PORTFOLIO_STROKE} values={summary.portfolio.slice(0, 3)} bold />
+              <SummaryRow name="组合 NAV" swatch={PORTFOLIO_STROKE} values={summary.portfolio.slice(0, 3)} bold pending={pending} />
               {showBenchmark && (
-                <SummaryRow name={`超额 vs ${benchmarkLabel}`} values={summary.excess.slice(0, 3)} dashed judge />
+                <SummaryRow name={`超额 vs ${benchmarkLabel}`} values={summary.excess.slice(0, 3)} dashed judge pending={pending} />
               )}
             </tbody>
           </table>
@@ -371,6 +400,7 @@ function SummaryRow({
   muted = false,
   dashed = false,
   judge = false,
+  pending = false,
 }: {
   name: string;
   values: number[];
@@ -380,6 +410,7 @@ function SummaryRow({
   dashed?: boolean;
   /** 仅"超额"这种判断性指标用涨跌色;序列本身靠左侧色块识别,数字保持中性。 */
   judge?: boolean;
+  pending?: boolean;
 }) {
   return (
     <tr>
@@ -409,10 +440,10 @@ function SummaryRow({
           className={cn(
             'px-2 py-2 text-right tnum',
             bold && 'font-semibold',
-            judge ? changeColor(value) : muted ? 'text-muted-foreground' : 'text-foreground',
+            pending ? 'text-muted-foreground' : judge ? changeColor(value) : muted ? 'text-muted-foreground' : 'text-foreground',
           )}
         >
-          {formatSignedPct(value)}
+          {pending ? '—' : formatSignedPct(value)}
         </td>
       ))}
     </tr>

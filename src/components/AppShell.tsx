@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
+import { Component, Suspense, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import {
   Activity,
@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { MarketStatusBar } from '@/components/MarketStatusBar';
+import { RouteFallback } from '@/components/RouteFallback';
 import { LOCAL_MODE } from '@/lib/localMode';
 
 function LocalBadge({ className }: { className?: string }) {
@@ -123,7 +124,11 @@ export function AppShell() {
               transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               className="min-h-full min-w-0 overflow-x-hidden"
             >
-              <Outlet />
+              {/* Route chunks are lazy, so this boundary is what keeps the nav
+                  and top bar painted while one is in flight. */}
+              <Suspense fallback={<RouteFallback />}>
+                <Outlet />
+              </Suspense>
             </motion.div>
           </RouteErrorBoundary>
         </main>

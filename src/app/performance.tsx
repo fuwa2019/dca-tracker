@@ -123,11 +123,14 @@ export function PerformancePage() {
               最终收盘后收益可能小幅变化。
             </span>
           )}
-          {generatedAt && (
-            <span className="text-[11px] text-muted-foreground tnum">
-              更新于 {formatDateTime(generatedAt)}
-            </span>
-          )}
+          {/* Always rendered, and on a line of its own below `sm`. The cache
+              status resolves after the first paint, and this span appearing
+              used to push the two buttons onto a new row — a 29 px shift of
+              everything below the header, measured as CLS 0.12 on emulated
+              mobile. `basis-full` keeps the row count independent of it. */}
+          <span className="basis-full text-[11px] text-muted-foreground tnum sm:basis-auto">
+            更新于 {generatedAt ? formatDateTime(generatedAt) : '—'}
+          </span>
           <Button
             asChild
             variant="outline"
@@ -201,7 +204,7 @@ export function PerformancePage() {
         )}
       </div>
 
-      {navBridge && <NavBridgeCard bridge={navBridge} />}
+      {(navBridge || portfolioHistory.isLoading) && <NavBridgeCard bridge={navBridge} />}
 
       <MonthlyPerformanceCalendar history={history} benchmark={selectedBenchmark} />
 

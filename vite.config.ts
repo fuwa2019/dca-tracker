@@ -70,11 +70,17 @@ export default defineConfig({
     chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
+        // The object form pulls a listed package's own dependencies into the
+        // same chunk unless they are claimed elsewhere. `clsx` and
+        // `tailwind-merge` are dependencies of both `cn()` and recharts, so
+        // without this entry they landed inside `charts` and dragged all 385 KB
+        // of recharts into the first load through `cn()` alone.
         manualChunks: {
           react: ['react', 'react-dom', 'react-router-dom'],
           charts: ['recharts'],
           motion: ['framer-motion'],
           supabase: ['@supabase/supabase-js'],
+          classnames: ['clsx', 'tailwind-merge'],
         },
       },
     },

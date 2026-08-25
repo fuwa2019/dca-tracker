@@ -26,7 +26,18 @@ export function monthDateRange(month: string): { start: string; end: string; day
   };
 }
 
-/** Monday-first calendar cells, including leading/trailing blanks. */
+/** A month needs at most six Monday-first rows: 6 leading blanks plus 31 days. */
+export const CALENDAR_CELLS = 42;
+
+/**
+ * Monday-first calendar cells, including leading/trailing blanks.
+ *
+ * Always `CALENDAR_CELLS` long, even for a month that fits in five rows. The
+ * grid is then the same height for every month, so the calendar cannot change
+ * size when the selected month moves — which it does on load, from the current
+ * month to the last month with performance data. That jump was a real layout
+ * shift of exactly one row.
+ */
 export function buildMonthCalendar(month: string): Array<string | null> {
   const { days } = monthDateRange(month);
   const [year, monthNumber] = month.split('-').map(Number);
@@ -36,7 +47,7 @@ export function buildMonthCalendar(month: string): Array<string | null> {
   for (let day = 1; day <= days; day += 1) {
     cells.push(`${month}-${String(day).padStart(2, '0')}`);
   }
-  while (cells.length % 7 !== 0) cells.push(null);
+  while (cells.length < CALENDAR_CELLS) cells.push(null);
   return cells;
 }
 

@@ -6,50 +6,55 @@ import { usd, signedPct, changeColor } from '@/lib/format';
 import type { NavBridge } from '@/lib/calc/navBridge';
 
 interface Props {
-  bridge: NavBridge;
+  /**
+   * `null` renders the same card with the figures withheld. The card is 366 px
+   * tall and sits above the calendar and the performance panel, so appearing
+   * only once the history resolves pushed the whole page down.
+   */
+  bridge: NavBridge | null;
 }
 
 /** PP-style signed ledger: 期初净值 + 外部净流入 + 期间盈亏 = 期末净值. */
 export function NavBridgeCard({ bridge }: Props) {
-  const gapVisible = Math.abs(bridge.identity_gap_usd) >= 0.005;
+  const identityGap = bridge && Math.abs(bridge.identity_gap_usd) >= 0.005 ? bridge.identity_gap_usd : null;
   return (
-    <Card className="p-4">
+    <Card className="p-4" aria-busy={bridge ? undefined : true}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <Calculator className="h-4 w-4 text-brand" />
           计算拆解
         </h2>
         <span className="text-[11px] text-muted-foreground tnum">
-          {bridge.start_date} 至 {bridge.end_date} · 与图表区间一致
+          {bridge ? `${bridge.start_date} 至 ${bridge.end_date} · 与图表区间一致` : '正在拉取历史数据'}
         </span>
       </div>
 
       <dl className="mt-3 divide-y divide-border rounded-lg border border-border text-sm">
-        <BridgeRow sign="" label="期初净值" sub="区间前一交易日的账户净值" value={bridge.starting_nav_usd} />
-        <BridgeRow sign="+" label="外部净流入" sub="由交易推断的资金流，区间内合计" value={bridge.external_flow_usd} />
+        <BridgeRow sign="" label="期初净值" sub="区间前一交易日的账户净值" value={bridge?.starting_nav_usd ?? null} />
+        <BridgeRow sign="+" label="外部净流入" sub="由交易推断的资金流，区间内合计" value={bridge?.external_flow_usd ?? null} />
         <BridgeRow
           sign="+"
           label="期间盈亏"
           sub="区间内净值变化中非资金流部分"
-          value={bridge.pnl_usd}
-          valueClassName={changeColor(bridge.pnl_usd)}
+          value={bridge?.pnl_usd ?? null}
+          valueClassName={bridge ? changeColor(bridge.pnl_usd) : undefined}
         />
-        <BridgeRow sign="=" label="期末净值" sub="区间最后一个交易日" value={bridge.ending_nav_usd} emphasize />
+        <BridgeRow sign="=" label="期末净值" sub="区间最后一个交易日" value={bridge?.ending_nav_usd ?? null} emphasize />
       </dl>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
-        {bridge.period_return_pct !== null && (
+        {bridge && bridge.period_return_pct !== null && (
           <span className="rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
             区间 TWR <strong className={cn('tnum', changeColor(bridge.period_return_pct))}>{signedPct(bridge.period_return_pct)}</strong>
           </span>
         )}
-        {gapVisible ? (
+        {identityGap !== null ? (
           <StatusBadge tone="warn" dot>
-            恒等差 {usd.format(bridge.identity_gap_usd)}，缓存可能需要刷新
+            恒等差 {usd.format(identityGap)}，缓存可能需要刷新
           </StatusBadge>
         ) : (
           <span className="rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
-            恒等式校验通过
+            {bridge ? '恒等式校验通过' : '等待业绩缓存'}
           </span>
         )}
         <span className="basis-full text-muted-foreground">
@@ -57,7 +62,7 @@ export function NavBridgeCard({ bridge }: Props) {
         </span>
       </div>
 
-      {gapVisible && (
+      {identityGap !== null && (
         <p className="mt-2 flex items-start gap-1.5 text-[11px] text-muted-foreground">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warn" />
           期初净值、外部净流入与期间盈亏之和不等于期末净值，通常表示业绩缓存不一致，请刷新业绩缓存后复核。
@@ -78,7 +83,7 @@ function BridgeRow({
   sign: '' | '+' | '=';
   label: string;
   sub: string;
-  value: number;
+  value: number | null;
   emphasize?: boolean;
   valueClassName?: string;
 }) {
@@ -90,7 +95,7 @@ function BridgeRow({
         <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">{sub}</span>
       </dt>
       <dd className={cn('shrink-0 font-num tabular-nums', emphasize ? 'text-base font-semibold' : 'text-sm', valueClassName)}>
-        {usd.format(value)}
+        {value === null ? '—' : usd.format(value)}
       </dd>
     </div>
   );

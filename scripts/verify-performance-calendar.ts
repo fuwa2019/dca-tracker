@@ -13,8 +13,14 @@ assert.equal(monthDateRange('2025-04').days, 30, 'April has 30 days');
 assert.equal(monthDateRange('2025-01').days, 31, 'January has 31 days');
 assert.equal(shiftMonth('2025-01', -1), '2024-12', 'month navigation crosses years backward');
 assert.equal(shiftMonth('2024-12', 1), '2025-01', 'month navigation crosses years forward');
-assert.equal(buildMonthCalendar('2024-02').length, 35, 'calendar keeps a Monday-first 7-column grid');
+assert.equal(buildMonthCalendar('2024-02').length, 42, 'a five-row month still fills six rows');
+assert.equal(buildMonthCalendar('2026-08').length, 42, 'a six-row month is the same height as a five-row one');
 assert.equal(buildMonthCalendar('2025-09').at(0), '2025-09-01', 'month starting on Monday has no leading blank');
+assert.deepEqual(
+  buildMonthCalendar('2024-02').slice(32),
+  Array.from({ length: 10 }, () => null),
+  'trailing padding is blank, so the extra row renders as empty cells',
+);
 
 const history = [
   { date: '2025-01-02', invested: 100, navUser: 100, returnPctUser: 0 },
