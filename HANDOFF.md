@@ -27,7 +27,7 @@ states exactly what is missing.
 | Supabase | Migrations applied through `0052`; **no user is on `ledger_twr_v2`** |
 | Quote Worker | Version `8d63a31a-2d64-4997-a039-a95dee51816e`; **does not yet include the V2 refresh code** |
 | Email Worker | Unchanged |
-| Working tree | Clean, `master` synced with `origin/master` |
+| Working tree | **Uncommitted**: the `/transactions` reserved-height fix, the probe's desktop/multi-run support, and the section 6 record. Verified, not committed, not deployed. |
 
 Repository: `/Users/junxihuo/Workspace/dca_system`, branch `master` tracking
 `origin/master`.
@@ -146,19 +146,31 @@ Rationale and rejected alternatives:
    order, live-region timing, braille, rotor and gesture navigation, plus the
    cloud-only routes (`/cashflows`, a populated `/share/<token>`, the
    authenticated login flow).
-5. **Performance follow-ups — done and released; two items left behind them.**
-   Route-level code splitting and the reserved-height work shipped in `1f3e027`;
-   section 5 of `docs/release/2026-08-24-release-gates.md` carries the numbers.
-   First-load JS went 427.41 → 171.65 KiB gzip with the budget ratcheted to
-   match, and emulated-mobile Lighthouse performance went 66–84 → 86–92 across
-   the six measured routes. What is still open: the intermittent 0.186 CLS class
-   on `/performance` desktop is **not proved gone** — its two deterministic
-   causes are fixed, but two runs cannot disprove a class that took a full 24-run
-   sweep to surface once, and `docs/release/probes/cls-attribution.mjs` now
-   exists to catch it if it returns; and `/transactions` still measures 0.015 on
-   emulated mobile, attributed to `<section class="workbench-next">` collapsing
-   from 43 px to 0. `supabase` (52.17 KiB gzip) is still first-load because the
-   auth check runs before any route renders.
+5. **Performance follow-ups — released; the two items behind them are now
+   settled, but the second fix is not deployed.** Route-level code splitting and
+   the reserved-height work shipped in `1f3e027`; sections 5 and 6 of
+   `docs/release/2026-08-24-release-gates.md` carry the numbers. First-load JS
+   went 427.41 → 171.65 KiB gzip with the budget ratcheted to match, and
+   emulated-mobile Lighthouse performance went 66–84 → 86–92 across the six
+   measured routes.
+
+   `/transactions` is fixed in the working tree and **not released**: its
+   recent-ledger placeholder was `h-24` against a 324/402 px list, which pushed
+   the section below it off screen. `TxnListSkeleton` now carries that footprint
+   and the route reads 0 CLS on both form factors, down from 0.015 mobile and
+   0.044 desktop.
+
+   The intermittent 0.186 class on `/performance` desktop **did not recur** in
+   33 runs, 30 of them driven concurrently with a full Lighthouse sweep — the
+   contention the original spike needed — plus two full gate sweeps under that
+   contention, worst run 0.005. Its deterministic causes are gone and nothing
+   left on the route changes size after first paint. That is not proof it is
+   impossible; `docs/release/probes/cls-attribution.mjs` (now with
+   `PROBE_FORM_FACTOR=desktop` and `PROBE_RUNS`) makes the next occurrence
+   attributable in one run instead of a sweep.
+
+   Still untouched: `supabase` (52.17 KiB gzip) is first-load because the auth
+   check runs before any route renders.
 6. **Prior SMH follow-up.** Verify the authenticated
    `POST /api/etf-holdings/refresh` with a synthetic account, including partial
    provider failure, final-holder deletion, and re-buy refresh, and SMH access

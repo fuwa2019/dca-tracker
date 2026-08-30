@@ -67,6 +67,34 @@ const COLUMN_LABELS: Record<OptionalColumn, string> = {
 /** Notes are usually empty, so the column is opt-in like the reference's. */
 const DEFAULT_HIDDEN: ReadonlyArray<OptionalColumn> = ['note'];
 
+/**
+ * Placeholder with the footprint of a five-row list, which is what
+ * `/transactions` shows.
+ *
+ * The old placeholder was `h-24`, so the list arriving grew the section by
+ * 228 px on emulated mobile and pushed the section below it off screen — the
+ * 0.015 CLS `docs/release/probes/cls-attribution.mjs` attributed on that route.
+ * The heights are measured from the rendered list and belong next to the markup
+ * that determines them: below `md` the card list is 5 x 64.5 px plus its border;
+ * at `md` and up the table adds a 45 px column chooser and a 41 px head to
+ * 5 x 63 px rows.
+ *
+ * A ledger with fewer than five rows still settles shorter than this. That is
+ * the uncommon case and it only ever shifts content up, unlike the old
+ * placeholder, which was wrong for every ledger.
+ */
+export function TxnListSkeleton() {
+  return (
+    <Card
+      className="h-[324px] animate-pulse p-0 md:h-[402px]"
+      role="status"
+      aria-busy="true"
+    >
+      <span className="sr-only">正在读取交易记录</span>
+    </Card>
+  );
+}
+
 export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort, onSortChange }: Props) {
   const enter = useEnterMotion();
   const qc = useQueryClient();

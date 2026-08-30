@@ -82,10 +82,21 @@
       "worstBestOfRunsDesktopPerformance": 99,
       "accessibilityAllRoutes": 100,
       "worstBestPractices": 96,
-      "worstCls": 0.044,
+      "worstCls": 0.005,
       "worstBestOfRunsMobileLcpMs": 3579,
       "worstBestOfRunsDesktopLcpMs": 772,
-      "clsAttributionProbe": "docs/release/probes/cls-attribution.mjs"
+      "clsAttributionProbe": "docs/release/probes/cls-attribution.mjs",
+      "performanceDesktopClsRuns": 33,
+      "performanceDesktopClsMax": 0.023,
+      "$clsComment": [
+        "worstCls was 0.044 (/transactions desktop) until the recent-ledger",
+        "placeholder was given the footprint of the list that replaces it; that",
+        "route now reads 0 on both form factors. See section 6 of",
+        "docs/release/2026-08-24-release-gates.md.",
+        "performanceDesktopCls* is the hunt for section 2's intermittent 0.186:",
+        "33 runs, 30 of them driven concurrently with a full Lighthouse sweep,",
+        "which is the contention the original spike needed. It did not recur."
+      ]
     },
     "previousMeasured": {
       "on": "2026-08-24",

@@ -367,6 +367,7 @@ passes.
 Pointed at `/transactions`, the probe attributes that route's long-standing
 0.015 to `<section class="workbench-next">` collapsing from 43 px to 0. Under
 the 0.1 threshold and outside this change; recorded now that it has a name.
+**Fixed in section 6.**
 
 ### What this does not establish
 
@@ -374,10 +375,85 @@ the 0.1 threshold and outside this change; recorded now that it has a name.
   proved gone. Its deterministic causes found here — the calendar's row count
   and the header's row count — are fixed, but two runs cannot disprove a class
   that took a full 24-run sweep to surface once. The attribution probe now
-  exists to catch it if it returns.
+  exists to catch it if it returns. **Hunted for deliberately in section 6.**
 - Nothing about the authenticated cloud routes, `/cashflows`, or a populated
   `/share/<token>`. Same limit as every other measurement on this page.
 - Nothing about a real phone. Emulated mobile is still a throttled desktop.
 - The accessibility probes in `docs/accessibility/probes/` were not re-run;
   Lighthouse's accessibility category (100 on all 24 runs) is the coverage
   claimed here.
+
+---
+
+## 6. The two items section 5 left open
+
+Section 5 shipped, then left two things behind: `/transactions` measuring 0.015
+on emulated mobile with a name but no fix, and section 2's intermittent 0.186 on
+`/performance` desktop recorded as not proved gone. Both are settled here.
+
+### `/transactions`, fixed
+
+The attribution was already in hand: `<section class="workbench-next">`
+collapsing from 43 px to 0 meant it had been pushed out of the viewport, not
+that it had shrunk. What pushed it was the recent-ledger list — the placeholder
+was `h-24`, 96 px, and the five-row list that replaced it is 324 px on emulated
+mobile and 402 px at `md` and up. The same defect as `/performance`'s panel, one
+route over.
+
+`TxnListSkeleton` now renders a card with that footprint, and the heights live
+in `TxnList.tsx` next to the markup that determines them: below `md` the card
+list is 5 x 64.5 px plus its border; at `md` and up the table adds a 45 px column
+chooser and a 41 px head to 5 x 63 px rows. A ledger with fewer than five rows
+still settles shorter, which shifts content up — the uncommon case, against a
+placeholder that was previously wrong for every ledger.
+
+| `/transactions` | Before | After |
+|---|---|---|
+| Attribution probe, emulated mobile | 0.0151 | **0.0001** |
+| Lighthouse gate, mobile | 0.015 | **0** |
+| Lighthouse gate, desktop (worst run) | 0.044 | **0** |
+
+The remaining 0.0001 is a font-swap reflow with no element movement.
+
+### The 0.186 class, hunted for
+
+The probe gained `PROBE_FORM_FACTOR=desktop` (Lighthouse's 1350x940 preset,
+unthrottled, its network profile) and `PROBE_RUNS`, because the shift worth
+catching is the one that appears in some runs and not others, and the probe
+could previously only look at mobile — the wrong form factor for this question.
+
+Section 2 established that 40 *isolated* runs did not reproduce it and that it
+appeared only deep inside a **full sweep**, consistent with a saturated main
+thread delaying the chart and table past first paint. So the hunt reproduced
+that condition rather than avoiding it: 30 of the 33 desktop runs below were
+driven **concurrently with a full 24-run Lighthouse sweep**, and both of those
+sweeps are reported here too.
+
+| Condition | Runs | Max CLS |
+|---|---|---|
+| `/performance` desktop, isolated | 3 | 0.0090 |
+| `/performance` desktop, concurrent with a full Lighthouse sweep | 30 | **0.0230** |
+| Full Lighthouse gate sweep, run under that same contention | 2 sweeps | `/performance` desktop worst run 0.005, then 0.005 |
+
+Nothing above 0.023, against 0.186 twice before. Every entry the probe printed
+across those runs was either a font-swap reflow or the 1–5 px displacement a
+font swap causes in the header — no element changing size, which is what the
+0.186 geometry required.
+
+**What this establishes, and what it does not.** Established: the two
+deterministic causes are gone (the calendar's row count and the header's row
+count, both fixed in section 5), and the hypothesised mechanism no longer has
+anything to move — the chart, the summary table and the calculation card all now
+occupy their loaded height before the data arrives. The class did not recur
+under the condition that originally produced it. Not established: that it is
+impossible. It surfaced twice out of a handful of `/performance` desktop
+measurements across three passes, and two post-fix sweeps contribute only four
+such measurements; the 33 probe runs are the stronger half of this evidence, and
+they are the probe's conditions, not Lighthouse's. The probe is checked in, so
+the next occurrence is attributable in one run instead of a sweep.
+
+### Gate state after both fixes
+
+Two full sweeps, both under contention, both passing. `/transactions` reads 0 on
+both form factors in both. Emulated-mobile performance 86–92, desktop 99–100,
+accessibility 100 in all 48 runs, best practices unchanged.

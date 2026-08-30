@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, BookOpen, CheckCircle2, FileUp, Plus } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { TxnList } from '@/components/TxnList';
+import { TxnList, TxnListSkeleton } from '@/components/TxnList';
 import { TxnForm } from '@/components/TxnForm';
 import { useTransactions } from '@/hooks/usePortfolio';
 import { useQuotes } from '@/hooks/useQuotes';
@@ -92,7 +92,7 @@ export function TransactionsPage() {
         </div>
 
         {isLoading ? (
-          <div className="h-24 animate-pulse rounded-lg border border-border bg-surface" />
+          <TxnListSkeleton />
         ) : (
           <TxnList rows={recent} emptyText="还没有交易，先导入文件或手工录入第一笔。" />
         )}
