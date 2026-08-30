@@ -23,11 +23,11 @@ states exactly what is missing.
 
 | Area | State |
 |---|---|
-| Frontend | Live on Pages at `d17831e`, entry `assets/index-VFqTamI9.js`, stylesheet `assets/index-B7RqbsaF.css` |
+| Frontend | Live on Pages at `dc3433b`, entry `assets/index-CWyiYIX-.js`, stylesheet `assets/index-H-TFRIaI.css` |
 | Supabase | Migrations applied through `0052`; **no user is on `ledger_twr_v2`** |
 | Quote Worker | Version `8d63a31a-2d64-4997-a039-a95dee51816e`; **does not yet include the V2 refresh code** |
 | Email Worker | Unchanged |
-| Working tree | **Uncommitted**: the `/transactions` reserved-height fix, the probe's desktop/multi-run support, and the section 6 record. Verified, not committed, not deployed. |
+| Working tree | Clean, `master` synced with `origin/master` |
 
 Repository: `/Users/junxihuo/Workspace/dca_system`, branch `master` tracking
 `origin/master`.
@@ -62,33 +62,22 @@ the archive for each one's checks.
 
 ### Frontend — current release
 
-`master` pushed to `d17831e` with explicit authorization; Pages rebuilt in about
-80 seconds. This release is route-level code splitting and the reserved-height
-CLS work (`1f3e027`), on top of the earlier same-day release at `336c493`.
-Checks, all cache-busted:
+`master` pushed to `dc3433b` with explicit authorization; Pages rebuilt within
+about 100 seconds (entry hash changed from the prior release's
+`index-VFqTamI9.js` to `index-CWyiYIX-.js`, confirming the rebuild landed). This
+release is the `/transactions` skeleton-footprint CLS fix and the 0.186 hunt
+recorded in section 6 of `docs/release/2026-08-24-release-gates.md`, on top of
+the route-splitting release at `d17831e`. Checks, all cache-busted:
 
-- the served `index.html` preloads exactly `react`, `motion`, `classnames` and
-  `supabase` — **`charts` is no longer in the document head**, which is the whole
-  point of the split — and still carries `rel="preload"` for the font
-  stylesheet, the `noscript` fallback and `registerSW.js" defer`;
-- **all 36 chunks named in the entry's `__vite__mapDeps` table are served with a
-  JavaScript content type.** This is the check code splitting adds: the SPA
-  `_redirects` fallback answers an unknown path with `index.html` and a 200, so a
-  missing route chunk would look fine to a status-code check and fail only at
-  runtime;
-- `/`, `/performance`, `/exposure`, `/transactions`, `/transactions/all`,
-  `/cashflows`, `/health`, `/settings`, `/settings/basis`, `/settings/share`,
-  `/login` and an invalid `/share/<token>` all return 200;
-- driven headless against production, `/login` and the invalid share route both
-  render with a **silent console** (so the Pages build still injects the public
-  `VITE_` values), 0 page overflow at 390 px and 320 px, and **0 unnamed images
-  in the accessibility tree**. A deep link to `/performance` while signed out
-  redirects to `/login` and renders, so the lazy chunk plus `RequireAuth` path
-  does not hang on the Suspense fallback.
+- `/`, `/transactions`, `/performance`, `/login` and `/health` all return 200;
+- driven headless against production, `/` and `/transactions` (unauthenticated,
+  so both redirect to `/login`) render with a **silent console**.
 
-No login was attempted and no private data was read. The authenticated routes
-and a populated `/share/<token>` are therefore **unverified in production** for
-this release, as for every previous one.
+This was a smaller change than the route-splitting release, so verification was
+scoped accordingly — the full `__vite__mapDeps` content-type audit and the
+12-route sweep were not repeated. No login was attempted and no private data
+was read. The authenticated routes and a populated `/share/<token>` remain
+**unverified in production**, as for every previous release.
 
 **`https://dca-tracker-git.netlify.app` returns 401** — site-level protection on
 the Netlify entrypoint added in `9805af6`. That target has never been verified.
@@ -154,11 +143,11 @@ Rationale and rejected alternatives:
    emulated-mobile Lighthouse performance went 66–84 → 86–92 across the six
    measured routes.
 
-   `/transactions` is fixed in the working tree and **not released**: its
-   recent-ledger placeholder was `h-24` against a 324/402 px list, which pushed
-   the section below it off screen. `TxnListSkeleton` now carries that footprint
-   and the route reads 0 CLS on both form factors, down from 0.015 mobile and
-   0.044 desktop.
+   `/transactions` is fixed and **released at `dc3433b`**: its recent-ledger
+   placeholder was `h-24` against a 324/402 px list, which pushed the section
+   below it off screen. `TxnListSkeleton` now carries that footprint and the
+   route reads 0 CLS on both form factors, down from 0.015 mobile and 0.044
+   desktop.
 
    The intermittent 0.186 class on `/performance` desktop **did not recur** in
    33 runs, 30 of them driven concurrently with a full Lighthouse sweep — the
