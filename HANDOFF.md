@@ -1,6 +1,6 @@
 # Current Handoff
 
-Updated: 2026-08-24
+Updated: 2026-08-31
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
@@ -25,7 +25,7 @@ states exactly what is missing.
 |---|---|
 | Frontend | Live on Pages at `dc3433b`, entry `assets/index-CWyiYIX-.js`, stylesheet `assets/index-H-TFRIaI.css` |
 | Supabase | Migrations applied through `0052`; **no user is on `ledger_twr_v2`** |
-| Quote Worker | Version `8d63a31a-2d64-4997-a039-a95dee51816e`; **does not yet include the V2 refresh code** |
+| Quote Worker | Version `e5bd372b-1090-4955-b072-867bbc14180a`, deployed 2026-08-31; **carries the V2 refresh code**, which is a no-op while no user is on V2 |
 | Email Worker | Unchanged |
 | Working tree | Clean, `master` synced with `origin/master` |
 
@@ -82,9 +82,41 @@ was read. The authenticated routes and a populated `/share/<token>` remain
 **`https://dca-tracker-git.netlify.app` returns 401** — site-level protection on
 the Netlify entrypoint added in `9805af6`. That target has never been verified.
 
+### Quote Worker — deployed 2026-08-31
+
+`workers/quote` at `45f56e8` was deployed with explicit authorization. Version
+went `8d63a31a-2d64-4997-a039-a95dee51816e` →
+`e5bd372b-1090-4955-b072-867bbc14180a`; upload 100.69 KiB, 23.75 KiB gzip.
+Bindings and the four cron triggers are unchanged from `wrangler.toml`.
+
+Two things landed that the previous version did not have:
+
+- the V2 refresh, chained after the daily price sync rather than on its own
+  trigger. `ledger_performance_refresh_universe` selects only settings rows with
+  `performance_method = 'ledger_twr_v2'`, and no user is on V2, so today this is
+  one RPC returning an empty set: nothing is computed and nothing is written;
+- the `ALLOWED_ORIGINS` Netlify entry from `9805af6`, which the deployed Worker
+  predated.
+
+Pre-deploy: `npm run typecheck` and `npm run test:finance` pass, and
+`wrangler deploy --dry-run` builds the bundle — the relevant one, because
+`ledgerPerformance.ts` imports `src/lib/calc/ledgerTwr.ts` across the repository
+boundary. `npm ci --prefix workers/quote` was not re-run; the existing
+`workers/quote/node_modules` built it.
+
+Post-deploy, all cache-busted: `/health` 200, refresh CORS preflight 200 for
+both `https://dca-tracker.pages.dev` and the newly allowed
+`https://dca-tracker-git.netlify.app` (each echoed back in
+`access-control-allow-origin`), unauthenticated refresh 401, and
+`/api/quote?symbols=VOO` 200 with a real snapshot quote.
+
+**Not verified:** the V2 refresh has never executed against a real portfolio,
+because there is no V2 user to select. The chained cron path — daily price sync
+`.then()` V2 sync — has also not yet run on a real trigger.
+
 ### Market data
 
-- Quote Worker `8d63a31a-2d64-4997-a039-a95dee51816e` serves health 200, refresh
+- Quote Worker `e5bd372b-1090-4955-b072-867bbc14180a` serves health 200, refresh
   CORS preflight 200, and unauthenticated refresh 401. SMH's primary channel is
   StockAnalysis' public HTML holdings page, checked against the verified
   2026-08-18 official snapshot so older data cannot overwrite newer.
@@ -117,10 +149,11 @@ Rationale and rejected alternatives:
 
 ## Next steps
 
-1. **Deploy the quote Worker.** The V2 refresh code is committed but the
-   deployed Worker predates it, so nothing computes a V2 curve today. This is
-   the only remaining step before D1 can be exercised at all. It needs explicit
-   authorization, and `docs/runbooks/deployment.md` has the procedure.
+1. **Watch the next quote Worker cron.** The Worker now runs the V2 sync
+   chained after the daily price sync, and that chain has not yet fired. The
+   price sync is the part that matters — a rejection there now lands in the V2
+   catch rather than as an unhandled `waitUntil` rejection. `wrangler tail` from
+   `workers/quote`, or the next day's `daily_prices` rows, settles it.
 2. **B2 — the `ledger_twr_v2` switch.** B1 closed on 2026-08-23. What remains is
    a full re-import and a V1 regression, both needing authorized cloud work.
    Only after those should any user's `performance_method` be flipped. Flipping
