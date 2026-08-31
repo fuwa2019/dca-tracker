@@ -84,35 +84,46 @@ the Netlify entrypoint added in `9805af6`. That target has never been verified.
 
 ### Quote Worker — deployed 2026-08-31
 
-`workers/quote` at `45f56e8` was deployed with explicit authorization. Version
-went `8d63a31a-2d64-4997-a039-a95dee51816e` →
-`e5bd372b-1090-4955-b072-867bbc14180a`; upload 100.69 KiB, 23.75 KiB gzip.
-Bindings and the four cron triggers are unchanged from `wrangler.toml`.
+`workers/quote` at `45f56e8` was deployed with explicit authorization. New
+version `e5bd372b-1090-4955-b072-867bbc14180a`, 100% of traffic; upload
+100.69 KiB, 23.75 KiB gzip. Bindings, secrets and the four cron triggers are
+unchanged.
 
-Two things landed that the previous version did not have:
+**This corrects the previous handoff's baseline.** It recorded the live Worker
+as `8d63a31a-2d64-4997-a039-a95dee51816e` without the V2 refresh code. Both
+halves are wrong, per `wrangler deployments list` and `wrangler versions view`:
 
-- the V2 refresh, chained after the daily price sync rather than on its own
-  trigger. `ledger_performance_refresh_universe` selects only settings rows with
-  `performance_method = 'ledger_twr_v2'`, and no user is on V2, so today this is
-  one RPC returning an empty set: nothing is computed and nothing is written;
-- the `ALLOWED_ORIGINS` Netlify entry from `9805af6`, which the deployed Worker
-  predated.
+- `8d63a31a` was created 2026-08-19T13:42:20Z and superseded five seconds later
+  by `7e097e7f`. Three further deployments followed it.
+- The version actually serving traffic before this one was
+  `0aeeb1bc-a7d7-45f0-871b-e659d9816bec`, created **2026-08-24T09:39:35Z** —
+  13m40s after `45f56e8` was authored (09:25:55Z) and 4m12s before migration
+  `0052` was applied (09:43:47Z). Its `ALLOWED_ORIGINS` already carries the
+  Netlify entry from `9805af6`, so it was uploaded from a tree at or after that
+  commit.
+
+So the V2 refresh code was almost certainly already live from 2026-08-24, and
+this deployment re-published the same commit rather than landing it. That is
+timing evidence plus one binding, not proof: wrangler cannot show a past
+version's code, so `0aeeb1bc`'s exact contents stay unproven. What is certain is
+that the ALLOWED_ORIGINS Netlify entry was **not** new in this deployment.
 
 Pre-deploy: `npm run typecheck` and `npm run test:finance` pass, and
-`wrangler deploy --dry-run` builds the bundle — the relevant one, because
+`wrangler deploy --dry-run` builds the bundle — the relevant check, because
 `ledgerPerformance.ts` imports `src/lib/calc/ledgerTwr.ts` across the repository
 boundary. `npm ci --prefix workers/quote` was not re-run; the existing
 `workers/quote/node_modules` built it.
 
 Post-deploy, all cache-busted: `/health` 200, refresh CORS preflight 200 for
-both `https://dca-tracker.pages.dev` and the newly allowed
-`https://dca-tracker-git.netlify.app` (each echoed back in
-`access-control-allow-origin`), unauthenticated refresh 401, and
-`/api/quote?symbols=VOO` 200 with a real snapshot quote.
+both `https://dca-tracker.pages.dev` and `https://dca-tracker-git.netlify.app`
+(each echoed back in `access-control-allow-origin`), unauthenticated refresh
+401, and `/api/quote?symbols=VOO` 200 with a real snapshot quote.
 
 **Not verified:** the V2 refresh has never executed against a real portfolio,
-because there is no V2 user to select. The chained cron path — daily price sync
-`.then()` V2 sync — has also not yet run on a real trigger.
+because `ledger_performance_refresh_universe` selects only settings rows with
+`performance_method = 'ledger_twr_v2'` and no user is on V2. It returns an empty
+set, so nothing is computed and nothing is written — that was true before this
+deployment too.
 
 ### Market data
 
@@ -149,11 +160,13 @@ Rationale and rejected alternatives:
 
 ## Next steps
 
-1. **Watch the next quote Worker cron.** The Worker now runs the V2 sync
-   chained after the daily price sync, and that chain has not yet fired. The
-   price sync is the part that matters — a rejection there now lands in the V2
-   catch rather than as an unhandled `waitUntil` rejection. `wrangler tail` from
-   `workers/quote`, or the next day's `daily_prices` rows, settles it.
+1. **Confirm the daily price sync still completes under the chained cron.**
+   `scheduled` now runs `runDailyPriceSync().then(runLedgerPerformanceSync)`, so
+   a price-sync rejection lands in the V2 catch instead of surfacing as an
+   unhandled `waitUntil` rejection. If `0aeeb1bc` already carried this code the
+   chain has been firing daily since 2026-08-24 and quotes have stayed current,
+   which is reassuring but not a check. `wrangler tail` from `workers/quote`
+   across a trigger, or the freshness of `daily_prices`, settles it.
 2. **B2 — the `ledger_twr_v2` switch.** B1 closed on 2026-08-23. What remains is
    a full re-import and a V1 regression, both needing authorized cloud work.
    Only after those should any user's `performance_method` be flipped. Flipping
@@ -192,7 +205,26 @@ Rationale and rejected alternatives:
    attributable in one run instead of a sweep.
 
    Still untouched: `supabase` (52.17 KiB gzip) is first-load because the auth
-   check runs before any route renders.
+   check runs before any route renders. Looked at on 2026-08-31 and **not
+   changed, on purpose.** It is already its own chunk and reaches the browser
+   as a `modulepreload` in the head, so it is fetched in parallel with the
+   entry, not after it. Making `useAuth` import it dynamically would take
+   52 KiB out of the measured first-load set, but the session check would then
+   start a round trip later — a real win for a logged-out visitor landing on
+   `/login`, and a real loss on every warm authenticated load. This is one
+   person's portfolio and that person is nearly always signed in, so the trade
+   goes the wrong way. Revisit only if the anonymous `/share/<token>` route
+   becomes the common entry point.
+
+   What did change on 2026-08-31: the budget's `externalRenderBlockingOrigins`
+   gate was counting the Google Fonts stylesheet inside `<noscript>`, and
+   because it counts distinct *origins*, that phantom made a genuinely
+   render-blocking fonts stylesheet in the head read as the same `1`. The gate
+   passed on a build carrying the exact regression `ce2cd21` removed.
+   `scripts/verify-release-budget.mjs` now strips `<noscript>` and the budget is
+   ratcheted `1 → 0`; both directions are mutation-tested. Section 7 of
+   `docs/release/2026-08-24-release-gates.md` has the table. No page bytes
+   moved — first-load JS is still 171.65 KiB gzip.
 6. **Prior SMH follow-up.** Verify the authenticated
    `POST /api/etf-holdings/refresh` with a synthetic account, including partial
    provider failure, final-holder deletion, and re-buy refresh, and SMH access

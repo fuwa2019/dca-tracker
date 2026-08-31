@@ -13,14 +13,26 @@
     "fails on a regression rather than on build-to-build noise."
   ],
   "measured": {
-    "on": "2026-08-24",
-    "commit": "1f3e027",
+    "on": "2026-08-31",
+    "commit": "eb98d3a",
+    "$comment": [
+      "JS and requests are unchanged from the 1f3e027 measurement; CSS moved",
+      "171.65/10.87 -> 171.65/10.89 with the dc3433b skeleton.",
+      "externalRenderBlockingOrigins moved 1 -> 0 because the scan was fixed,",
+      "not because the page changed. It had been counting the Google Fonts",
+      "stylesheet inside `<noscript>`, which cannot block first paint for a",
+      "client able to run this SPA. Since the measurement counts distinct",
+      "origins, that phantom occupied the slot and a genuinely render-blocking",
+      "fonts stylesheet in the head still read as 1 -- the gate passed on a",
+      "build carrying the exact regression ce2cd21 removed. Ratcheted to 0 so",
+      "it now fails."
+    ],
     "initialJsGzipKib": 171.65,
-    "initialCssGzipKib": 10.87,
-    "initialTotalGzipKib": 182.52,
+    "initialCssGzipKib": 10.89,
+    "initialTotalGzipKib": 182.55,
     "largestChunkGzipKib": 52.24,
     "initialRequests": 8,
-    "externalRenderBlockingOrigins": 1
+    "externalRenderBlockingOrigins": 0
   },
   "previousMeasured": {
     "on": "2026-08-24",
@@ -39,7 +51,7 @@
     "initialTotalGzipKib": 194,
     "largestChunkGzipKib": 58,
     "initialRequests": 9,
-    "externalRenderBlockingOrigins": 1
+    "externalRenderBlockingOrigins": 0
   },
   "lighthouse": {
     "$comment": [

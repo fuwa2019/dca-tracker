@@ -74,16 +74,27 @@ const requests = assets.length + 1;
 
 // ------------------------------------- render-blocking third-party origins
 // A stylesheet from another origin blocks first paint on a connection this app
-// does not control. One is currently accepted (Google Fonts); adding a second
-// is a release decision, not an implementation detail.
+// does not control. Zero are accepted; adding one back is a release decision,
+// not an implementation detail.
+//
+// `<noscript>` is stripped before scanning. `ce2cd21` moved the Google Fonts
+// stylesheet to `rel="preload" as="style"` with an `onload` swap and left a
+// plain `<link rel="stylesheet">` inside `<noscript>` for scripting-off
+// clients. That fallback cannot block first paint for anyone able to run this
+// SPA at all, but the scan still counted it — and because the measurement is a
+// count of distinct ORIGINS, the phantom occupied the Google Fonts slot, so a
+// real render-blocking fonts stylesheet back in the head also read as 1. The
+// gate passed on a build carrying exactly the regression it exists to catch.
+// Confirmed by mutating a built `index.html` both before and after this fix.
+const scanned = html.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, '');
 const externalOrigins = new Set();
-for (const [, url] of html.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*\bhref="(https?:\/\/[^"]+)"/g)) {
+for (const [, url] of scanned.matchAll(/<link\b[^>]*\brel="stylesheet"[^>]*\bhref="(https?:\/\/[^"]+)"/g)) {
   externalOrigins.add(new URL(url).origin);
 }
-for (const [, url] of html.matchAll(/<link\b[^>]*\bhref="(https?:\/\/[^"]+)"[^>]*\brel="stylesheet"/g)) {
+for (const [, url] of scanned.matchAll(/<link\b[^>]*\bhref="(https?:\/\/[^"]+)"[^>]*\brel="stylesheet"/g)) {
   externalOrigins.add(new URL(url).origin);
 }
-for (const [, url] of html.matchAll(/<script\b(?![^>]*\b(?:async|defer|type="module")\b)[^>]*\bsrc="(https?:\/\/[^"]+)"/g)) {
+for (const [, url] of scanned.matchAll(/<script\b(?![^>]*\b(?:async|defer|type="module")\b)[^>]*\bsrc="(https?:\/\/[^"]+)"/g)) {
   externalOrigins.add(new URL(url).origin);
 }
 

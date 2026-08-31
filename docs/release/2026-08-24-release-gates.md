@@ -457,3 +457,65 @@ the next occurrence is attributable in one run instead of a sweep.
 Two full sweeps, both under contention, both passing. `/transactions` reads 0 on
 both form factors in both. Emulated-mobile performance 86–92, desktop 99–100,
 accessibility 100 in all 48 runs, best practices unchanged.
+
+## 7. The render-blocking gate was measuring a phantom
+
+Found 2026-08-31 while looking for what else is still on the first-load critical
+path. `npm run test:release-budget` printed
+
+```
+阻塞渲染的第三方来源：https://fonts.googleapis.com
+  · 阻塞渲染的第三方来源数：1 / 1
+```
+
+on a build where nothing third-party blocks first paint. Section 1's gate reads
+`dist/index.html` and counts distinct origins of render-blocking external
+stylesheets and scripts. `ce2cd21` had already moved the Google Fonts stylesheet
+to `rel="preload" as="style"` with an `onload` swap and left a plain
+`<link rel="stylesheet">` inside `<noscript>` for scripting-off clients. The
+scan did not exclude `<noscript>`, so it counted that fallback — a stylesheet
+that cannot block first paint for any client able to run this SPA at all.
+
+### Why a cosmetic miscount was actually a hole in the gate
+
+The measurement is a count of **distinct origins**, so the phantom occupied the
+`https://fonts.googleapis.com` slot. Putting the fonts stylesheet back into the
+head as a real render-blocking `<link>` — precisely the regression `ce2cd21`
+removed, and the one Lighthouse measured at ~2.9 s of blocking time on emulated
+mobile — moved the count from 1 to 1. The gate passed.
+
+Demonstrated rather than argued. A built `dist/` was copied to a scratch
+directory and its `rel="preload" as="style"` link rewritten to
+`rel="stylesheet"`, then the gate run against it through
+`RELEASE_BUDGET_DIST`:
+
+| build | before the fix | after the fix |
+|---|---|---|
+| real `dist/` | 1 / 1, passes | 0 / 0, passes |
+| fonts stylesheet back in the head | **1 / 1, passes** | **1 / 0, fails** |
+
+### The fix
+
+`scripts/verify-release-budget.mjs` strips `<noscript>…</noscript>` before
+scanning. The three origin regexes are otherwise unchanged, and the
+`rel="preload"` link is still correctly not counted — it carries no
+`rel="stylesheet"`.
+
+`externalRenderBlockingOrigins` is then ratcheted `1 → 0` in
+`docs/release/performance-budget.json`. The 0 is the honest reading of the
+current page, and it is what makes the gate fail on a new render-blocking
+third-party origin instead of silently absorbing one.
+
+**The page did not change.** No bytes moved, no route got faster; first-load JS
+is still 171.65 KiB gzip. What changed is that a gate which had been green for
+the wrong reason is now green for the right one. The same `measured` block was
+re-taken on `eb98d3a`: CSS 10.87 → 10.89 KiB gzip from the `dc3433b` skeleton,
+everything else unchanged.
+
+### What this does not establish
+
+That no third-party resource delays first paint. The gate reads static markup
+only: it cannot see a stylesheet injected at runtime, a font file's own transfer,
+or anything Lighthouse would attribute to the network. The two `preconnect`
+hints to `fonts.googleapis.com` and `fonts.gstatic.com` remain, and the font
+files themselves are still fetched cross-origin and still swap.
