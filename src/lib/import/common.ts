@@ -170,6 +170,26 @@ export function decimalMultiply(left: string, right: string, places = 10): strin
   return formatScaled(digits, a.scale + b.scale, places);
 }
 
+export function decimalDivide(left: string, right: string, places = 10): string {
+  const a = decimalParts(left);
+  const b = decimalParts(right);
+  if (b.digits === 0n) throw new Error('division by zero');
+
+  const denominator = b.digits * 10n ** BigInt(a.scale);
+  const numerator = a.digits * 10n ** BigInt(b.scale + places);
+  let quotient = numerator / denominator;
+  const remainder = numerator % denominator;
+  if (remainder * 2n >= denominator) quotient += 1n;
+
+  const target = 10n ** BigInt(places);
+  const whole = quotient / target;
+  const fraction = String(quotient % target).padStart(places, '0');
+  const negative = a.negative !== b.negative && quotient !== 0n;
+  return places > 0
+    ? `${negative ? '-' : ''}${whole}.${fraction}`
+    : `${negative ? '-' : ''}${whole}`;
+}
+
 export function signedTradeAmount(
   side: 'buy' | 'sell',
   shares: string,

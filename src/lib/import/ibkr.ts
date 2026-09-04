@@ -1,6 +1,7 @@
 import {
   addDuplicateOrdinals,
   buildImportPreview,
+  decimalDivide,
   decimalMultiply,
   decimalSubtract,
   fixedDecimal,
@@ -10,7 +11,6 @@ import {
   normalizeHeader,
   normalizeTicker,
   parseDate,
-  parseDecimal,
   parseDelimited,
   rowsForItems,
   signedTradeAmount,
@@ -51,6 +51,7 @@ interface IbkrParsedImport extends ParsedImport {
 
 interface IbkrRowContext {
   amountIsGrossProceeds: boolean;
+  amountIsBaseCurrency: boolean;
   defaultCurrency: string;
 }
 
@@ -83,10 +84,10 @@ const COLUMN_ALIASES: Record<IbkrColumn, string[]> = {
   ],
   net_amount: [
     'net amount', 'netamount', 'net cash', 'netcash', 'net proceeds', 'netproceeds',
-    'net cash amount', 'netcashamount', '净现金', '净金额', '净收益',
+    'net cash amount', 'netcashamount', '净现金', '净金额', '净收益', '净额',
   ],
   amount: ['trade money', 'trademoney', 'net cash', 'netcash', 'amount', 'total amount', '总额', '金额'],
-  currency: ['currency', 'currency primary', 'currencyprimary', 'currency of trade', 'ccy', '币种', '货币'],
+  currency: ['currency', 'currency primary', 'currencyprimary', 'currency of trade', 'price currency', 'pricecurrency', 'ccy', '币种', '货币', '价格货币'],
   description: ['description', 'security description', 'securitydescription', 'details', 'memo', '说明', '描述'],
   usd_amount: [
     'usd', 'usd amount', 'usd settlement', 'usd net amount', 'usd net cash', 'usd amount settled',
@@ -223,9 +224,42 @@ function absoluteDecimal(value: string): string {
   return value.startsWith('-') ? value.slice(1) : value;
 }
 
+function parseIbkrDecimal(value: string | undefined, maxPlaces: number): string | null {
+  const raw = (value ?? '').trim();
+  if (!raw) return null;
+  const normalized = raw
+    .replace(/[,$£€]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/^\((.*)\)$/, '-$1');
+  const match = normalized.match(/^([+-]?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/);
+  if (!match) return null;
+
+  const exponent = Number(match[4] ?? '0');
+  if (!Number.isSafeInteger(exponent) || Math.abs(exponent) > 1000) return null;
+  let digits = BigInt(`${match[2]}${match[3] ?? ''}`);
+  let scale = (match[3] ?? '').length - exponent;
+  if (scale < 0) {
+    digits *= 10n ** BigInt(-scale);
+    scale = 0;
+  }
+  if (scale > maxPlaces) {
+    const divisor = 10n ** BigInt(scale - maxPlaces);
+    const remainder = digits % divisor;
+    digits /= divisor;
+    if (remainder * 2n >= divisor) digits += 1n;
+    scale = maxPlaces;
+  }
+
+  if (digits === 0n) return '0';
+  const target = 10n ** BigInt(scale);
+  const whole = digits / target;
+  const fraction = String(digits % target).padStart(scale, '0').replace(/0+$/, '');
+  return `${match[1] === '-' ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`;
+}
+
 function parseNumericField(value: string | undefined, places: number, label: string, errors: string[]): string | null {
   if (isPlaceholder(value)) return null;
-  const parsed = parseDecimal(value, places);
+  const parsed = parseIbkrDecimal(value, places);
   if (parsed === null) errors.push(`${label}无效`);
   return parsed;
 }
@@ -289,10 +323,23 @@ function conversionFor(
   sourceAmount: string,
   explicitUsdAmount: string | null,
   rawFxRate: string | undefined,
+  amountIsBaseCurrency: boolean,
+  currencyWasMissing: boolean,
   errors: string[],
 ): { usdAmount: string; fxRate: string } | null {
   const parsedFx = parseNumericField(rawFxRate, 12, '汇率', errors);
   if (parsedFx !== null && Number(parsedFx) <= 0) errors.push('汇率必须为正数');
+  if (amountIsBaseCurrency && explicitUsdAmount) {
+    if (isUsCurrency(currency)) {
+      if (!currencyWasMissing && parsedFx !== null && Math.abs(Number(parsedFx) - 1) > 0.0000001) errors.push('USD 行汇率必须为 1');
+      return { usdAmount: explicitUsdAmount, fxRate: '1' };
+    }
+    if (parsedFx === null || Number(parsedFx) <= 0) {
+      if (parsedFx === null) errors.push('非 USD 行缺少汇率');
+      return null;
+    }
+    return { usdAmount: explicitUsdAmount, fxRate: parsedFx };
+  }
   if (isUsCurrency(currency)) {
     if (parsedFx !== null && Math.abs(Number(parsedFx) - 1) > 0.0000001) errors.push('USD 行汇率必须为 1');
     return {
@@ -349,11 +396,13 @@ type IbkrFields = Partial<Record<ImportRowField, string>>;
 
 const GROSS_PROCEEDS_CONTEXT_KEY = 'amount_is_gross_proceeds';
 const BASE_CURRENCY_CONTEXT_KEY = 'base_currency';
+const BASE_SETTLEMENT_CONTEXT_KEY = 'amount_is_base_currency';
 const HEADER_DATA_CONTEXT_KEY = 'header_data';
 
 function rowContextFrom(detection: ImportDetection): IbkrRowContext {
   return {
     amountIsGrossProceeds: detection.context?.[GROSS_PROCEEDS_CONTEXT_KEY] === '1',
+    amountIsBaseCurrency: detection.context?.[BASE_SETTLEMENT_CONTEXT_KEY] === '1',
     defaultCurrency: detection.context?.[BASE_CURRENCY_CONTEXT_KEY] ?? 'USD',
   };
 }
@@ -363,13 +412,17 @@ function parseIbkrRow(sourceIndex: number, fields: IbkrFields, context: IbkrRowC
   const actionText = (fields.action ?? '').trim() || description;
   const rawAmount = (fields.amount ?? '').trim();
   const rawUsdAmount = (fields.usd_amount ?? '').trim();
+  const rawCurrency = (fields.currency ?? '').trim();
   const errors: string[] = [];
   const date = parseDate(fields.date ?? '');
   const rawActionAmount = parseNumericField(firstValue(rawAmount, rawUsdAmount), 10, '金额', []);
   const kind = actionKind(actionText, rawActionAmount ?? undefined);
-  const currency = inferCurrency(fields.currency ?? '', description, context.defaultCurrency, errors);
-  const explicitUsdAmount = parseNumericField(rawUsdAmount, 10, 'USD 金额', errors);
-  const sourceAmountCandidate = parseNumericField(rawAmount, 10, '金额', errors) ?? explicitUsdAmount;
+  const currencyWasMissing = isPlaceholder(rawCurrency);
+  const currency = inferCurrency(rawCurrency, description, context.defaultCurrency, errors);
+  const parsedAmount = parseNumericField(rawAmount, 10, '金额', errors);
+  const parsedUsdColumnAmount = parseNumericField(rawUsdAmount, 10, 'USD 金额', errors);
+  const explicitUsdAmount = parsedUsdColumnAmount ?? (context.amountIsBaseCurrency ? parsedAmount : null);
+  const sourceAmountCandidate = parsedAmount ?? explicitUsdAmount;
 
   if (!date) errors.push('日期无效');
   if (!kind) errors.push('操作类型无法映射');
@@ -387,12 +440,23 @@ function parseIbkrRow(sourceIndex: number, fields: IbkrFields, context: IbkrRowC
   const amountIsGross = context.amountIsGrossProceeds && !explicitUsdAmount;
   if (amountIsGross) sourceAmount = decimalSubtract(sourceAmount, feesSource, 10);
 
-  const conversion = conversionFor(currency, sourceAmount, explicitUsdAmount, fields.fx_rate, errors);
+  const conversion = conversionFor(
+    currency,
+    sourceAmount,
+    explicitUsdAmount,
+    fields.fx_rate,
+    context.amountIsBaseCurrency,
+    currencyWasMissing,
+    errors,
+  );
   if (!conversion) {
     return { source_index: sourceIndex, action: actionText, category: 'error', default_status: 'block', reason: errors.join('；') };
   }
   const usdAmount = conversion.usdAmount;
   const fxRate = conversion.fxRate;
+  if (context.amountIsBaseCurrency && !isUsCurrency(currency)) {
+    sourceAmount = decimalDivide(usdAmount, fxRate, 10);
+  }
 
   if (kind === 'buy' || kind === 'sell') {
     const parsedShares = parseNumericField(fields.quantity, 10, '股数', errors);
@@ -411,7 +475,7 @@ function parseIbkrRow(sourceIndex: number, fields: IbkrFields, context: IbkrRowC
     const canonicalPrice = sourcePrice && !isUsCurrency(currency)
       ? decimalMultiply(sourcePrice, fxRate, 12)
       : sourcePrice;
-    const feesUsd = isUsCurrency(currency) ? feesSource : decimalMultiply(feesSource, fxRate, 10);
+    const feesUsd = context.amountIsBaseCurrency || isUsCurrency(currency) ? feesSource : decimalMultiply(feesSource, fxRate, 10);
     const computedAmount = shares && canonicalPrice ? signedTradeAmount(kind, shares, canonicalPrice, feesUsd) : null;
     if (computedAmount && Math.abs(Number(decimalSubtract(usdAmount, computedAmount, 10))) > 0.0200001) {
       errors.push(`金额与成交明细不一致（应约为 ${computedAmount} USD）`);
@@ -550,6 +614,17 @@ function baseCurrencyFrom(rows: string[][]): string {
   return 'USD';
 }
 
+function isBaseCurrencySettlementTable(
+  header: string[],
+  columns: Partial<Record<IbkrColumn, number>>,
+): boolean {
+  if (columns.net_amount === undefined || columns.currency === undefined) return false;
+  const netHeader = normalizeHeader(header[columns.net_amount] ?? '');
+  const currencyHeader = normalizeHeader(header[columns.currency] ?? '');
+  return ['net amount', 'netamount', '净额'].includes(netHeader)
+    && ['price currency', 'pricecurrency', '价格货币'].includes(currencyHeader);
+}
+
 function chooseTable(text: string): { table: ReturnType<typeof parseDelimited>; headerIndex: number; columns: Partial<Record<IbkrColumn, number>> } {
   const candidates = IBKR_DELIMITERS.map((delimiter) => {
     const table = parseDelimited(text, delimiter);
@@ -571,6 +646,7 @@ function parseInput(input: ImportInput): IbkrParsedImport {
     .filter((index) => index >= 0);
   const segmented = headerIndex >= 0 && headerIndices.some((index) => !!headerMarker(table.rows[index]));
   const defaultCurrency = baseCurrencyFrom(table.rows);
+  const amountIsBaseCurrency = headerIndex >= 0 && isBaseCurrencySettlementTable(table.rows[headerIndex], columns);
   const amountHeader = headerIndex >= 0
     ? normalizeHeader(table.rows[headerIndex][columns.net_amount ?? columns.gross_amount ?? columns.amount ?? columns.usd_amount ?? -1] ?? '')
     : '';
@@ -587,10 +663,12 @@ function parseInput(input: ImportInput): IbkrParsedImport {
       ? []
       : [
         ...(segmented ? ['检测到 IBKR Header/Data 多段文件，已按交易和现金事件分段读取。'] : []),
+        ...(amountIsBaseCurrency ? ['检测到 IBKR Price Currency/净额格式：净额按 Base Currency 作为已结算金额，汇率仅用于成交价和原币审计。'] : []),
         ...(columns.currency === undefined ? ['文件未提供独立 Currency 列，未声明币种的行按 Base Currency 或 USD 处理。'] : []),
       ],
     context: {
       [GROSS_PROCEEDS_CONTEXT_KEY]: amountIsGrossProceeds ? '1' : '0',
+      [BASE_SETTLEMENT_CONTEXT_KEY]: amountIsBaseCurrency ? '1' : '0',
       [BASE_CURRENCY_CONTEXT_KEY]: defaultCurrency,
       [HEADER_DATA_CONTEXT_KEY]: segmented ? '1' : '0',
     },
@@ -626,6 +704,7 @@ function parseInput(input: ImportInput): IbkrParsedImport {
     const segmentEnd = headerIndices[segmentIndex + 1] ?? table.rows.length;
     const segmentContext: IbkrRowContext = {
       amountIsGrossProceeds: segmentColumns.net_amount === undefined && segmentColumns.gross_amount !== undefined,
+      amountIsBaseCurrency: isBaseCurrencySettlementTable(table.rows[segmentHeaderIndex], segmentColumns),
       defaultCurrency,
     };
     for (let index = segmentHeaderIndex + 1; index < segmentEnd; index += 1) {
@@ -639,12 +718,20 @@ function parseInput(input: ImportInput): IbkrParsedImport {
         quantity: valueAt(row, segmentColumns, 'quantity'),
         price: valueAt(row, segmentColumns, 'price'),
         fees: valueAt(row, segmentColumns, 'fees'),
-        amount: firstValue(
-          valueAt(row, segmentColumns, 'net_amount'),
-          valueAt(row, segmentColumns, 'amount'),
-          valueAt(row, segmentColumns, 'gross_amount'),
-        ),
-        usd_amount: valueAt(row, segmentColumns, 'usd_amount'),
+        amount: segmentContext.amountIsBaseCurrency
+          ? firstValue(
+            valueAt(row, segmentColumns, 'gross_amount'),
+            valueAt(row, segmentColumns, 'amount'),
+            valueAt(row, segmentColumns, 'net_amount'),
+          )
+          : firstValue(
+            valueAt(row, segmentColumns, 'net_amount'),
+            valueAt(row, segmentColumns, 'amount'),
+            valueAt(row, segmentColumns, 'gross_amount'),
+          ),
+        usd_amount: segmentContext.amountIsBaseCurrency
+          ? valueAt(row, segmentColumns, 'net_amount')
+          : valueAt(row, segmentColumns, 'usd_amount'),
         currency: valueAt(row, segmentColumns, 'currency'),
         fx_rate: valueAt(row, segmentColumns, 'fx_rate'),
         description: valueAt(row, segmentColumns, 'description'),

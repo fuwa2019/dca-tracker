@@ -123,6 +123,35 @@ assert.equal(ibkrHeaderDataPreview.trades.find((row) => row.ticker === '700.HK')
 assert.ok(ibkrHeaderDataPreview.cash_events.some((row) => row.source_currency === 'EUR' && row.usd_amount === '108.0000000000'));
 assert.ok(ibkrHeaderDataPreview.cash_events.some((row) => row.event_type === 'fx_transfer' && row.usd_amount === '-108.0000000000'));
 
+const ibkrBaseCurrencyText = [
+  'Transaction History,Header,日期,账户,说明,交易类型,代码,数量,价格,Price Currency,总额,佣金,净额,子类型,汇率,交易费用,乘数',
+  'Transaction History,Data,2026-01-02,U***33918,SMH sell,卖,SMH,-0.8105,550.65,USD,446.301825,-0.359773647,445.942051353,Trade,1.0,-,1',
+  'Transaction History,Data,2026-01-03,U***33918,QQQM buy,买,QQQM,2,100,USD,-200,-4.9004E-5,-200.000049004,Trade,1,-,1',
+  'Transaction History,Data,2026-01-04,U***33918,SIVE sell,卖,SIVE,-6,102.5,SEK,64.6734,-1.8520732403800002,62.82132675962,Trade,0.10516,-,1',
+  'Transaction History,Data,2026-01-05,U***33918,FX component,外汇交易组成部分,-,-,-,CNH,-,-,-1.8014172E-4,Forex,0.14885,-,1',
+  'Transaction History,Data,2026-01-06,U***33918,Deposit,存款,-,-,-,-,100,-,100,Cash,0.14887,-,1',
+  'Transaction History,Data,2026-01-07,U***33918,Adjustment,调整,-,-,-,-,0.4112441618782201,-,0.4112441618782201,Adjustment,1,-,1',
+].join('\n');
+const ibkrBaseCurrencyPreview = ibkrImportAdapter.audit({ text: ibkrBaseCurrencyText, fileName: 'localized-base-currency.csv' });
+assert.equal(ibkrBaseCurrencyPreview.detection.supported, true);
+assert.equal(ibkrBaseCurrencyPreview.format, 'ibkr-transaction-history-header-data');
+assert.ok(ibkrBaseCurrencyPreview.detection.warnings.some((warning) => warning.includes('Base Currency')));
+assert.equal(ibkrBaseCurrencyPreview.status_counts.import, 5);
+assert.equal(ibkrBaseCurrencyPreview.status_counts.block, 1);
+const baseTickers = new Set(ibkrBaseCurrencyPreview.trades.map((row) => row.ticker));
+assert.deepEqual(baseTickers, new Set(['SMH', 'QQQM', 'SIVE']));
+const baseSiveTrade = ibkrBaseCurrencyPreview.trades.find((row) => row.ticker === 'SIVE');
+assert.equal(baseSiveTrade?.source_currency, 'SEK');
+assert.equal(baseSiveTrade?.source_price, '102.500000000000');
+assert.equal(baseSiveTrade?.price, '10.778900000000');
+assert.equal(baseSiveTrade?.usd_amount, '62.8213267596');
+assert.equal(baseSiveTrade?.fees_usd, '1.8520732404');
+const baseQqqmTrade = ibkrBaseCurrencyPreview.trades.find((row) => row.ticker === 'QQQM');
+assert.equal(baseQqqmTrade?.fees_usd, '0.0000490040');
+assert.equal(baseQqqmTrade?.usd_amount, '-200.0000490040');
+assert.ok(ibkrBaseCurrencyPreview.cash_events.some((row) => row.event_type === 'fx_transfer' && row.source_currency === 'CNH'));
+assert.ok(ibkrBaseCurrencyPreview.cash_events.some((row) => row.event_type === 'broker_deposit' && row.usd_amount === '100.0000000000'));
+assert.equal(ibkrBaseCurrencyPreview.rows.find((row) => row.status === 'block')?.reason, '操作类型无法映射');
 const officialIbkrShape = read('ibkr-activity-statement-official-en.csv');
 const officialIbkrPreview = ibkrImportAdapter.audit({ text: officialIbkrShape, fileName: 'activity-statement-trades.csv' });
 assert.equal(officialIbkrPreview.errors.length, 0, 'official IBKR Trades aliases should parse');
