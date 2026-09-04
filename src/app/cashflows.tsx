@@ -29,7 +29,7 @@ export function CashflowsPage() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<CashRow | null>(null);
   const [deleting, setDeleting] = useState<CashRow | null>(null);
-  const fxTransferCount = rows.filter((row) => row.cashflow_kind === 'fx_transfer').length;
+  const manualFxTransferCount = rows.filter((row) => row.cashflow_kind === 'fx_transfer' && row.cny_amount !== null && row.target_rate !== null).length;
   const externalCashflowCount = rows.filter((row) => row.cashflow_kind !== 'stock_allocation').length;
 
   const del = useMutation({
@@ -75,7 +75,7 @@ export function CashflowsPage() {
           sub={signedPct(-stats.lossPct)}
           className={changeColor(-stats.totalLoss)}
         />
-        <StatCard label="累计 CNY 出账" value={cny.format(stats.totalCny)} sub={`${fxTransferCount} 笔手工换汇`} />
+        <StatCard label="累计 CNY 出账" value={cny.format(stats.totalCny)} sub={`${manualFxTransferCount} 笔手工换汇`} />
       </div>
 
       {rows.length === 0 ? (
@@ -95,6 +95,7 @@ export function CashflowsPage() {
             {rows.map((c, i) => {
               const eventChip = cashEventChip(c.cashflow_kind);
               const isFxTransfer = c.cashflow_kind === 'fx_transfer';
+              const isManualFxTransfer = isFxTransfer && c.cny_amount !== null && c.target_rate !== null;
               const cnyAmt = Number(c.cny_amount);
               const feesCny = Number(c.fees_cny) || 0;
               const usdAmt = Number(c.usd_amount ?? 0);
@@ -118,7 +119,7 @@ export function CashflowsPage() {
                       <StatusBadge tone={eventChip.tone} dot className="text-[10px]">{eventChip.label}</StatusBadge>
                     </div>
                     <div className="min-w-[180px] flex-1">
-                      {isFxTransfer ? (
+                      {isManualFxTransfer ? (
                         <>
                           <div className="font-medium tnum">{cny.format(cnyAmt)}</div>
                           <div className="text-[11px] text-muted-foreground tnum">
@@ -131,16 +132,16 @@ export function CashflowsPage() {
                         </div>
                       )}
                     </div>
-                    <div className={cn('w-28 shrink-0 text-right font-medium tnum', isFxTransfer ? undefined : changeColor(usdAmt))}>
-                      {isFxTransfer
+                    <div className={cn('w-28 shrink-0 text-right font-medium tnum', isManualFxTransfer ? undefined : changeColor(usdAmt))}>
+                      {isManualFxTransfer
                         ? (usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>)
                         : signedUsd(usdAmt)}
                     </div>
                     <div className={cn('w-24 shrink-0 text-right text-xs tnum', changeColor(-loss))}>
-                      {isFxTransfer && usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
+                      {isManualFxTransfer && usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      {isFxTransfer && (
+                      {isManualFxTransfer && (
                         <Button aria-label={`编辑 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -156,12 +157,12 @@ export function CashflowsPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-2">
                         <StatusBadge tone={eventChip.tone} dot className="text-[10px]">{eventChip.label}</StatusBadge>
-                        {isFxTransfer && (
+                        {isManualFxTransfer && (
                           <span className="min-w-0 truncate text-xs text-muted-foreground tnum">{cny.format(cnyAmt)}</span>
                         )}
                       </div>
-                      <div className={cn('shrink-0 text-right font-medium tnum', isFxTransfer ? undefined : changeColor(usdAmt))}>
-                        {isFxTransfer
+                      <div className={cn('shrink-0 text-right font-medium tnum', isManualFxTransfer ? undefined : changeColor(usdAmt))}>
+                        {isManualFxTransfer
                           ? (usdAmt > 0 ? usd.format(usdAmt) : <span className="text-warn">待入账</span>)
                           : signedUsd(usdAmt)}
                       </div>
@@ -169,7 +170,7 @@ export function CashflowsPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground tnum min-w-0">
                         <span>{shortDate(displayDate)}</span>
-                        {isFxTransfer ? (
+                        {isManualFxTransfer ? (
                           <>
                             <span>汇率 {rate.toFixed(4)}</span>
                             {usdAmt > 0 && (
@@ -182,7 +183,7 @@ export function CashflowsPage() {
                         {c.note && <span className="truncate">· {c.note}</span>}
                       </div>
                       <div className="ml-2 flex shrink-0 gap-1">
-                        {isFxTransfer && (
+                        {isManualFxTransfer && (
                           <Button aria-label={`编辑 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -216,7 +217,7 @@ export function CashflowsPage() {
             <DialogTitle>确认删除？</DialogTitle>
             <DialogDescription>
               {deleting && (
-                deleting.cashflow_kind !== 'fx_transfer'
+                deleting.cashflow_kind !== 'fx_transfer' || deleting.cny_amount === null || deleting.target_rate === null
                   ? `${deleting.usd_in_date ?? deleting.cny_out_date} · ${cashEventChip(deleting.cashflow_kind).label} · ${signedUsd(Number(deleting.usd_amount))}`
                   : `${deleting.cny_out_date} · ${cashEventChip(deleting.cashflow_kind).label} · ${cny.format(Number(deleting.cny_amount))}`
               )}
@@ -243,7 +244,14 @@ export function CashflowsPage() {
 
 /** Source-side detail for a plain cash event; empty when the row carries none. */
 function cashEventDetail(row: CashRow): string {
-  return [row.ticker, row.source_action, row.source_description]
+  const nativeAmount = row.source_currency && row.source_currency !== 'USD' && row.source_amount != null
+    ? `${formatSourceAmount(row.source_amount)} ${row.source_currency}`
+    : null;
+  return [nativeAmount, row.ticker, row.source_action, row.source_description]
     .filter((part): part is string => !!part && part.trim() !== '')
     .join(' · ');
+}
+
+function formatSourceAmount(value: number): string {
+  return Number(value).toLocaleString('en-US', { maximumFractionDigits: 10 });
 }

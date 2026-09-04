@@ -152,7 +152,7 @@ export function CashflowForm({ initial, onDone }: Props) {
         </div>
       </Section>
 
-      <Section title="USD 到账" hint="Schwab 实际收到的美元金额（净额，扣完手续费）">
+      <Section title="USD 到账" hint="券商实际收到的美元金额（净额，扣完手续费）">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field id="usd-date" label="到账日">
             <Input id="usd-date" type="date" value={usdInDate} onChange={(e) => setUsdInDate(e.target.value)} />

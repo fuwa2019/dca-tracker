@@ -1,1 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0a0a0a"/><text x="16" y="22" text-anchor="middle" font-family="-apple-system,system-ui,sans-serif" font-weight="700" font-size="14" fill="#fafafa">$</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0a0a0a"/><path d="M8 9h16M8 16h16M8 23h10" fill="none" stroke="#fafafa" stroke-linecap="round" stroke-width="2"/><circle cx="23" cy="23" r="2" fill="#f08a72"/></svg>

@@ -62,7 +62,7 @@ export function TransactionsPage() {
             <div>
               <h2 id="import-title" className="text-sm font-semibold">统一导入预览</h2>
               <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                支持 Schwab、IBKR 和 TradingView。文件只在本机解析，确认前不写入数据库；每一行都会得到导入、重复、忽略或阻止状态。
+                支持 Schwab、IBKR 和 TradingView；个股、ETF、非美市场证券、现金事件和多币种行都会保留。文件只在本机解析，确认前不写入数据库；每一行都会得到导入、重复、忽略或阻止状态。
               </p>
             </div>
           </div>
@@ -71,7 +71,7 @@ export function TransactionsPage() {
             : <SchwabTransactionTools transactions={txns} />}
         </div>
         <div className="mt-5 grid gap-2 border-t border-border pt-4 text-xs sm:grid-cols-3">
-          <ImportRule label="支持来源" value={LEDGER_IMPORT_V2 ? 'Schwab · IBKR · TradingView' : 'Schwab 兼容导入'} />
+          <ImportRule label="支持来源" value={LEDGER_IMPORT_V2 ? 'Schwab · IBKR · TradingView · 多币种' : 'Schwab 兼容导入'} />
           <ImportRule label="写入边界" value="事务提交，失败不留半条记录" />
           <ImportRule label="现有账本" value={`${txns.length} 笔交易 · ${positions.length} 个持仓`} />
         </div>

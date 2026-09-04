@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, ArrowRight, ArrowLeft, KeyRound } from '@/components/icons';
+import { ArrowLeft, ArrowRight, BookOpen, KeyRound, Mail } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -72,11 +72,11 @@ export function LoginPage() {
         className="w-full max-w-sm space-y-6"
       >
         <div className="space-y-2 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[hsl(348_86%_58%)] to-[hsl(332_74%_42%)] font-serif text-2xl font-semibold text-white shadow-[0_8px_24px_-8px_hsl(var(--brand)/0.6)] ring-1 ring-inset ring-white/15">
-            $
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand text-brand-foreground shadow-[0_8px_24px_-8px_hsl(var(--brand)/0.6)] ring-1 ring-inset ring-white/15">
+            <BookOpen className="h-7 w-7" aria-hidden="true" />
           </div>
-          <div className="kicker">Personal Investing Journal</div>
-          <h1 className="font-serif text-3xl font-semibold tracking-tight">DCA Tracker</h1>
+          <div className="kicker">Cross-Broker Portfolio Ledger</div>
+          <h1 className="font-serif text-3xl font-semibold tracking-tight">Portfolio Ledger</h1>
           <p className="text-sm text-muted-foreground">
             {step === 'email' ? '输入邮箱，下一步会收到 6 位验证码' : '请输入邮件里的 6 位验证码'}
           </p>

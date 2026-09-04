@@ -133,6 +133,7 @@ export interface SchwabExportTransaction {
   trade_date: string;
   side: 'buy' | 'sell';
   ticker: string;
+  source_action?: string | null;
   source_description?: string | null;
   shares: number | string;
   price: number | string;
@@ -147,7 +148,7 @@ export interface SchwabExportCashflow {
   usd_amount: number | string;
   source_action: string;
   source_description?: string | null;
-  cashflow_kind?: 'broker_deposit' | 'stock_allocation';
+  cashflow_kind?: LedgerCashEventType;
 }
 
 type ParsedTable = {
@@ -798,7 +799,7 @@ export function exportSchwabTransactions(
       sourceOrder: index,
       cells: [
         formatSchwabDate(transaction.trade_date),
-        transaction.side === 'buy' ? 'Buy' : 'Sell',
+        transaction.source_action?.trim() || (transaction.side === 'buy' ? 'Buy' : 'Sell'),
         normalizeTicker(transaction.ticker),
         transaction.source_description?.trim() || normalizeTicker(transaction.ticker),
         formatDecimal(shares, SHARES_DECIMAL_PLACES),

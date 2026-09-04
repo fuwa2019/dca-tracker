@@ -2,11 +2,11 @@
  * Pure rules for inline-fixing a blocked import row in the review step.
  *
  * A row is fixable only when it failed the adapter's own per-row parsing
- * (`category === 'error'`), the adapter implements `reparseRow`, and the row
- * carries `source_fields` — all three hold for the TradingView and IBKR
- * adapters today. Schwab's eight-column parser has no per-field source
- * capture, so its blocked rows stay "fix the source file and re-select it"
- * only, exactly as before this module existed.
+ * (category === 'error'), the adapter implements reparseRow, and the row
+ * carries source_fields. The native eight-column Schwab parser, TradingView,
+ * and IBKR adapters meet all three conditions. Schwab's six-column legacy
+ * compatibility fallback still has no per-field source capture, so only that
+ * fallback remains on the "fix the source file and re-select it" path.
  *
  * Nothing here writes to a database or touches React. A fix re-derives a
  * `ParsedImportRow` through the adapter's own row rules and hands the
@@ -34,11 +34,13 @@ export const IMPORT_ROW_FIELD_LABELS: Record<ImportRowField, string> = {
   amount: '金额',
   usd_amount: 'USD 金额',
   currency: '币种',
+  fx_rate: 'USD 汇率',
+  exchange: '交易所',
   description: '说明',
 };
 
 const FIELD_ORDER: ImportRowField[] = [
-  'date', 'action', 'symbol', 'quantity', 'price', 'fees', 'amount', 'usd_amount', 'currency', 'description',
+  'date', 'action', 'symbol', 'quantity', 'price', 'fees', 'amount', 'usd_amount', 'currency', 'fx_rate', 'exchange', 'description',
 ];
 
 /** True only for a row that failed parsing and whose adapter supports a fix. */

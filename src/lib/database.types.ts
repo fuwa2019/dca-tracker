@@ -41,6 +41,7 @@ export interface CashflowRow {
   ticker?: string | null;
   source_currency?: string | null;
   source_amount?: number | null;
+  fx_rate_to_usd?: number | null;
   target_rate: number | null;
   fees_cny: number;
   fees_usd: number;
@@ -64,6 +65,7 @@ export interface CashflowInsert {
   ticker?: string | null;
   source_currency?: string | null;
   source_amount?: number | null;
+  fx_rate_to_usd?: number | null;
   target_rate?: number | null;
   fees_cny?: number;
   fees_usd?: number;
@@ -88,6 +90,10 @@ export interface TransactionRow {
   shares: number;
   fees_usd: number;
   settled_amount_usd: number | null;
+  source_currency?: string | null;
+  source_price?: number | null;
+  source_amount?: number | null;
+  fx_rate_to_usd?: number | null;
   kind: 'dca' | 'lumpsum';
   note: string | null;
   source_description: string | null;
@@ -107,6 +113,10 @@ export interface TransactionInsert {
   shares: number;
   fees_usd?: number;
   settled_amount_usd?: number | null;
+  source_currency?: string | null;
+  source_price?: number | null;
+  source_amount?: number | null;
+  fx_rate_to_usd?: number | null;
   kind: 'dca' | 'lumpsum';
   note?: string | null;
   source_description?: string | null;
@@ -507,6 +517,9 @@ export interface Database {
             fees_usd: number | string;
             usd_amount: number | string;
             source_currency: string;
+            source_price?: number | string | null;
+            source_amount?: number | string | null;
+            fx_rate_to_usd?: number | string | null;
             source_action: string;
             source_description?: string | null;
             duplicate_ordinal: number;
@@ -522,6 +535,7 @@ export interface Database {
             source_currency: string;
             source_amount: number | string;
             usd_amount: number | string;
+            fx_rate_to_usd?: number | string | null;
             source_action: string;
             source_description?: string | null;
             duplicate_ordinal: number;

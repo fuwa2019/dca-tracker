@@ -265,7 +265,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
             <div className="mt-4 space-y-3">
               <StateRow icon={dataState.tone === 'ok' ? CheckCircle2 : Activity} label="行情与持仓" value={dataState.label} detail={dataState.detail} tone={dataState.tone} />
               <StateRow icon={cacheDirty ? RefreshCw : CheckCircle2} label="绩效缓存" value={cacheDirty ? '待刷新' : '已同步'} detail={cacheDirty ? '交易或现金事件发生了变化' : '当前结果可继续查看'} tone={cacheDirty ? 'warn' : 'ok'} />
-              <StateRow icon={Database} label="导入模型" value={LEDGER_IMPORT_V2 ? '统一账本 V2' : '兼容模式'} detail={LEDGER_IMPORT_V2 ? 'Schwab · IBKR · TradingView' : '建议切换统一预览'} tone={LEDGER_IMPORT_V2 ? 'ok' : 'warn'} />
+              <StateRow icon={Database} label="导入模型" value={LEDGER_IMPORT_V2 ? '组合账本' : '兼容模式'} detail={LEDGER_IMPORT_V2 ? 'Schwab · IBKR · TradingView · 多币种' : '建议切换统一预览'} tone={LEDGER_IMPORT_V2 ? 'ok' : 'warn'} />
             </div>
           </section>
 

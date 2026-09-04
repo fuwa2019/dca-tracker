@@ -1,5 +1,5 @@
 import { ibkrImportAdapter } from './ibkr.ts';
-import { schwabImportAdapter } from './schwab.ts';
+import { schwabLedgerImportAdapter } from './schwabLedger.ts';
 import { tradingViewImportAdapter } from './tradingview.ts';
 import type { ImportInput, PortfolioImportAdapter } from './types.ts';
 
@@ -23,15 +23,14 @@ export {
   type RowFixResult,
 } from './rowFix.ts';
 export { ibkrImportAdapter } from './ibkr.ts';
-export { schwabImportAdapter } from './schwab.ts';
+export { schwabLedgerImportAdapter as schwabImportAdapter } from './schwabLedger.ts';
 export { tradingViewImportAdapter } from './tradingview.ts';
 
 export const portfolioImportAdapters: ReadonlyArray<PortfolioImportAdapter> = [
-  // TradingView must be checked first because the legacy Schwab parser also
-  // accepts the same six-column header shape for backward compatibility.
+  // Keep six-column TradingView ahead of Schwab's legacy compatibility fallback.
   tradingViewImportAdapter,
   ibkrImportAdapter,
-  schwabImportAdapter,
+  schwabLedgerImportAdapter,
 ];
 
 export function detectPortfolioImportAdapter(input: ImportInput): PortfolioImportAdapter | null {

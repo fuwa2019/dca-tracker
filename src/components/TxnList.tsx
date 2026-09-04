@@ -18,7 +18,7 @@ import { TxnForm } from '@/components/TxnForm';
 import { StatusBadge } from '@/components/StatusBadge';
 import { tradeEventChip } from '@/lib/ledgerEvents';
 import { supabase } from '@/lib/supabase';
-import { usd, shortDate, changeColor } from '@/lib/format';
+import { num6, usd, shortDate, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
 import type { Database } from '@/lib/database.types';
@@ -237,7 +237,7 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
                       )}
                       {visible('price') && (
                         <td className="px-3 py-2.5 text-right">
-                          <NumericCell value={usd.format(Number(t.price))} unit={fee > 0 ? `费 ${usd.format(fee)}` : '成交价'} />
+                          <NumericCell value={tradePriceLabel(t)} unit={tradePriceUnit(t, fee)} />
                         </td>
                       )}
                       <td className={cn('px-3 py-2.5 text-right font-medium tnum', changeColor(cashEffect))}>
@@ -290,7 +290,8 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
                           </StatusBadge>
                         </div>
                         <div className="mt-0.5 truncate font-num text-[11px] text-muted-foreground">
-                          {shortDate(t.trade_date)} · {Number(t.shares).toFixed(4)} 股 @ {usd.format(Number(t.price))}
+                          {shortDate(t.trade_date)} · {Number(t.shares).toFixed(4)} 股 @ {tradePriceLabel(t)}
+                          {t.source_currency && t.source_currency.toUpperCase() !== 'USD' ? ` · ${usd.format(Number(t.price))} USD/股` : ''}
                           {fee > 0 ? ` · 费 ${usd.format(fee)}` : ''}
                         </div>
                       </div>
@@ -363,6 +364,18 @@ function TickerAvatar({ ticker }: { ticker: string }) {
       {ticker.slice(0, 4)}
     </span>
   );
+}
+
+function tradePriceLabel(row: TxnRow): string {
+  const currency = row.source_currency?.trim().toUpperCase() || 'USD';
+  if (currency === 'USD') return usd.format(Number(row.price));
+  return `${num6.format(Number(row.source_price ?? row.price))} ${currency}`;
+}
+
+function tradePriceUnit(row: TxnRow, fee: number): string {
+  const currency = row.source_currency?.trim().toUpperCase() || 'USD';
+  const canonical = currency === 'USD' ? '成交价' : `${usd.format(Number(row.price))} USD/股`;
+  return fee > 0 ? `${canonical} · 费 ${usd.format(fee)}` : canonical;
 }
 
 function KindBadge({ kind }: { kind: string }) {

@@ -26,9 +26,9 @@ export default defineConfig({
       injectRegister: 'script-defer',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'DCA Tracker',
-        short_name: 'DCA',
-        description: 'DCA Tracker v3.0 · 高级主题与公开报告',
+        name: 'Portfolio Ledger · 组合账本',
+        short_name: '组合账本',
+        description: '跨券商、跨币种、可核对的投资组合账本',
         theme_color: '#0a0a0a',
         background_color: '#fafafa',
         display: 'standalone',

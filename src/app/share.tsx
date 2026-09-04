@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
+  BookOpen,
   CalendarDays,
   Clock,
   EyeOff,
@@ -248,7 +249,7 @@ export function SharePage() {
           <Logo />
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <div className="truncate text-sm font-semibold">DCA Tracker</div>
+              <div className="truncate text-sm font-semibold">Portfolio Ledger</div>
               <span className="hidden rounded-md border border-border bg-surface-elevated px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline">
                 分享报告
               </span>
@@ -722,7 +723,7 @@ function MetaChip({
 function Logo() {
   return (
     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-foreground shadow-sm shadow-brand/25">
-      $
+      <BookOpen className="h-4 w-4" aria-hidden="true" />
     </div>
   );
 }

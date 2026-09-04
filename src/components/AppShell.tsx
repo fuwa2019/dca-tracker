@@ -306,8 +306,8 @@ function DesktopNav() {
         <Logo className="h-9 w-9" />
         {expanded && (
           <div className="min-w-0 flex-1 leading-tight">
-            <div className="truncate text-sm font-semibold tracking-tight">DCA Tracker</div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">单组合 · 可核对账本</div>
+            <div className="truncate text-sm font-semibold tracking-tight">Portfolio Ledger</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">跨券商 · 跨币种 · 可核对</div>
           </div>
         )}
       </div>
@@ -340,7 +340,7 @@ function DesktopNav() {
               Build · {__APP_COMMIT_DATE__}
             </div>
             <div className="mt-0.5 text-[10px] text-muted-foreground">
-              {LOCAL_MODE ? '本地演示 · 免登录' : '投资记录 · 公开报告'}
+              {LOCAL_MODE ? '本地演示 · 免登录' : '组合账本 · 公开报告'}
             </div>
           </div>
         )}
@@ -394,7 +394,7 @@ function Logo({ className }: { className?: string }) {
         className,
       )}
     >
-      $
+      <BookOpen className="h-4 w-4" aria-hidden="true" />
     </div>
   );
 }

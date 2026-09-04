@@ -350,7 +350,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            title="导入 ETF 交易与现金事件"
+            title="导入 Schwab 交易与现金事件（兼容模式）"
             onClick={() => {
               setOpen(true);
               setNotice(null);
@@ -363,7 +363,7 @@ export function SchwabTransactionTools({ transactions }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            title="导出 ETF 交易与现金事件"
+            title="导出 Schwab 交易与现金事件（兼容模式）"
             disabled={exporting || cashflowsLoading || (transactions.length === 0 && cashflows.length === 0)}
             onClick={() => void runExport()}
           >
@@ -405,9 +405,9 @@ export function SchwabTransactionTools({ transactions }: Props) {
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>导入 ETF 交易与现金</DialogTitle>
+                <DialogTitle>导入 Schwab 交易与现金（兼容模式）</DialogTitle>
                 <DialogDescription>
-                  文件只在此设备解析；个股交易不导入，其净投入按成交日从 ETF 现金划转。
+                  文件只在此设备解析；兼容模式仍只保留 ETF 交易，个股请使用上方的统一组合导入。
                 </DialogDescription>
               </DialogHeader>
 
@@ -812,7 +812,7 @@ function ResetConfirmation({
         <DialogTitle>确认清空全部组合数据并导入</DialogTitle>
         <DialogDescription>
           全部交易将删除 {transactionRemoved} 笔，并重建 {transactionAdded} 笔 ETF 交易；
-          {excludedStocks} 笔个股交易不导入。全部现金流将删除 {cashflowRemoved} 笔，
+          兼容模式跳过 {excludedStocks} 笔个股交易。全部现金流将删除 {cashflowRemoved} 笔，
           重建 {cashflowAdded} 笔入金与个股划转，ETF 净投入共 {formatUsd(adjustedDeposits)}。
         </DialogDescription>
       </DialogHeader>

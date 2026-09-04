@@ -29,12 +29,10 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { useCashflows } from '@/hooks/usePortfolio';
-import { searchSymbols } from '@/lib/quote';
 import { normalizeSymbol } from '@/lib/symbols';
 import { classifySchwabSymbol, type SchwabSymbolClassification } from '@/lib/schwabTransactions';
 import etfHoldings from '@/data/etf-holdings.json';
 import { ledgerEventChip } from '@/lib/ledgerEvents';
-import { buildReconciliation } from '@/lib/import/common.ts';
 import {
   countLedgerEventKinds,
   detectPortfolioImportAdapter,
@@ -107,7 +105,6 @@ export function PortfolioImportTools({ transactions }: Props) {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [source, setSource] = useState<ImportSource | null>(null);
   const [classifications, setClassifications] = useState<Record<string, SchwabSymbolClassification>>({});
-  const [classificationOverrides, setClassificationOverrides] = useState<Record<string, Exclude<SchwabSymbolClassification, 'unknown'>>>({});
   const [classifying, setClassifying] = useState(false);
   const classificationRunRef = useRef(0);
   const [parsing, setParsing] = useState(false);
@@ -155,7 +152,6 @@ export function PortfolioImportTools({ transactions }: Props) {
     setSource(null);
     classificationRunRef.current += 1;
     setClassifications({});
-    setClassificationOverrides({});
     setClassifying(false);
     setMode('append');
     setConfirmScope(false);
@@ -179,7 +175,7 @@ export function PortfolioImportTools({ transactions }: Props) {
       { text: rawText, fileName: fileInfo?.name },
       { mode: nextMode, existing_import_keys: keysForSource(source) },
     );
-    setPreview(applyAssetPolicy(nextPreview, classifications, classificationOverrides));
+    setPreview(applyAssetPolicy(nextPreview));
     setFixingRow(null);
     setFixDraft({});
   }
@@ -204,7 +200,7 @@ export function PortfolioImportTools({ transactions }: Props) {
       { mode, existing_import_keys: keysForSource(source) },
     );
     if (!rebuilt) return;
-    setPreview(applyAssetPolicy(rebuilt, classifications, classificationOverrides));
+    setPreview(applyAssetPolicy(rebuilt));
     setFixingRow(null);
     setFixDraft({});
   }
@@ -226,7 +222,7 @@ export function PortfolioImportTools({ transactions }: Props) {
       const text = await file.text();
       const adapter = detectPortfolioImportAdapter({ text, fileName: file.name });
       if (!adapter) {
-        setError('未识别到支持的 Schwab、IBKR 或 TradingView 文件格式。');
+        setError('未识别到支持的组合交易文件格式。');
         return;
       }
       setRawText(text);
@@ -251,7 +247,7 @@ export function PortfolioImportTools({ transactions }: Props) {
       const resolved = await resolveClassifications(symbols, descriptions);
       if (classificationRun === classificationRunRef.current) {
         setClassifications(resolved);
-        setPreview(applyAssetPolicy(nextPreview, resolved, classificationOverrides));
+        setPreview(applyAssetPolicy(nextPreview));
       }
     } catch (parseError) {
       setError(parseError instanceof Error ? parseError.message : '文件读取失败。');
@@ -378,7 +374,7 @@ export function PortfolioImportTools({ transactions }: Props) {
               统一导入预览
             </DialogTitle>
             <DialogDescription className="text-xs">
-              文件只在此设备解析。确认前不会写入数据库，每一行都会显示导入、重复、忽略或阻止状态。
+              文件只在此设备解析。支持 ETF、个股、非美市场证券、现金事件和多币种行；确认前不会写入数据库，每一行都会显示导入、重复、忽略或阻止状态。
             </DialogDescription>
             {!result && (
               <div className="pt-3">
@@ -424,7 +420,7 @@ export function PortfolioImportTools({ transactions }: Props) {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">
-                      {fileInfo?.name ?? '选择 Schwab、IBKR 或 TradingView 文件'}
+                      {fileInfo?.name ?? '选择券商或组合交易文件'}
                     </span>
                     <span id="portfolio-ledger-file-help" className="mt-0.5 block truncate text-xs text-muted-foreground">
                       {fileInfo
@@ -479,7 +475,7 @@ export function PortfolioImportTools({ transactions }: Props) {
                     </p>
                     {classifying && (
                       <p className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
-                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />正在确认证券类型，未知证券暂不允许写入。
+                        <LoaderCircle className="h-3.5 w-3.5 animate-spin" />正在读取证券信息，识别结果只用于提示，不影响导入。
                       </p>
                     )}
                   </div>
@@ -489,15 +485,6 @@ export function PortfolioImportTools({ transactions }: Props) {
                     <AssetReview
                       rows={preview.rows}
                       classifications={classifications}
-                      overrides={classificationOverrides}
-                      disabled={classifying}
-                      onChange={(ticker, classification) => {
-                        const next = { ...classificationOverrides };
-                        if (classification === 'unknown') delete next[ticker];
-                        else next[ticker] = classification;
-                        setClassificationOverrides(next);
-                        setPreview(applyAssetPolicy(preview, classifications, next));
-                      }}
                     />
               )}
 
@@ -938,11 +925,13 @@ function RowFixForm({ row, draft, onFieldChange, onCancel, onApply }: {
 
 function itemSummary(row: ImportPreviewRow): string {
   const item = row.item;
-  if (!item) return row.category === 'error' ? '无法归一化' : '未保留为 ETF 账本';
+  if (!item) return row.category === 'error' ? '无法归一化' : '未保留为组合记录';
   if ('side' in item) {
-    return `${item.ticker} ${item.shares} 股 · ${item.usd_amount} USD`;
+    const nativePrice = item.source_price ?? item.price;
+    const nativeCurrency = item.source_currency || 'USD';
+    return `${item.ticker} ${item.shares} 股 · 成交 ${nativePrice} ${nativeCurrency}/股 · 结算 ${item.usd_amount} USD`;
   }
-  return `${item.ticker ? `${item.ticker} · ` : ''}${item.usd_amount} USD`;
+  return `${item.ticker ? `${item.ticker} · ` : ''}${item.source_amount} ${item.source_currency} · ${item.usd_amount} USD`;
 }
 
 function ImportReceipt({
@@ -983,7 +972,7 @@ function ImportReceipt({
           </div>
           <p className="text-xs leading-5 text-muted-foreground">
             源文件 {summary.total} 行中写入 {summary.imported} 行；其余 {summary.skipped} 行包含 {summary.duplicates} 行重复、
-            {summary.ignored} 行按资产策略忽略、{summary.blocked} 行被阻止。四数由数据库回执与预览逐行状态推导，未改变 RPC 契约。
+            {summary.ignored} 行按来源规则忽略、{summary.blocked} 行被阻止。四数由数据库回执与预览逐行状态推导，未改变 RPC 契约。
           </p>
         </section>
       )}
@@ -1029,83 +1018,16 @@ function ImportReceipt({
   );
 }
 
-function applyAssetPolicy(
-  preview: ImportPreview,
-  classifications: Record<string, SchwabSymbolClassification>,
-  overrides: Record<string, Exclude<SchwabSymbolClassification, 'unknown'>> = {},
-): ImportPreview {
-  const rows = preview.rows.map((row) => {
-    if (!row.item) return row;
-    const ticker = 'side' in row.item
-      ? normalizeSymbol(row.item.ticker)
-      : normalizeSymbol(row.item.ticker ?? '');
-    if (!ticker) return row;
-    const classification: SchwabSymbolClassification = overrides[ticker] ?? classifications[ticker] ?? 'unknown';
-    if (classification === 'stock') {
-      return {
-        ...row,
-        default_status: 'ignore' as const,
-        status: 'ignore' as const,
-        reason: '证券类型为个股，不属于单组合 ETF 账本。',
-      };
-    }
-    if (classification === ('unknown' as SchwabSymbolClassification)) {
-      return {
-        ...row,
-        default_status: 'block' as const,
-        status: 'block' as const,
-        reason: '无法确认这是美国 ETF，需完成资产确认后再导入。',
-      };
-    }
-    return row;
-  });
-  const statusCounts: ImportPreview['status_counts'] = {
-    import: 0,
-    duplicate: 0,
-    ignore: 0,
-    block: 0,
-  };
-  for (const row of rows) statusCounts[row.status] += 1;
-  const errors = rows
-    .filter((row) => row.status === 'block')
-    .map((row) => `第 ${row.source_index} 行：${row.reason ?? '无法导入'}`);
-  const finalRows = rows.filter((row) => row.status === 'import' || row.status === 'duplicate');
-  const trades = finalRows
-    .filter((row): row is ImportPreviewRow & { item: ImportPreview['trades'][number] } => !!row.item && 'side' in row.item)
-    .map((row) => row.item);
-  const cash_events = finalRows
-    .filter((row): row is ImportPreviewRow & { item: ImportPreview['cash_events'][number] } => !!row.item && 'event_type' in row.item)
-    .map((row) => row.item);
-  const reconciliation = buildReconciliation({ trades, cash_events });
-  const baseWarnings = preview.warnings.filter((warning) => !warning.startsWith('按当前保留行计算的期末现金为'));
-  const reconciliationWarnings = Number(reconciliation.ending_cash_usd) < -0.00000001
-    ? [`按当前保留行计算的期末现金为 ${reconciliation.ending_cash_usd} USD，请检查遗漏的入金、提款或被忽略的现金事件。`]
-    : [];
-  return {
-    ...preview,
-    rows,
-    trades,
-    cash_events,
-    reconciliation,
-    warnings: [...baseWarnings, ...reconciliationWarnings],
-    errors,
-    can_commit: errors.length === 0 && statusCounts.import + statusCounts.duplicate > 0,
-    status_counts: statusCounts,
-  };
+function applyAssetPolicy(preview: ImportPreview): ImportPreview {
+  return preview;
 }
 
 function AssetReview({
   rows,
   classifications,
-  overrides,
-  disabled,
-  onChange,
 }: {
   rows: ImportPreview['rows'];
   classifications: Record<string, SchwabSymbolClassification>;
-  overrides: Record<string, Exclude<SchwabSymbolClassification, 'unknown'>>;
-  disabled: boolean;
-  onChange: (ticker: string, classification: SchwabSymbolClassification) => void;
 }) {
   const tradeRows = rows.filter((row) => row.item && ('side' in row.item || ('event_type' in row.item && !!row.item.ticker)));
   const symbols = [...new Set(tradeRows
@@ -1116,29 +1038,22 @@ function AssetReview({
   return (
     <section className="space-y-2" aria-labelledby="portfolio-import-assets-title">
       <div className="flex items-center justify-between gap-2">
-        <h3 id="portfolio-import-assets-title" className="text-sm font-semibold">资产确认</h3>
+        <h3 id="portfolio-import-assets-title" className="text-sm font-semibold">证券识别</h3>
         <span className="text-xs text-muted-foreground">{symbols.length} 个证券</span>
       </div>
+      <p className="text-xs leading-5 text-muted-foreground">识别结果只用于提示；ETF、个股、非美市场证券和未分类代码都会继续写入组合账本。</p>
       <div className="divide-y divide-border rounded-lg border border-border">
         {symbols.map((ticker) => {
-          const classification: SchwabSymbolClassification = overrides[ticker] ?? classifications[ticker] ?? 'unknown';
+          const classification: SchwabSymbolClassification = classifications[ticker] ?? 'unknown';
           return (
             <div key={ticker} className="flex flex-wrap items-center gap-2 px-3 py-2.5 sm:flex-nowrap">
               <span className="min-w-16 font-num text-sm font-semibold">{ticker}</span>
               <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                {classification === ('unknown' as SchwabSymbolClassification) ? '未能从文件或行情源确认资产类型。' : classification === 'etf' ? '确认保留在 ETF 账本。' : '确认忽略个股交易。'}
+                {classification === 'unknown' ? '未分类；仍会写入组合账本。' : classification === 'etf' ? '识别为 ETF；会写入组合账本。' : '识别为个股；会写入组合账本。'}
               </span>
-              <select
-                aria-label={`${ticker} 资产类型`}
-                value={classification}
-                disabled={disabled}
-                onChange={(event) => onChange(ticker, event.target.value as SchwabSymbolClassification)}
-                className="h-9 min-w-24 rounded-lg border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="unknown">待确认</option>
-                <option value="etf">ETF，导入</option>
-                <option value="stock">个股，忽略</option>
-              </select>
+              <StatusBadge tone={classification === 'etf' ? 'info' : classification === 'stock' ? 'neutral' : 'warn'} dot>
+                {classification === 'etf' ? 'ETF' : classification === 'stock' ? '个股' : '未分类'} · 导入
+              </StatusBadge>
             </div>
           );
         })}
@@ -1151,27 +1066,16 @@ async function resolveClassifications(
   symbols: string[],
   descriptions: Map<string, string>,
 ): Promise<Record<string, SchwabSymbolClassification>> {
-  const pairs = await Promise.all(symbols.map(async (rawTicker) => {
+  // Classification is deliberately local-only. It is descriptive metadata;
+  // unknown, foreign-market and individual-stock symbols remain importable.
+  const pairs = symbols.map((rawTicker) => {
     const ticker = normalizeSymbol(rawTicker);
-    const local = classifySchwabSymbol({
+    return [ticker, classifySchwabSymbol({
       ticker,
       description: descriptions.get(ticker),
       knownEtfSymbols: KNOWN_ETF_SYMBOLS,
-    });
-    if (local !== 'unknown') return [ticker, local] as const;
-    try {
-      const results = await searchSymbols(ticker);
-      const exact = results.find((row) => normalizeSymbol(row.symbol) === ticker);
-      return [ticker, classifySchwabSymbol({
-        ticker,
-        description: descriptions.get(ticker),
-        knownEtfSymbols: KNOWN_ETF_SYMBOLS,
-        providerType: exact?.type,
-      })] as const;
-    } catch {
-      return [ticker, 'unknown'] as const;
-    }
-  }));
+    })] as const;
+  });
   return Object.fromEntries(pairs);
 }
 

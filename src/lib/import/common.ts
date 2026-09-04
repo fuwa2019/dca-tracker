@@ -9,15 +9,16 @@ import type {
   NormalizedLedger,
   ParsedImport,
   ParsedImportRow,
+  ImportDelimiter,
 } from './types.ts';
 
 export interface CsvTable {
   rows: string[][];
   errors: Papa.ParseError[];
-  delimiter: ',' | '\t';
+  delimiter: ImportDelimiter;
 }
 
-export function parseDelimited(text: string, delimiter: ',' | '\t'): CsvTable {
+export function parseDelimited(text: string, delimiter: ImportDelimiter): CsvTable {
   const result = Papa.parse<string[]>(text.replace(/^\uFEFF/, ''), {
     delimiter,
     skipEmptyLines: false,
@@ -71,6 +72,10 @@ export function parseDate(value: string): string | null {
   const text = value.trim();
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return validDate(iso[1], iso[2], iso[3]);
+  const compact = text.match(/^(\d{4})(\d{2})(\d{2})/);
+  if (compact) return validDate(compact[1], compact[2], compact[3]);
+  const slashIso = text.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (slashIso) return validDate(slashIso[1], slashIso[2].padStart(2, '0'), slashIso[3].padStart(2, '0'));
   const us = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (us) return validDate(us[3], us[1].padStart(2, '0'), us[2].padStart(2, '0'));
   return null;

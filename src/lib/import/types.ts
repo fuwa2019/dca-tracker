@@ -1,4 +1,5 @@
 export type ImportSource = 'schwab' | 'ibkr' | 'tradingview';
+export type ImportDelimiter = ',' | '\t' | ';';
 
 export type ImportMode = 'append' | 'replace_source' | 'reset_all';
 
@@ -26,7 +27,7 @@ export interface ImportDetection {
   source: ImportSource;
   format: string;
   confidence: 'high' | 'medium' | 'low';
-  delimiter?: ',' | '\t';
+  delimiter?: ImportDelimiter;
   header_row?: number;
   warnings: string[];
   /**
@@ -50,6 +51,12 @@ export interface LedgerTrade {
   /** Signed settlement cash. A broker-supplied value is authoritative. */
   usd_amount: string;
   source_currency: string;
+  /** Original broker-native execution price, when the source carries one. */
+  source_price?: string;
+  /** Original broker-native signed settlement amount, when available. */
+  source_amount?: string;
+  /** USD per unit of source_currency used for canonical conversion. */
+  fx_rate_to_usd?: string;
   source_action: string;
   source_description: string;
   duplicate_ordinal: number;
@@ -63,6 +70,8 @@ export interface LedgerCashEvent {
   event_type: LedgerCashEventType;
   ticker?: string;
   source_currency: string;
+  /** USD per unit of source_currency used for canonical conversion. */
+  fx_rate_to_usd?: string;
   source_amount: string;
   usd_amount: string;
   source_action: string;
@@ -88,6 +97,8 @@ export type ImportRowField =
   | 'amount'
   | 'usd_amount'
   | 'currency'
+  | 'fx_rate'
+  | 'exchange'
   | 'description';
 
 export interface ParsedImportRow {
