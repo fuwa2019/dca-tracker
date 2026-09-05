@@ -130,13 +130,15 @@ const ibkrBaseCurrencyText = [
   'Transaction History,Data,2026-01-04,U***33918,SIVE sell,卖,SIVE,-6,102.5,SEK,64.6734,-1.8520732403800002,62.82132675962,Trade,0.10516,-,1',
   'Transaction History,Data,2026-01-05,U***33918,FX component,外汇交易组成部分,-,-,-,CNH,-,-,-1.8014172E-4,Forex,0.14885,-,1',
   'Transaction History,Data,2026-01-06,U***33918,Deposit,存款,-,-,-,-,100,-,100,Cash,0.14887,-,1',
-  'Transaction History,Data,2026-01-07,U***33918,Adjustment,调整,-,-,-,-,0.4112441618782201,-,0.4112441618782201,Adjustment,1,-,1',
+  'Transaction History,Data,2026-01-07,U***33918,FX Translations P&L,调整,-,-,-,-,0.4112441618782201,-,0.4112441618782201,Adjustment,1,-,1',
+  'Transaction History,Data,2026-01-08,U***33918,Manual adjustment,调整,-,-,-,-,0.01,-,0.01,Adjustment,1,-,1',
 ].join('\n');
 const ibkrBaseCurrencyPreview = ibkrImportAdapter.audit({ text: ibkrBaseCurrencyText, fileName: 'localized-base-currency.csv' });
 assert.equal(ibkrBaseCurrencyPreview.detection.supported, true);
 assert.equal(ibkrBaseCurrencyPreview.format, 'ibkr-transaction-history-header-data');
 assert.ok(ibkrBaseCurrencyPreview.detection.warnings.some((warning) => warning.includes('Base Currency')));
 assert.equal(ibkrBaseCurrencyPreview.status_counts.import, 5);
+assert.equal(ibkrBaseCurrencyPreview.status_counts.ignore, 1, 'FX translation P&L is a non-cash valuation adjustment');
 assert.equal(ibkrBaseCurrencyPreview.status_counts.block, 1);
 const baseTickers = new Set(ibkrBaseCurrencyPreview.trades.map((row) => row.ticker));
 assert.deepEqual(baseTickers, new Set(['SMH', 'QQQM', 'SIVE']));
@@ -151,7 +153,9 @@ assert.equal(baseQqqmTrade?.fees_usd, '0.0000490040');
 assert.equal(baseQqqmTrade?.usd_amount, '-200.0000490040');
 assert.ok(ibkrBaseCurrencyPreview.cash_events.some((row) => row.event_type === 'fx_transfer' && row.source_currency === 'CNH'));
 assert.ok(ibkrBaseCurrencyPreview.cash_events.some((row) => row.event_type === 'broker_deposit' && row.usd_amount === '100.0000000000'));
-assert.equal(ibkrBaseCurrencyPreview.rows.find((row) => row.status === 'block')?.reason, '操作类型无法映射');
+assert.equal(ibkrBaseCurrencyPreview.rows.find((row) => row.status === 'ignore')?.reason, 'IBKR FX Translations P&L 为非现金汇兑估值调整，不写入现金账本。');
+assert.equal(ibkrBaseCurrencyPreview.cash_events.some((row) => row.source_description === 'FX Translations P&L'), false, 'ignored FX translation must not enter the cash ledger');
+assert.equal(ibkrBaseCurrencyPreview.rows.find((row) => row.source_index === 8)?.reason, '操作类型无法映射', 'other Adjustment rows must remain blocked');
 const officialIbkrShape = read('ibkr-activity-statement-official-en.csv');
 const officialIbkrPreview = ibkrImportAdapter.audit({ text: officialIbkrShape, fileName: 'activity-statement-trades.csv' });
 assert.equal(officialIbkrPreview.errors.length, 0, 'official IBKR Trades aliases should parse');

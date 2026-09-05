@@ -154,6 +154,14 @@ const ACTION_ALIASES: Record<string, 'buy' | 'sell' | LedgerCashEventType | null
   换汇: 'fx_transfer',
 };
 
+const IBKR_ADJUSTMENT_ACTIONS = new Set(['adjustment', 'adjust', 'adj', '调整']);
+const FX_TRANSLATION_PNL_PATTERN = /^fx\s+translations?\s+p\s*(?:&|\/)\s*l(?:\s+adjustment)?$/i;
+
+function isFxTranslationPnlAdjustment(action: string, description: string): boolean {
+  return IBKR_ADJUSTMENT_ACTIONS.has(normalizeAction(action))
+    && FX_TRANSLATION_PNL_PATTERN.test(normalizeAction(description));
+}
+
 const EXCHANGE_SUFFIXES: Record<string, string> = {
   ASX: 'AX',
   ASX24: 'AX',
@@ -410,6 +418,15 @@ function rowContextFrom(detection: ImportDetection): IbkrRowContext {
 function parseIbkrRow(sourceIndex: number, fields: IbkrFields, context: IbkrRowContext): ParsedImportRow {
   const description = (fields.description ?? '').trim();
   const actionText = (fields.action ?? '').trim() || description;
+  if (isFxTranslationPnlAdjustment(actionText, description)) {
+    return {
+      source_index: sourceIndex,
+      action: actionText,
+      category: 'ignored',
+      default_status: 'ignore',
+      reason: 'IBKR FX Translations P&L 为非现金汇兑估值调整，不写入现金账本。',
+    };
+  }
   const rawAmount = (fields.amount ?? '').trim();
   const rawUsdAmount = (fields.usd_amount ?? '').trim();
   const rawCurrency = (fields.currency ?? '').trim();
