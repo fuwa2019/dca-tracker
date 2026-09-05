@@ -1,4 +1,4 @@
-# dca-quote Worker
+# Portfolio Ledger Quote Worker
 
 免 CORS 行情接口。默认使用 Yahoo Finance；设置 `MARKET_DATA_PROVIDER=schwab` 后使用 Charles Schwab Market Data Production。Worker 只实现市场数据，不实现账户、持仓、订单、交易记录或下单能力。
 
@@ -49,6 +49,7 @@ VITE_QUOTE_WORKER_URL=https://dca-quote.your-account.workers.dev
 
 - `GET /api/quote?symbols=VOO,QQQM,SMH` — 多股报价，KV 缓存 1 分钟。返回：
 - `GET /api/market/quotes?symbols=VOO,QQQM,SMH` — 同上，前端默认使用这个路径；Schwab provider 会批量请求 `/marketdata/v1/quotes`。
+- Schwab provider 对含未限定交易所代码的请求若批量返回 400 或空报价，会逐标的重试；仍查不到的代码再单独查询 Yahoo Search。例如 `SIVE` 会解析到 Yahoo 的 `SIVE.ST`，响应仍保留应用中的 `SIVE` ticker，并标记为 Yahoo fallback。
   ```json
   {
     "quotes": [{"ticker": "VOO", "price": 532.4, "prevClose": 530.1, "change": 2.3, "changePct": 0.0043, "marketState": "REGULAR", "source": "yahoo", "asOf": "...", "fetchedAt": "...", "fallback": false, "providerLabel": "yahoo-v7"}],

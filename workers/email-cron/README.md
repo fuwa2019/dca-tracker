@@ -1,6 +1,6 @@
-# dca-email-cron Worker
+# Portfolio Ledger Email Worker
 
-每月第一个美股交易日**前一天** Beijing 11:00 发邮件提醒入金。
+每月第一个美股交易日**前一天** Beijing 11:00 发邮件提醒准备投资资金。
 
 ## 工作原理
 
@@ -26,7 +26,7 @@ npx wrangler kv namespace create EMAIL_KV --preview
 npx wrangler secret put RESEND_API_KEY            # 在 resend.com 创建 API key
 npx wrangler secret put SUPABASE_URL              # 例 https://xxxx.supabase.co
 npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY # 在 Supabase Settings → API
-npx wrangler secret put FROM_EMAIL                # 例 "DCA <reminders@yourdomain.com>"
+npx wrangler secret put FROM_EMAIL                # 例 "Portfolio Ledger <reminders@yourdomain.com>"
 
 # 部署
 npm run deploy

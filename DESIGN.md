@@ -1,12 +1,13 @@
-# DCA Tracker Design Baseline
+# Portfolio Ledger Design Baseline
 
 Status: baseline draft, 2026-08-18
 
 ## Design Direction
 
-DCA Tracker should feel like a quiet financial workbench: dense enough for
+Portfolio Ledger should feel like a quiet financial workbench: dense enough for
 reconciliation, calm enough for long-term review, and explicit about uncertain
-data. The current editorial dashboard is a useful implementation baseline, but
+data across brokers, currencies, and markets. The current editorial dashboard
+is a useful implementation baseline, but
 the research phase may replace its navigation, visual hierarchy, and dashboard
 composition.
 

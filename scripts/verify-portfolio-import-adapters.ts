@@ -6,6 +6,7 @@ import {
   detectPortfolioImportAdapter,
   ibkrImportAdapter,
   isRowFixable,
+  newLedgerItemsForAppend,
   rebuildPreviewAfterRowFix,
   rowFieldEdits,
   schwabImportAdapter,
@@ -193,6 +194,17 @@ const duplicatePreview = ibkrImportAdapter.audit(
   { existing_import_keys: new Set([duplicateKey!]) },
 );
 assert.ok(duplicatePreview.status_counts.duplicate >= 1, 'existing source identity must become duplicate');
+const appendLedger = newLedgerItemsForAppend(duplicatePreview);
+assert.equal(
+  appendLedger.trades.length + appendLedger.cash_events.length,
+  duplicatePreview.status_counts.import,
+  'append payload contains only rows marked as new',
+);
+assert.equal(
+  appendLedger.trades.some((row) => row.import_key === duplicateKey),
+  false,
+  'known duplicate trade is excluded from the append payload',
+);
 
 assert.equal(
   detectPortfolioImportAdapter({ text: tradingViewText })?.source,

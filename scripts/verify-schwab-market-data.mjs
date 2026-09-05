@@ -20,13 +20,17 @@ try {
       'ES2022',
       '--noEmit',
       'false',
+      '--allowImportingTsExtensions',
+      'false',
+      '--rewriteRelativeImportExtensions',
     ],
     { stdio: 'pipe' },
   );
 
-  const mod = await import(path.join(outDir, 'marketData.js'));
-  const calendarMod = await import(path.join(outDir, 'nyseCalendar.js'));
-  const workerMod = await importCompiledWorker(outDir);
+  const compiledDir = path.join(outDir, 'workers/quote/src');
+  const mod = await import(path.join(compiledDir, 'marketData.js'));
+  const calendarMod = await import(path.join(compiledDir, 'nyseCalendar.js'));
+  const workerMod = await importCompiledWorker(compiledDir);
   const env = {
     SCHWAB_CLIENT_ID: 'client-id',
     SCHWAB_CLIENT_SECRET: 'client-secret',
@@ -37,6 +41,10 @@ try {
 
   assert.deepEqual(mod.parseSymbolsParam(' voo, QQQM,voo,,smh '), ['VOO', 'QQQM', 'SMH'], 'symbols parse and de-dupe');
   assert.equal(mod.normalizeSymbol(' ibit '), 'IBIT', 'symbol normalization trims and uppercases');
+  assert.equal(mod.isSchwabCompatibleSymbol('VOO'), true, 'plain US symbols use Schwab when configured');
+  assert.equal(mod.isSchwabCompatibleSymbol('BHP.AX'), false, 'ASX symbols bypass Schwab market data');
+  assert.equal(mod.isSchwabCompatibleSymbol('700.HK'), false, 'Hong Kong symbols bypass Schwab market data');
+  assert.equal(mod.isSchwabCompatibleSymbol('USDCNY=X'), false, 'FX symbols bypass Schwab market data');
   assert.equal(mod.marketDataProviderFromEnv(env), 'schwab', 'provider env switch');
   assert.equal(workerMod.dailyPriceSourceFromEnv(env), 'schwab', 'Schwab daily_prices source');
   assert.equal(workerMod.dailyPriceSourceFromEnv({ ...env, MARKET_DATA_PROVIDER: 'yahoo' }), 'yahoo', 'Yahoo daily_prices source');
@@ -125,6 +133,169 @@ try {
   assert.equal(upsertBodies[1].p_rows[0].source, 'yahoo', 'Yahoo provider upserts daily_prices.source=yahoo');
   assert.equal(upsertBodies[0].p_rows[0].is_provisional, false, 'historical candles reconcile provisional rows');
 
+  let mixedSchwabCalls = 0;
+  let mixedYahooCalls = 0;
+  globalThis.fetch = async (url) => {
+    const target = String(url);
+    if (target.endsWith('/v1/oauth/token')) {
+      mixedSchwabCalls += 1;
+      return jsonResponse({ access_token: 'mixed-access', expires_in: 1800 });
+    }
+    if (target.includes('api.schwabapi.com/marketdata/v1/quotes')) {
+      mixedSchwabCalls += 1;
+      return jsonResponse({ VOO: { quote: {}, reference: { symbol: 'VOO' } } });
+    }
+    if (target.includes('query1.finance.yahoo.com/v7/finance/quote')) {
+      mixedYahooCalls += 1;
+      return jsonResponse({
+        quoteResponse: {
+          result: [{
+            symbol: 'VOO',
+            regularMarketPrice: 501,
+            regularMarketPreviousClose: 500,
+            regularMarketChange: 1,
+            regularMarketChangePercent: 0.2,
+            regularMarketTime: Math.floor(Date.parse('2026-06-05T20:00:00.000Z') / 1000),
+            marketState: 'CLOSED',
+          }],
+        },
+      });
+    }
+    throw new Error(`unexpected mixed provider fetch ${target}`);
+  };
+  try {
+    mod.resetSchwabClientForTests();
+    const response = await workerMod.default.fetch(
+      new Request('https://worker.test/api/market/quotes?symbols=VOO'),
+      { ...env, ALLOWED_ORIGINS: '*', QUOTE_CACHE: { get: async () => null, put: async () => {} } },
+      { waitUntil: () => {} },
+    );
+    const body = await response.json();
+    assert.equal(response.status, 200, 'empty Schwab quote falls back successfully');
+    assert.equal(body.quotes[0].price, 501, 'valid Yahoo quote is not overwritten by empty Schwab quote');
+    assert.equal(body.quotes[0].source, 'yahoo', 'fallback quote preserves Yahoo provenance');
+    assert.equal(mixedSchwabCalls, 2, 'mixed fallback makes one token and one Schwab request');
+    assert.equal(mixedYahooCalls, 1, 'mixed fallback makes one Yahoo request');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  let foreignSchwabCalls = 0;
+  const foreignYahooCalls = [];
+  globalThis.fetch = async (url) => {
+    const target = String(url);
+    if (target.endsWith('/v1/oauth/token')) {
+      foreignSchwabCalls += 1;
+      return jsonResponse({ access_token: 'foreign-access', expires_in: 1800 });
+    }
+    if (target.includes('api.schwabapi.com/marketdata/v1/quotes?symbols=VOO%2CSIVE')) {
+      foreignSchwabCalls += 1;
+      return new Response('unknown symbol SIVE', { status: 400 });
+    }
+    if (target.includes('api.schwabapi.com/marketdata/v1/quotes?symbols=VOO')) {
+      foreignSchwabCalls += 1;
+      return jsonResponse({
+        VOO: { quote: { lastPrice: 502, closePrice: 500 }, reference: { symbol: 'VOO' } },
+      });
+    }
+    if (target.includes('api.schwabapi.com/marketdata/v1/quotes?symbols=SIVE')) {
+      foreignSchwabCalls += 1;
+      return new Response('unknown symbol SIVE', { status: 400 });
+    }
+    if (target.includes('api.schwabapi.com/marketdata/v1/pricehistory')) {
+      return jsonResponse({ symbol: 'SIVE', candles: [] });
+    }
+    if (target.includes('query1.finance.yahoo.com/v7/finance/quote')) {
+      foreignYahooCalls.push(target);
+      return jsonResponse({ quoteResponse: { result: [] } });
+    }
+    if (target.includes('query1.finance.yahoo.com/v8/finance/chart/SIVE?')) {
+      foreignYahooCalls.push(target);
+      return new Response('SIVE is not a Yahoo symbol', { status: 404 });
+    }
+    if (target.includes('query1.finance.yahoo.com/v1/finance/search?q=SIVE')) {
+      foreignYahooCalls.push(target);
+      return jsonResponse({
+        quotes: [{ symbol: 'SIVE.ST', shortname: 'Sivers Semiconductors AB', exchange: 'STO', quoteType: 'EQUITY' }],
+      });
+    }
+    if (target.includes('query1.finance.yahoo.com/v8/finance/chart/SIVE.ST?')) {
+      foreignYahooCalls.push(target);
+      if (target.includes('interval=1d')) {
+        return jsonResponse({
+          chart: {
+            result: [{
+              timestamp: [Math.floor(Date.parse('2026-06-05T20:00:00.000Z') / 1000)],
+              indicators: {
+                quote: [{ close: [27.26] }],
+                adjclose: [{ adjclose: [27.26] }],
+              },
+            }],
+          },
+        });
+      }
+      return jsonResponse({
+        chart: {
+          result: [{
+            meta: {
+              currency: 'SEK',
+              regularMarketPrice: 27.26,
+              regularMarketTime: Math.floor(Date.parse('2026-06-05T20:00:00.000Z') / 1000),
+              chartPreviousClose: 25.46,
+              marketState: 'REGULAR',
+            },
+          }],
+        },
+      });
+    }
+    throw new Error('unexpected foreign provider fetch ' + target);
+  };
+  try {
+    mod.resetSchwabClientForTests();
+    const quoteResponse = await workerMod.default.fetch(
+      new Request('https://worker.test/api/market/quotes?symbols=VOO,SIVE'),
+      { ...env, ALLOWED_ORIGINS: '*', QUOTE_CACHE: { get: async () => null, put: async () => {} } },
+      { waitUntil: () => {} },
+    );
+    const quoteBody = await quoteResponse.json();
+    const quoteByTicker = Object.fromEntries(quoteBody.quotes.map((quote) => [quote.ticker, quote]));
+    assert.equal(quoteResponse.status, 200, 'missing Schwab foreign quote falls back successfully');
+    assert.equal(quoteByTicker.VOO.source, 'schwab', 'valid Schwab quote remains the primary result');
+    assert.equal(quoteByTicker.VOO.price, 502, 'valid Schwab quote is not replaced by Yahoo');
+    assert.equal(quoteByTicker.SIVE.ticker, 'SIVE', 'Yahoo alias keeps the application ticker');
+    assert.equal(quoteByTicker.SIVE.price, 27.26, 'Yahoo exchange-qualified alias supplies the foreign price');
+    assert.equal(quoteByTicker.SIVE.currency, 'SEK', 'Yahoo alias keeps the foreign currency');
+    assert.equal(quoteByTicker.SIVE.source, 'yahoo', 'foreign alias reports Yahoo provenance');
+    assert.equal(quoteByTicker.SIVE.fallback, true, 'foreign alias is marked as provider fallback');
+    assert.equal(quoteByTicker.SIVE.providerLabel, 'yahoo-v8:SIVE.ST', 'foreign alias exposes the Yahoo listing in metadata');
+    assert.equal(foreignSchwabCalls, 4, 'foreign fallback splits one rejected batch into two Schwab symbol requests');
+    assert.equal(foreignYahooCalls.filter((target) => target.includes('VOO')).length, 0, 'Yahoo fallback is scoped to the missing foreign symbol');
+    assert.ok(foreignYahooCalls.some((target) => target.includes('/v1/finance/search?q=SIVE')), 'foreign fallback resolves the Yahoo listing with search');
+
+    const historyResponse = await workerMod.default.fetch(
+      new Request('https://worker.test/api/market/price-history?symbol=SIVE&range=1y'),
+      { ...env, ALLOWED_ORIGINS: '*', QUOTE_CACHE: { get: async () => null, put: async () => {} } },
+      { waitUntil: () => {} },
+    );
+    const historyBody = await historyResponse.json();
+    assert.equal(historyResponse.status, 200, 'missing Schwab foreign history falls back successfully');
+    assert.equal(historyBody.series.ticker, 'SIVE', 'foreign history keeps the application ticker');
+    assert.equal(historyBody.series.points.length, 1, 'Yahoo exchange-qualified alias supplies foreign history');
+    assert.equal(historyBody.series.source, 'yahoo', 'foreign history reports Yahoo provenance');
+    assert.equal(historyBody.series.fallback, true, 'foreign history is marked as provider fallback');
+    assert.equal(historyBody.series.providerLabel, 'yahoo-v8:SIVE.ST', 'foreign history exposes the Yahoo listing in metadata');
+    const chartResponse = await workerMod.default.fetch(
+      new Request('https://worker.test/api/chart?symbol=SIVE&range=1y&interval=1d'),
+      { ...env, ALLOWED_ORIGINS: '*', QUOTE_CACHE: { get: async () => null, put: async () => {} } },
+      { waitUntil: () => {} },
+    );
+    const chartBody = await chartResponse.json();
+    assert.equal(chartResponse.status, 200, 'missing Yahoo chart symbol falls back successfully');
+    assert.equal(chartBody.chart.result[0].indicators.quote[0].close[0], 27.26, 'Yahoo exchange-qualified alias supplies the chart');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
   const storedTokens = new Map();
   const tokenStore = {
     get: async (key) => storedTokens.get(key) ?? null,
@@ -193,6 +364,7 @@ try {
         },
       });
     }
+    if (target.includes('/rest/v1/quote_snapshots') && init.method === 'POST') return new Response('', { status: 200 });
     if (target.includes('/rest/v1/rpc/upsert_daily_prices')) {
       fallbackUpsertBodies.push(JSON.parse(String(init.body)));
       return new Response('', { status: 200 });
@@ -671,7 +843,7 @@ try {
   assert.doesNotMatch(sanitized, /client-secret|access-secret|refresh-secret/, 'secrets redacted from logs');
 
   const perfSource = await readFile(path.join(root, 'src/app/performance.tsx'), 'utf8');
-  assert.match(perfSource, /交易业绩是否跑赢 \{selectedBenchmark\}/, 'benchmark title uses selected benchmark');
+  assert.match(perfSource, /\$\{selectedBenchmark\}/, 'benchmark labels use selected benchmark');
   assert.doesNotMatch(perfSource, /交易业绩是否跑赢 SPY/, 'benchmark title does not hard-code SPY');
 
   const readme = await readFile(path.join(root, 'README.md'), 'utf8');
@@ -690,12 +862,18 @@ try {
 
 async function importCompiledWorker(outDir) {
   const indexPath = path.join(outDir, 'index.js');
-  const marketDataUrl = pathToFileURL(path.join(outDir, 'marketData.js')).href;
-  const nyseCalendarUrl = pathToFileURL(path.join(outDir, 'nyseCalendar.js')).href;
+  const importUrls = {
+    marketData: pathToFileURL(path.join(outDir, 'marketData.js')).href,
+    nyseCalendar: pathToFileURL(path.join(outDir, 'nyseCalendar.js')).href,
+    etfHoldings: pathToFileURL(path.join(outDir, 'etfHoldings.js')).href,
+    ledgerPerformance: pathToFileURL(path.join(outDir, 'ledgerPerformance.js')).href,
+  };
   const source = await readFile(indexPath, 'utf8');
   const loadableSource = source
-    .replace("from './marketData';", `from '${marketDataUrl}';`)
-    .replace("from './nyseCalendar.js';", `from '${nyseCalendarUrl}';`);
+    .replace(/from '\.\/marketData(?:\.js)?';/g, `from '${importUrls.marketData}';`)
+    .replace(/from '\.\/nyseCalendar(?:\.js)?';/g, `from '${importUrls.nyseCalendar}';`)
+    .replace(/from '\.\/etfHoldings(?:\.js)?';/g, `from '${importUrls.etfHoldings}';`)
+    .replace(/from '\.\/ledgerPerformance(?:\.js)?';/g, `from '${importUrls.ledgerPerformance}';`);
   return import(`data:text/javascript;charset=utf-8,${encodeURIComponent(loadableSource)}`);
 }
 

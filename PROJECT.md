@@ -1,11 +1,12 @@
-# DCA Tracker Project
+# Portfolio Ledger Project
 
 ## Product
 
-DCA Tracker is a private, responsive PWA for tracking a long-term US ETF
-portfolio. It is designed around a Schwab-funded portfolio, but transactions,
-cashflows, settings, and market data remain application-owned rather than being
-read from a brokerage account.
+Portfolio Ledger is a private, responsive PWA for tracking a cross-broker,
+multi-currency portfolio. It accepts Schwab, IBKR, and TradingView exports,
+including individual stocks and foreign-market securities; transactions,
+cashflows, settings, and market data remain application-owned rather than
+being read from a brokerage account.
 
 The current product includes:
 
@@ -24,9 +25,9 @@ The current product includes:
 
 - Users: one authenticated portfolio owner and recipients of sanitized,
   read-only share links.
-- Core problem: maintain an application-owned record of a long-term US ETF
-  portfolio and report trustworthy holdings, cashflow, and performance metrics
-  without exposing private financial data.
+- Core problem: maintain an application-owned record of a multi-currency,
+  multi-market portfolio and report trustworthy holdings, cashflow, and
+  performance metrics without exposing private financial data.
 - Current stage: the SPA, two Workers, Supabase schema, local demo, and
   verification workflows are implemented and maintained from this repository.
 - In scope: portfolio records, market-data ingestion, performance calculation,
@@ -105,8 +106,8 @@ More detail:
   and scheduled cache refresh.
 - `workers/email-cron/`: NYSE-calendar reminder scheduling and email delivery.
 - `supabase/migrations/`: append-only schema and RPC history, currently through
-  `0052_ledger_performance_cache_v2.sql`; production was verified through
-  `0052` after the explicit migration authorization on 2026-08-24.
+  `0054_portfolio_multi_currency.sql`; production was verified through
+  `0054` after the explicit migration authorization on 2026-09-04.
 - `scripts/`: regression checks, local dataset generation, operational market
   data helpers, and X content tooling.
 - `tests/fixtures/`: finance and long-horizon regression fixtures.
@@ -166,10 +167,23 @@ Additional scoped checks:
 ```bash
 npm run test:ui
 npm run test:symbols
+npm run test:migration-numbering
+npm run test:migration-overloads
 npm run test:nyse-calendar-sync
 npm run test:stress
 npm run test:schwab
 ```
+
+`test:migration-overloads` replays the `create function` / `drop function`
+statements across `supabase/migrations/` in order and fails when a call form
+ends up with more than one live candidate — the Postgres 42725 class. It exists
+because `_performance_source_hash` regressed exactly that way twice: 0028
+removed the default from the two-argument form, 0043 put it back and 0047
+carried it, and `refresh_due_performance_caches` then failed on every nightly
+run for a month without surfacing. Four pre-existing zero-argument ambiguities
+are registered in the script as non-blocking warnings; see
+`docs/decisions/2026-08-31-function-overload-ambiguity.md`. It reads text only,
+so it cannot see functions built by dynamic SQL inside a `do $$ ... $$` block.
 
 There is no lint script. Do not claim lint passed unless one is added and run.
 CI runs the three worker/root installs followed by finance, email-reminder,

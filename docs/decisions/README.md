@@ -21,3 +21,5 @@ Accepted decisions:
   duplicates and reject new migration numbering conflicts automatically.
 - `2026-08-18-ledger-import-release-gate.md`: keep V2 preview flag-gated until
   isolated database, cache invalidation, RLS, atomicity, and privacy checks pass.
+- `2026-08-31-function-overload-ambiguity.md`: forbid a defaulted overload that
+  shadows a wrapper, and gate the whole class with `test:migration-overloads`.

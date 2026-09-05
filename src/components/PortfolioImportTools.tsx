@@ -37,6 +37,7 @@ import {
   countLedgerEventKinds,
   detectPortfolioImportAdapter,
   isRowFixable,
+  newLedgerItemsForAppend,
   rebuildPreviewAfterRowFix,
   retainedRowReasons,
   rowFieldEdits,
@@ -268,14 +269,15 @@ export function PortfolioImportTools({ transactions }: Props) {
       return;
     }
 
+    const ledgerToImport = mode === 'append' ? newLedgerItemsForAppend(preview) : preview;
     setImporting(true);
     setError(null);
     setNotice(null);
     try {
       const response = await supabase.rpc('import_portfolio_ledger', {
         p_source: source,
-        p_trades: preview.trades,
-        p_cash_events: preview.cash_events,
+        p_trades: ledgerToImport.trades,
+        p_cash_events: ledgerToImport.cash_events,
         p_mode: mode,
       });
       if (response.error) throw response.error;
@@ -283,7 +285,9 @@ export function PortfolioImportTools({ transactions }: Props) {
       if (!nextResult) throw new Error('数据库未返回导入回执。');
       setResult(nextResult);
       setConfirmScope(false);
-      setNotice('导入已提交，所有源行均在同一事务中处理。');
+      setNotice(mode === 'append'
+        ? '新增行已提交，重复行未写入。'
+        : '导入已提交，所有源行均在同一事务中处理。');
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['transactions'] }),
         qc.invalidateQueries({ queryKey: ['cashflows'] }),
@@ -650,7 +654,7 @@ function ImportProblemBanner({
         <FileCheck2 className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0">
           <p className="font-medium">{total} 行全部可以导入</p>
-          <p className="mt-0.5 text-xs leading-5">确认前不会写入数据库；重复行会在写入时被跳过。</p>
+          <p className="mt-0.5 text-xs leading-5">确认前不会写入数据库；新增导入只提交新行，重复行不会写入。</p>
         </div>
       </div>
     );
@@ -950,6 +954,7 @@ function ImportReceipt({
       result,
       status_counts: preview.status_counts,
       total_rows: preview.rows.length,
+      prefiltered_duplicates: preview.mode === 'append' ? preview.status_counts.duplicate : 0,
     })
     : null;
   const retainedReasons = preview ? retainedRowReasons(preview.rows) : [];
@@ -972,7 +977,7 @@ function ImportReceipt({
           </div>
           <p className="text-xs leading-5 text-muted-foreground">
             源文件 {summary.total} 行中写入 {summary.imported} 行；其余 {summary.skipped} 行包含 {summary.duplicates} 行重复、
-            {summary.ignored} 行按来源规则忽略、{summary.blocked} 行被阻止。四数由数据库回执与预览逐行状态推导，未改变 RPC 契约。
+            {summary.ignored} 行按来源规则忽略、{summary.blocked} 行被阻止。新增导入的已知重复在请求前已剔除，四数由数据库回执与预览逐行状态推导，未改变 RPC 契约。
           </p>
         </section>
       )}

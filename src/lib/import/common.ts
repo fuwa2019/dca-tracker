@@ -337,3 +337,21 @@ export function rowsForItems(
   }
   return { trades, cash_events };
 }
+
+/**
+ * Returns only rows that are new for an append import. The preview keeps all
+ * normalized items for reconciliation and row-level review, so the caller
+ * must apply this filter at the write boundary instead of sending known
+ * duplicates back to the RPC.
+ */
+export function newLedgerItemsForAppend(preview: ImportPreview): NormalizedLedger {
+  const newImportKeys = new Set(
+    preview.rows
+      .filter((row) => row.status === 'import' && !!row.item)
+      .map((row) => row.item!.import_key),
+  );
+  return {
+    trades: preview.trades.filter((trade) => newImportKeys.has(trade.import_key)),
+    cash_events: preview.cash_events.filter((event) => newImportKeys.has(event.import_key)),
+  };
+}

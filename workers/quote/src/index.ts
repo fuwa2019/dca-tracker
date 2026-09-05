@@ -28,6 +28,7 @@ import {
   buildSchwabAuthorizeUrl,
   currentSchwabRefreshToken,
   exchangeSchwabAuthorizationCode,
+  isSchwabCompatibleSymbol,
   marketDataProviderFromEnv,
   normalizeSymbol,
   parseSymbolsParam,
@@ -442,46 +443,176 @@ async function handleQuote(url: URL, env: Env, ctx: ExecutionContext): Promise<R
 
 async function fetchQuotesFromProvider(env: Env, symbols: string[]): Promise<QuoteOut[]> {
   const provider = marketDataProviderFromEnv(env);
-  let quotes: QuoteOut[] = [];
-  if (provider === 'schwab') {
-    try {
-      quotes = await new SchwabMarketDataClient(env).getQuotes(symbols);
-    } catch (err) {
-      console.warn('[quote] Schwab quote fetch failed, falling back to Yahoo:', sanitizeForLog(err instanceof Error ? err.message : String(err)));
-      quotes = await fetchYahooQuotes(symbols, true);
+  if (provider !== 'schwab') return fetchYahooQuotes(symbols, false, env.QUOTE_CACHE);
+
+  const schwabSymbols = symbols.filter(isSchwabCompatibleSymbol);
+  const yahooSymbols = symbols.filter((symbol) => !isSchwabCompatibleSymbol(symbol));
+  const byTicker = new Map<string, QuoteOut>();
+
+  if (yahooSymbols.length > 0) {
+    for (const quote of await fetchYahooQuotes(yahooSymbols, true, env.QUOTE_CACHE)) {
+      byTicker.set(quote.ticker, quote);
     }
-    const missing = symbols.filter((s) => !quotes.find((q) => q.ticker === s && q.price !== null));
-    if (missing.length > 0) {
-      const fallback = await fetchYahooQuotes(missing, true);
-      const byTicker = new Map(quotes.map((q) => [q.ticker, q]));
-      for (const q of fallback) byTicker.set(q.ticker, q);
-      quotes = symbols.flatMap((s) => {
-        const q = byTicker.get(s);
-        return q ? [q] : [];
-      });
-    }
-  } else {
-    quotes = await fetchYahooQuotes(symbols, false);
   }
-  return quotes;
+
+  if (schwabSymbols.length > 0) {
+    let quotes: QuoteOut[] = [];
+    const schwabClient = new SchwabMarketDataClient(env);
+    try {
+      quotes = await schwabClient.getQuotes(schwabSymbols);
+    } catch (err) {
+      if (schwabSymbols.length > 1 && isSchwabBadRequest(err)) {
+        console.warn('[quote] Schwab quote batch was rejected; retrying symbols individually');
+        for (const symbol of schwabSymbols) {
+          try {
+            quotes.push(...await schwabClient.getQuotes([symbol]));
+          } catch (symbolError) {
+            console.warn('[quote] Schwab quote lookup failed for ' + symbol + ', falling back to Yahoo:', errorMessage(symbolError));
+          }
+        }
+      } else {
+        console.warn('[quote] Schwab quote fetch failed, falling back to Yahoo:', errorMessage(err));
+        quotes = await fetchYahooQuotes(schwabSymbols, true, env.QUOTE_CACHE);
+      }
+    }
+    for (const quote of quotes) {
+      byTicker.set(quote.ticker, quote);
+    }
+    const missing = schwabSymbols.filter((s) => !quotes.some((q) => q.ticker === s && quoteHasPrice(q)));
+    if (missing.length > 0) {
+      const fallback = await fetchYahooQuotes(missing, true, env.QUOTE_CACHE);
+      for (const q of fallback) byTicker.set(q.ticker, q);
+    }
+  }
+
+  return symbols.flatMap((symbol) => {
+    const quote = byTicker.get(symbol);
+    return quote ? [quote] : [];
+  });
 }
 
-async function fetchYahooQuotes(symbols: string[], fallback: boolean): Promise<QuoteOut[]> {
-  let quotes: QuoteOut[] = [];
+function isSchwabBadRequest(error: unknown): boolean {
+  return errorMessage(error).startsWith('schwab_bad_request:');
+}
+
+async function fetchYahooQuotes(symbols: string[], fallback: boolean, cache?: KVNamespace): Promise<QuoteOut[]> {
+  const requestedSymbols = [...new Set(symbols.map(normalizeSymbol).filter(Boolean))];
+  if (requestedSymbols.length === 0) return [];
+
+  const byTicker = new Map<string, QuoteOut>();
   // Primary: v7 quote endpoint (returns multiple symbols in one shot)
   try {
-    quotes = await fetchV7Quotes(symbols, fallback);
+    for (const quote of await fetchV7Quotes(requestedSymbols, fallback)) {
+      byTicker.set(quote.ticker, quote);
+    }
   } catch {
-    quotes = [];
+    // v7 is a best-effort batch endpoint; continue with per-symbol chart calls.
   }
 
   // Fallback per-symbol via v8 chart (more resilient when v7 is throttled)
-  const missing = symbols.filter((s) => !quotes.find((q) => q.ticker === s));
+  const missing = requestedSymbols.filter((s) => !quoteHasPrice(byTicker.get(s)));
   if (missing.length > 0) {
     const fallbackQuotes = await Promise.all(missing.map((s) => fetchV8Quote(s, fallback).catch(() => null)));
-    for (const q of fallbackQuotes) if (q) quotes.push(q);
+    for (const q of fallbackQuotes) if (q) byTicker.set(q.ticker, q);
   }
-  return quotes;
+
+  // Broker exports can contain an unqualified foreign ticker, such as SIVE.
+  // Yahoo's searchable listing is SIVE.ST, so resolve only still-missing
+  // symbols and retag the result back to the application's original ticker.
+  const unresolved = requestedSymbols.filter((s) => !quoteHasPrice(byTicker.get(s)));
+  const aliasedQuotes = await Promise.all(unresolved.map(async (requested) => {
+    const yahooSymbol = await resolveYahooExchangeSymbol(requested, cache);
+    if (!yahooSymbol || yahooSymbol === requested) return null;
+    const quote = await fetchV8Quote(yahooSymbol, fallback).catch(() => null);
+    return quote ? retagYahooQuote(quote, requested, yahooSymbol) : null;
+  }));
+  for (const quote of aliasedQuotes) if (quote) byTicker.set(quote.ticker, quote);
+
+  return requestedSymbols.flatMap((symbol) => {
+    const quote = byTicker.get(symbol);
+    return quote ? [quote] : [];
+  });
+}
+
+function quoteHasPrice(quote: QuoteOut | undefined): boolean {
+  return typeof quote?.price === 'number' && Number.isFinite(quote.price);
+}
+
+function retagYahooQuote(quote: QuoteOut, requestedTicker: string, yahooSymbol: string): QuoteOut {
+  return {
+    ...quote,
+    ticker: normalizeSymbol(requestedTicker),
+    providerLabel: (quote.providerLabel ?? 'yahoo') + ':' + normalizeSymbol(yahooSymbol),
+  };
+}
+
+async function resolveYahooExchangeSymbol(symbol: string, cache?: KVNamespace): Promise<string | null> {
+  const requested = normalizeSymbol(symbol);
+  if (!requested || requested.includes('.') || requested.includes('=') || requested.startsWith('^')) return null;
+
+  const cacheKey = 'search:' + requested;
+  let results: YahooSearchResult[] | null = null;
+  if (cache) {
+    try {
+      const cached = await cache.get(cacheKey, 'json') as unknown;
+      if (Array.isArray(cached)) results = cachedYahooSearchResults(cached);
+    } catch {
+      // Search resolution must not turn a quote failure into a cache failure.
+    }
+  }
+
+  if (results === null) {
+    const upstream = 'https://query1.finance.yahoo.com/v1/finance/search?q='
+      + encodeURIComponent(requested)
+      + '&quotesCount=8&newsCount=0&enableFuzzyQuery=true';
+    let response: Response;
+    try {
+      response = await fetch(upstream, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+    } catch {
+      return null;
+    }
+    if (!response.ok) return null;
+    const data = (await response.json()) as YahooSearch;
+    results = normalizedYahooSearchResults(data);
+    if (cache) {
+      await cache.put(cacheKey, JSON.stringify(results), { expirationTtl: SEARCH_TTL }).catch(() => {});
+    }
+  }
+
+  return results.find((row) => {
+    const candidate = normalizeSymbol(row.symbol);
+    const isSameBaseTicker = candidate.startsWith(requested + '.') && candidate.length > requested.length + 1;
+    const isEquity = !row.type || row.type.toUpperCase() === 'EQUITY';
+    return isSameBaseTicker && isEquity;
+  })?.symbol ?? null;
+}
+
+function normalizedYahooSearchResults(data: YahooSearch): YahooSearchResult[] {
+  return (data.quotes ?? [])
+    .map((row) => ({
+      symbol: normalizeSymbol(row.symbol ?? ''),
+      name: row.shortname ?? row.longname ?? row.symbol ?? '',
+      exchange: row.exchange ?? null,
+      type: row.quoteType ?? null,
+    }))
+    .filter((row) => row.symbol)
+    .slice(0, 8);
+}
+
+function cachedYahooSearchResults(value: unknown): YahooSearchResult[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((row) => {
+    if (!row || typeof row !== 'object') return [];
+    const item = row as Record<string, unknown>;
+    const symbol = typeof item.symbol === 'string' ? normalizeSymbol(item.symbol) : '';
+    if (!symbol) return [];
+    return [{
+      symbol,
+      name: typeof item.name === 'string' ? item.name : symbol,
+      exchange: typeof item.exchange === 'string' ? item.exchange : null,
+      type: typeof item.type === 'string' ? item.type : null,
+    }];
+  });
 }
 
 async function readQuoteSnapshots(env: Env, symbols: string[]): Promise<QuoteOut[]> {
@@ -654,14 +785,25 @@ async function handleChart(url: URL, env: Env): Promise<Response> {
   const prepost = url.searchParams.get('prepost') === '1' || url.searchParams.get('includePrePost') === 'true';
   if (!symbol) return json({ error: 'missing_symbol' }, 400);
 
-  const cacheKey = `chart:${symbol}:${range}:${interval}:${prepost ? 'prepost' : 'regular'}`;
+  const cacheKey = 'chart:' + symbol + ':' + range + ':' + interval + ':' + (prepost ? 'prepost' : 'regular');
   const cached = await env.QUOTE_CACHE.get(cacheKey, 'json');
   if (cached) return json({ ...cached, cache: 'hit' });
 
-  const upstream = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=${prepost ? 'true' : 'false'}&events=div%2Csplit`;
-  const r = await fetch(upstream, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
-  if (!r.ok) return json({ error: 'upstream_error', status: r.status }, 502);
-  const data = (await r.json()) as unknown;
+  const chartUrl = (ticker: string) => 'https://query1.finance.yahoo.com/v8/finance/chart/'
+    + encodeURIComponent(ticker)
+    + '?range=' + encodeURIComponent(range)
+    + '&interval=' + encodeURIComponent(interval)
+    + '&includePrePost=' + (prepost ? 'true' : 'false')
+    + '&events=div%2Csplit';
+  let response = await fetch(chartUrl(symbol), { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+  if (!response.ok) {
+    const yahooSymbol = await resolveYahooExchangeSymbol(symbol, env.QUOTE_CACHE);
+    if (yahooSymbol && yahooSymbol !== symbol) {
+      response = await fetch(chartUrl(yahooSymbol), { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+    }
+  }
+  if (!response.ok) return json({ error: 'upstream_error', status: response.status }, 502);
+  const data = (await response.json()) as unknown;
 
   await env.QUOTE_CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: CHART_TTL });
   return json(data);
@@ -1017,7 +1159,7 @@ function orderHistorySeries(symbols: string[], series: HistorySeries[]): History
 }
 
 async function fetchHistoryFromProvider(env: Env, symbol: string, range: string, params = new URLSearchParams()): Promise<HistorySeries> {
-  if (marketDataProviderFromEnv(env) === 'schwab') {
+  if (marketDataProviderFromEnv(env) === 'schwab' && isSchwabCompatibleSymbol(symbol)) {
     const historyParams = new URLSearchParams(params);
     if (!historyParams.has('range')) historyParams.set('range', range);
     try {
@@ -1028,19 +1170,63 @@ async function fetchHistoryFromProvider(env: Env, symbol: string, range: string,
         'schwab',
       );
       if (series.points.length > 0) return series;
-      console.warn(`[history] Schwab returned no points for ${normalizeSymbol(symbol)}, falling back to Yahoo`);
+      console.warn('[history] Schwab returned no points for ' + normalizeSymbol(symbol) + ', falling back to Yahoo');
     } catch (err) {
       console.warn(
-        `[history] Schwab price history failed for ${normalizeSymbol(symbol)}, falling back to Yahoo:`,
+        '[history] Schwab price history failed for ' + normalizeSymbol(symbol) + ', falling back to Yahoo:',
         sanitizeForLog(err instanceof Error ? err.message : String(err)),
       );
     }
-    return fetchYahooHistory(symbol, range, params, true);
+    return fetchYahooHistory(symbol, range, params, true, env.QUOTE_CACHE);
   }
-  return fetchYahooHistory(symbol, range, params);
+  return fetchYahooHistory(symbol, range, params, false, env.QUOTE_CACHE);
 }
 
-async function fetchYahooHistory(symbol: string, range: string, params = new URLSearchParams(), fallback = false): Promise<HistorySeries> {
+async function fetchYahooHistory(
+  symbol: string,
+  range: string,
+  params = new URLSearchParams(),
+  fallback = false,
+  cache?: KVNamespace,
+): Promise<HistorySeries> {
+  const requested = normalizeSymbol(symbol);
+  let direct: HistorySeries | null = null;
+  let directError: unknown = null;
+  try {
+    direct = await fetchYahooHistoryDirect(requested, range, params, fallback);
+  } catch (error) {
+    directError = error;
+  }
+  if (direct?.points.length) return direct;
+
+  const yahooSymbol = await resolveYahooExchangeSymbol(requested, cache);
+  if (yahooSymbol && yahooSymbol !== requested) {
+    try {
+      const resolved = await fetchYahooHistoryDirect(yahooSymbol, range, params, fallback);
+      return {
+        ...resolved,
+        ticker: requested,
+        providerLabel: (resolved.providerLabel ?? 'yahoo-v8') + ':' + yahooSymbol,
+      };
+    } catch (aliasError) {
+      if (directError) throw directError;
+      console.warn(
+        '[history] Yahoo exchange alias ' + requested + ' -> ' + yahooSymbol + ' failed:',
+        sanitizeForLog(aliasError instanceof Error ? aliasError.message : String(aliasError)),
+      );
+    }
+  }
+
+  if (directError) throw directError;
+  return direct ?? withHistoryProviderMetadata({ ticker: requested, points: [] }, 'yahoo', fallback, 'yahoo-v8');
+}
+
+async function fetchYahooHistoryDirect(
+  symbol: string,
+  range: string,
+  params = new URLSearchParams(),
+  fallback = false,
+): Promise<HistorySeries> {
   const startDate = normalizeIsoDate(params.get('startDate'));
   const endDate = normalizeIsoDate(params.get('endDate'));
   const upstreamParams = new URLSearchParams({
@@ -1054,10 +1240,12 @@ async function fetchYahooHistory(symbol: string, range: string, params = new URL
   } else {
     upstreamParams.set('range', range);
   }
-  const upstream = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?${upstreamParams.toString()}`;
-  const r = await fetch(upstream, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
-  if (!r.ok) throw new Error(`yahoo ${r.status}`);
-  const data = (await r.json()) as YahooV8Chart;
+  const upstream = 'https://query1.finance.yahoo.com/v8/finance/chart/'
+    + encodeURIComponent(symbol)
+    + '?' + upstreamParams.toString();
+  const response = await fetch(upstream, { headers: { 'User-Agent': UA, Accept: 'application/json' } });
+  if (!response.ok) throw new Error('yahoo ' + response.status);
+  const data = (await response.json()) as YahooV8Chart;
   const result = data.chart?.result?.[0];
   const timestamps = result?.timestamp ?? [];
   const closes = result?.indicators?.quote?.[0]?.close ?? [];
@@ -1080,7 +1268,7 @@ async function fetchYahooHistory(symbol: string, range: string, params = new URL
       asOfTimestamp,
     });
   }
-  return withHistoryProviderMetadata({ ticker: symbol, points }, 'yahoo', fallback, 'yahoo-v8');
+  return withHistoryProviderMetadata({ ticker: normalizeSymbol(symbol), points }, 'yahoo', fallback, 'yahoo-v8');
 }
 
 function withHistoryProviderMetadata(
@@ -1661,6 +1849,13 @@ interface YahooV7Quote {
       currency?: string;
     }>;
   };
+}
+
+interface YahooSearchResult {
+  symbol: string;
+  name: string;
+  exchange: string | null;
+  type: string | null;
 }
 
 interface YahooSearch {

@@ -135,8 +135,26 @@ export function marketDataProviderFromEnv(env: SchwabEnv): MarketDataProviderNam
   return env.MARKET_DATA_PROVIDER?.trim().toLowerCase() === 'schwab' ? 'schwab' : 'yahoo';
 }
 
+const NON_SCHWAB_MARKET_SUFFIXES = new Set([
+  'AX', 'HK', 'L', 'TO', 'V', 'SW', 'DE', 'PA', 'AS', 'MC', 'MI', 'SA',
+  'NS', 'BO', 'KS', 'TW', 'SI', 'T', 'JK', 'SS', 'SZ', 'TA', 'VI', 'ST',
+  'OL', 'CO', 'HE', 'BR', 'IR', 'JO', 'NZ', 'MX', 'KL', 'BA',
+]);
+
 export function normalizeSymbol(symbol: string): string {
   return symbol.trim().toUpperCase();
+}
+
+/**
+ * Schwab Market Data is only used for plain US symbols. Yahoo handles
+ * exchange-qualified symbols and FX/index symbols without requiring a
+ * Schwab market-data lookup.
+ */
+export function isSchwabCompatibleSymbol(symbol: string): boolean {
+  const normalized = normalizeSymbol(symbol);
+  if (!normalized || normalized.includes('=') || normalized.startsWith('^')) return false;
+  const suffix = normalized.match(/\.([A-Z0-9]+)$/)?.[1];
+  return !suffix || !NON_SCHWAB_MARKET_SUFFIXES.has(suffix);
 }
 
 export function parseSymbolsParam(raw: string | null, max = 20): string[] {

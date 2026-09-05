@@ -1,6 +1,6 @@
 # Current Handoff
 
-Updated: 2026-08-31
+Updated: 2026-09-04
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
@@ -9,32 +9,61 @@ documents that own it, listed there and under Related Files below.
 
 ## Current Goal
 
-Execute the DCA Tracker competitive research and six-month optimization plan:
-move from trusted source import and ledger semantics to financial calculation,
-task-oriented interaction, and privacy-safe analysis, without expanding beyond
-one personal ETF portfolio.
+Complete the Portfolio Ledger transition: accept trusted cross-broker imports,
+including IBKR multi-currency and individual/foreign-market securities, while
+keeping calculations, privacy, and the existing single-owner portfolio boundary
+safe.
 
-`docs/research/competitive/2026-08/requirements-audit.md` is the evidence
-ledger for that goal and the arbiter of what counts as proved. As of today it
-has **no fully `missing` rows**; what remains is `partial`, and each partial row
-states exactly what is missing.
+The implementation and production release are complete. Migration
+`0054_portfolio_multi_currency.sql` is applied, the Pages/Worker changes are
+deployed, and public smoke checks pass. A real private IBKR file remains
+intentionally unverified in this session; the owner can select it in the
+production importer for the final account-specific check.
 
 ## Where things stand
 
 | Area | State |
 |---|---|
-| Frontend | Live on Pages at `dc3433b`, entry `assets/index-CWyiYIX-.js`, stylesheet `assets/index-H-TFRIaI.css` |
-| Supabase | Migrations applied through `0052`; **no user is on `ledger_twr_v2`** |
-| Quote Worker | Version `e5bd372b-1090-4955-b072-867bbc14180a`, deployed 2026-08-31; **carries the V2 refresh code**, which is a no-op while no user is on V2 |
-| Email Worker | Unchanged |
-| Working tree | Clean, `master` synced with `origin/master` |
+| Frontend | Portfolio Ledger is live on Pages at deployment `9a4c9291`; production domain and login smoke checks passed 2026-09-04 |
+| Supabase | Migrations applied through `0054`; native-currency columns and the authenticated-only import RPC are live; **no user is on `ledger_twr_v2`** |
+| Quote Worker | Version `a6164e6b-2777-4be4-9198-81147c59ada2`, deployed 2026-09-04; foreign symbols route to Yahoo and compatible US symbols keep Schwab |
+| Email Worker | Version `b949cda2-f64d-4920-bcc8-eb69abb8d600`, deployed 2026-09-04; reminder copy uses Portfolio Ledger and generic cross-broker wording |
+| Working tree | `master` synced with `origin/master`, with the import, multi-currency, branding, docs, and verification changes listed below |
 
 Repository: `/Users/junxihuo/Workspace/dca_system`, branch `master` tracking
 `origin/master`.
 
+## Release completed — 2026-09-04
+
+- Supabase project `igwacbeojogblacektxr` registered migration
+  `0054_portfolio_multi_currency` at version `20260904053829`. Metadata checks
+  confirmed native-currency fields on `transactions`/`cashflows`; anonymous
+  execution of both import functions is denied and authenticated execution is
+  allowed as designed.
+- Cloudflare Pages project `dca-tracker-git` deployed the working-tree build;
+  the deployment preview was `c2ea2b63.dca-tracker-git.pages.dev`, and the
+  production domain returned 200 with title `Portfolio Ledger · 组合账本`.
+- Quote Worker `dca-quote` deployed version
+  `a6164e6b-2777-4be4-9198-81147c59ada2`; `/health` returned 200 and public
+  `7203.T` quote routing returned Yahoo/JPY data.
+- Email Worker `dca-email-cron` deployed version
+  `b949cda2-f64d-4920-bcc8-eb69abb8d600`; its public root returned 200 without
+  invoking the protected `/run` mail trigger.
+- Cloudflare Pages auth-config revalidation: the production `VITE_*` variables
+  were present in the `dca-tracker-git` project config, the current working-tree
+  build received them only in-process, and production deployment
+  `9a4c9291-81eb-4800-ab70-61abff5f286e` completed successfully. Cache-busted
+  canonical and preview checks returned 200; all 37 JavaScript assets loaded,
+  the browser login page had zero console messages/errors/warnings, and Supabase
+  Auth health/CORS checks returned 200. No OTP was sent and no Supabase rows or
+  Worker code/configuration were changed.
+- No private transaction CSV was read or uploaded by this session. The
+  migration's USD backfill is the only production-row write performed; no
+  account-specific rows were manually changed.
+
 ## Verified production state
 
-### Database — migration 0052 applied 2026-08-24
+### Database — migration 0052 baseline
 
 Applied by the owner. Independently corroborated from the project's own
 Postgres logs (project `igwacbeojogblacektxr`):
@@ -57,10 +86,16 @@ service-role only, and that `shared_performance_history` still projects through
 the sanitizer. This session has only read-only *log* access to the project, not
 SQL execution, so those runtime facts are recorded as the owner's verification.
 
+Migration `0054_portfolio_multi_currency` was applied to production on
+2026-09-04 and registered as version `20260904053829`. Live catalog checks
+confirmed the native-currency columns and the authenticated-only import RPC
+contract. The migration backfilled existing USD rows and did not manually alter
+any account-specific records.
+
 Earlier migrations `0047`–`0051` were verified in production when applied; see
 the archive for each one's checks.
 
-### Frontend — current release
+### Frontend — prior release baseline (superseded 2026-09-04)
 
 `master` pushed to `dc3433b` with explicit authorization; Pages rebuilt within
 about 100 seconds (entry hash changed from the prior release's
@@ -82,7 +117,7 @@ was read. The authenticated routes and a populated `/share/<token>` remain
 **`https://dca-tracker-git.netlify.app` returns 401** — site-level protection on
 the Netlify entrypoint added in `9805af6`. That target has never been verified.
 
-### Quote Worker — deployed 2026-08-31
+### Quote Worker — prior deployment baseline (superseded 2026-09-04)
 
 `workers/quote` at `45f56e8` was deployed with explicit authorization. New
 version `e5bd372b-1090-4955-b072-867bbc14180a`, 100% of traffic; upload
@@ -136,6 +171,58 @@ deployment too.
 - A real SMH refresh through the deployed Worker remains **unverified**; direct
   local `curl` to VanEck still resets the connection.
 
+## The 42725 nightly failure — found and fixed in the repo this session
+
+The chained cron **does complete**, which answers the previous handoff's first
+next step. From the project's own Postgres and edge logs, the 2026-08-31 04:10
+firing ran `active_monitor_universe` → four `upsert_daily_prices` (all 200) →
+`refresh_due_performance_caches` → `ledger_performance_refresh_universe` (200,
+body `[]`, as expected while no user is on V2). The 12:15 retry ran the same
+chain with nine `upsert_daily_prices`, all 200. A price-sync rejection would
+have stopped the chain before the V2 call, so the daily prices are being
+written and `daily_prices` is current.
+
+What the same logs also show is a failure that had never surfaced.
+`refresh_due_performance_caches` returns **400 on every firing**:
+
+```
+42725  function public._performance_source_hash(uuid) is not unique
+```
+
+`0028` removed the default from `_performance_source_hash(uuid, text)` on
+purpose, because the one-argument wrapper makes a defaulted two-argument form
+unresolvable. `0043` (authored 2026-07-28) put `default 'SPY'` back and `0047`
+carried it. `create or replace function` adds a default without complaint, so
+both applied cleanly and only the call failed. `refreshDuePerformanceCaches` in
+`workers/quote/src/index.ts` catches and `console.warn`s, so the nightly cache
+warm-up has been a silent no-op for about a month.
+
+Impact is bounded: nothing is written wrong, and the cache is still refreshed
+on demand by the client (`refresh_performance_history_cache` returns 200 in the
+same logs). The cost is that the first dashboard load after a data change pays
+the full recompute.
+
+`supabase/migrations/0053_fix_performance_source_hash_ambiguity.sql` drops the
+two-argument form and recreates it with the 0047 body and no default —
+`create or replace` cannot remove a default — and ends with a `do $$ … $$` that
+resolves a one-argument call so a future regression fails the migration loudly.
+`npm run test:migration-overloads` (new, `scripts/verify-function-overloads.mjs`)
+replays every create/drop across the migration set in file order and fails on
+the whole 42725 class. It is mutation-tested both ways: removing `0053`
+reproduces the production error, reintroducing the default inside `0053` fails
+it. Rationale, the four registered pre-existing ambiguities, and rollback:
+`docs/decisions/2026-08-31-function-overload-ambiguity.md`.
+
+Migration `0053` was applied to production at `2026-09-03T17:20:24Z` and
+registered as `fix_performance_source_hash_ambiguity`. Live catalog inspection
+showed both `_performance_source_hash` overloads without argument defaults,
+with the existing `security definer` and service-role-only ACL unchanged. The
+04:10 UTC cron on 2026-09-04 returned HTTP 200 for
+`refresh_due_performance_caches`; no post-migration 42725/`not unique` appeared.
+Two cache rows received refresh attempts and updates, and the dirty count was
+0 afterward, confirming that the warm-up completed. No user
+`performance_method` was changed.
+
 ## The V2 performance method — read this before touching it
 
 Migration `0052` added the storage and write surface for `ledger_twr_v2`. It
@@ -160,13 +247,10 @@ Rationale and rejected alternatives:
 
 ## Next steps
 
-1. **Confirm the daily price sync still completes under the chained cron.**
-   `scheduled` now runs `runDailyPriceSync().then(runLedgerPerformanceSync)`, so
-   a price-sync rejection lands in the V2 catch instead of surfacing as an
-   unhandled `waitUntil` rejection. If `0aeeb1bc` already carried this code the
-   chain has been firing daily since 2026-08-24 and quotes have stayed current,
-   which is reassuring but not a check. `wrangler tail` from `workers/quote`
-   across a trigger, or the freshness of `daily_prices`, settles it.
+1. **The Portfolio Ledger release is complete.** Migration `0054` is applied,
+   the Pages/quote/email deployments are live, and public smoke checks pass.
+   The remaining account-specific check is for the owner to select the private
+   IBKR export in production; this session intentionally did not read that file.
 2. **B2 — the `ledger_twr_v2` switch.** B1 closed on 2026-08-23. What remains is
    a full re-import and a V1 regression, both needing authorized cloud work.
    Only after those should any user's `performance_method` be flipped. Flipping
@@ -239,6 +323,22 @@ Rationale and rejected alternatives:
   leak** — migration `0023` truncated that table and no migration since writes
   `public_history`, so the branch is unreachable. Close it deliberately if that
   table is ever repopulated.
+- **Four zero-argument RPC overloads are ambiguous the same way.**
+  `performance_history`, `performance_cache_status`,
+  `refresh_performance_history_cache` and `tracked_symbol_coverage` each have a
+  `(p_benchmark text default …)` form plus an explicit zero-argument wrapper, so
+  a no-argument call has two candidates. **No production failure observed** —
+  the client passes `p_benchmark` by name, which PostgREST resolves — but the
+  zero-argument fallback branches in `src/hooks/usePerformanceCache.ts`,
+  `usePortfolio.ts` and `useDemoDcaData.ts` would raise 42725 instead of falling
+  back. Registered as non-blocking warnings in
+  `scripts/verify-function-overloads.mjs`; fixing them drops and recreates four
+  functions granted to `authenticated`, one of them part of the 0052 V2 cache
+  contract, so it is a separate authorized change.
+- **The quote Worker swallows RPC failures from the daily sync.**
+  `refreshDuePerformanceCaches` catches and `console.warn`s, which is why the
+  42725 breakage above ran for a month unnoticed. Changing that is a Worker
+  deploy and was not done.
 - **The writer's magnitude check is a smell test.** It rejects a return outside
   ±1000, which catches a NAV like `138499.04` in a return field but not a small
   amount — `921.53` passes. The guarantee is the key allowlist, not this bound.
@@ -292,6 +392,14 @@ npm run build
 npm run test:release-budget
 ```
 
+Migration changes additionally need the two scoped static checks, neither of
+which is in CI:
+
+```bash
+npm run test:migration-numbering
+npm run test:migration-overloads
+```
+
 Release-time browser probes are not in CI and are run by hand:
 `docs/release/probes/` (Lighthouse, cross-browser, layout-shift attribution) and
 `docs/accessibility/probes/` (axe, keyboard, reduced motion, reflow and target
@@ -312,6 +420,12 @@ checklist.
 - `docs/tasks/2026-08-19-competitive-learning-rectification-plan.md`
 - `docs/runbooks/deployment.md`, `docs/runbooks/database-migrations.md`
 - `supabase/migrations/0052_ledger_performance_cache_v2.sql`
+- `supabase/migrations/0053_fix_performance_source_hash_ambiguity.sql`,
+  `scripts/verify-function-overloads.mjs`,
+  `docs/decisions/2026-08-31-function-overload-ambiguity.md`
+- `supabase/migrations/0054_portfolio_multi_currency.sql`,
+  `src/lib/import/ibkr.ts`, `src/lib/import/schwabLedger.ts`,
+  `scripts/verify-portfolio-multi-currency.mjs`
 - `workers/quote/src/ledgerPerformance.ts`, `src/lib/calc/ledgerTwr.ts`
 - `src/components/icons.tsx`, `src/lib/import/`
 - `docs/archive/ai/2026-08-handoff-sessions.md` — the 2026-08 session narrative

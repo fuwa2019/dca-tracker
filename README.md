@@ -1,7 +1,9 @@
-# DCA Tracker
+# Portfolio Ledger · 组合账本
 
-DCA Tracker is a private React PWA for tracking a long-term US ETF portfolio.
-It combines transactions and cashflows with market data to report holdings,
+Portfolio Ledger is a private React PWA for tracking a cross-broker,
+multi-currency portfolio. It accepts ETF, individual-stock, and foreign-market
+records, then combines transactions and cashflows with market data to report
+holdings,
 account NAV, XIRR, cached TWR performance, benchmark comparisons, data health,
 and sanitized read-only share links.
 

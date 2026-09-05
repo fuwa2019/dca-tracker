@@ -1,5 +1,5 @@
 /**
- * DCA Email Cron Worker
+ * Portfolio Ledger Email Cron Worker
  * --------------------------------
  * Fires daily at UTC 03:00 (Beijing 11:00).
  *
@@ -144,17 +144,17 @@ async function sendReminder(
 
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',Arial,sans-serif; max-width:520px; margin:24px auto; padding:24px; border:1px solid #e5e5e5; border-radius:16px; color:#0a0a0a;">
-      <div style="font-size:13px; color:#737373; margin-bottom:8px;">DCA Tracker · 入金提醒</div>
+      <div style="font-size:13px; color:#737373; margin-bottom:8px;">Portfolio Ledger · 入金提醒</div>
       <h1 style="font-size:22px; margin:0 0 12px; line-height:1.3;">明天 (${ctx.nextTradingDay}) 是 ${ctx.ym} 美股第一个交易日</h1>
       <p style="font-size:15px; line-height:1.55; color:#404040;">
-        记得提前把这个月的定投资金到位到嘉信账户，以免错过开盘。
+        记得提前把这个月的投资资金准备到账户，以免错过开盘。
         ${dca ? `<br/><strong>${dca}</strong>` : ''}
       </p>
       <div style="margin-top:20px; padding:12px 14px; background:#fafafa; border-radius:10px; font-size:13px; color:#525252;">
-        小提醒：CNY → 港卡 → Schwab 的链条通常需要 1–3 个工作日，留好时间。
+        小提醒：CNY → 港卡 → 券商账户的链条通常需要 1–3 个工作日，留好时间。
       </div>
       <div style="margin-top:24px; font-size:11px; color:#a3a3a3;">
-        想停止此提醒？在 DCA Tracker → 设置 → 关闭"邮件提醒"。
+        想停止此提醒？在 Portfolio Ledger → 设置 → 关闭“邮件提醒”。
       </div>
     </div>
   `;

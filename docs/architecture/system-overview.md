@@ -2,7 +2,7 @@
 
 ## System Boundary
 
-DCA Tracker owns portfolio transactions, cashflows, settings, derived
+Portfolio Ledger owns portfolio transactions, cashflows, settings, derived
 performance, cached market prices, and sanitized sharing. It consumes market
 data and email-delivery services but does not place trades, synchronize a
 brokerage account, or delegate financial calculations to an external provider.

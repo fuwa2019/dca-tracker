@@ -4,7 +4,7 @@ import { tradingViewImportAdapter } from './tradingview.ts';
 import type { ImportInput, PortfolioImportAdapter } from './types.ts';
 
 export * from './types.ts';
-export { buildReconciliation } from './common.ts';
+export { buildReconciliation, newLedgerItemsForAppend } from './common.ts';
 export {
   countLedgerEventKinds,
   retainedRowReasons,

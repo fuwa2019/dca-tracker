@@ -1,12 +1,13 @@
-# DCA Tracker Product Baseline
+# Portfolio Ledger Product Baseline
 
 Status: baseline draft, 2026-08-18
 
 ## Product
 
-DCA Tracker is a private, open-source, single-portfolio tracker for a person
-who steadily invests in US ETFs and needs an auditable record of what happened,
-what the account is worth, and how the result was calculated.
+Portfolio Ledger is a private, open-source, single-portfolio tracker for a
+person who invests across brokers, currencies, markets, ETFs, and individual
+stocks and needs an auditable record of what happened, what the account is
+worth, and how the result was calculated.
 
 The product promise is: precise inputs, restrained scope, transparent outputs.
 The product is an application-owned ledger. It is not a trading terminal, a
@@ -26,7 +27,7 @@ brokerage sync service, a multi-account wealth platform, or a SaaS product.
 
 ### Restrained
 
-- One person, one ETF portfolio, one clear operating model.
+- One person, one portfolio, one clear operating model.
 - Focus on transactions, cash events, holdings, performance, data health, and
   privacy-safe sharing.
 - Do not add account aggregation, live brokerage synchronization, order
@@ -82,7 +83,7 @@ Every source row ends in exactly one primary state:
 
 - `import`: valid and new, eligible for the selected write mode;
 - `duplicate`: matches an existing source identity and will not create a row;
-- `ignore`: known and intentionally outside the retained ETF ledger;
+- `ignore`: known and intentionally outside the retained portfolio ledger;
 - `block`: invalid, ambiguous, unsupported currency, or unsafe to write.
 
 Warnings may accompany an imported or ignored row, but a warning must never

@@ -50,13 +50,14 @@ itself.
 4. `npm run test:release-budget` against the `dist/` that step 3 produced.
 5. Scoped checks for whatever the change actually touched (`test:ui`,
    `test:portfolio-import`, `test:csv-import`, `test:migration-numbering`,
+   `test:migration-overloads`,
    `test:etf-holdings`, `test:symbols`, `test:nyse-calendar-sync`).
 6. If the change is user visible: the Lighthouse probe and the cross-browser
    probe, and the accessibility probes in `docs/accessibility/probes/`.
    Update the dated record with the new numbers.
-7. If the change includes a migration: apply order, rollback story, and
-   `test:migration-numbering`. Production application is a separately
-   authorized operation.
+7. If the change includes a migration: apply order, rollback story,
+   `test:migration-numbering`, and `test:migration-overloads`. Production
+   application is a separately authorized operation.
 8. `git diff --check`, then review the full diff.
 9. Deploy only with explicit authorization for that exact operation.
 10. Post-deploy, always with a cache-busting query parameter — the Pages edge

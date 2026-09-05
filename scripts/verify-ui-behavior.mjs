@@ -95,6 +95,10 @@ assert.match(transactionTools, /Schwab_Transactions_/, 'combined export uses a t
 
 const portfolioImport = readFileSync(new URL('../src/components/PortfolioImportTools.tsx', import.meta.url), 'utf8');
 assert.match(portfolioImport, /import_portfolio_ledger/, 'source-neutral preview writes through the generic ledger RPC');
+assert.match(portfolioImport, /newLedgerItemsForAppend/, 'append imports filter known duplicates before the RPC payload');
+assert.match(portfolioImport, /p_trades:\s*ledgerToImport\.trades/, 'append RPC payload uses the filtered trade list');
+assert.match(portfolioImport, /p_cash_events:\s*ledgerToImport\.cash_events/, 'append RPC payload uses the filtered cash-event list');
+assert.match(portfolioImport, /新增行已提交，重复行未写入/, 'append success notice explains that duplicates were not written');
 assert.match(portfolioImport, /replace_source/, 'source-neutral preview exposes source replacement');
 assert.match(portfolioImport, /reset_all/, 'source-neutral preview exposes full reset mode');
 assert.match(portfolioImport, /导入/, 'source-neutral preview labels import rows');
@@ -105,9 +109,9 @@ assert.match(portfolioImport, /role="table"/, 'source-neutral preview exposes a 
 assert.match(portfolioImport, /aria-live/, 'source-neutral preview announces status changes');
 assert.match(portfolioImport, /sm:grid-cols-\[3\.5rem_8rem_5rem/, 'row details collapse into a mobile layout');
 assert.match(portfolioImport, /本地演示模式只展示预览，不写入数据库/, 'local mode never writes through the preview');
-assert.match(portfolioImport, /资产确认/, 'source-neutral preview exposes asset confirmation');
-assert.match(portfolioImport, /个股，忽略/, 'asset confirmation can explicitly ignore stocks');
-assert.match(portfolioImport, /ETF，导入/, 'asset confirmation can explicitly retain ETFs');
+assert.match(portfolioImport, /证券识别/, 'source-neutral preview exposes descriptive asset classification');
+assert.match(portfolioImport, /识别结果只用于提示/, 'asset classification cannot block supported securities');
+assert.match(portfolioImport, /个股、非美市场证券和未分类代码都会继续写入/, 'individual and foreign-market securities remain importable');
 assert.match(portfolioImport, /导入前对账/, 'preview exposes normalized reconciliation totals');
 assert.match(portfolioImport, /cash_by_kind/, 'preview exposes cash-event reconciliation categories');
 
@@ -185,7 +189,7 @@ const previewRows = [
   { source_index: 2, action: 'Buy', category: 'trade', default_status: 'import', status: 'import', item: { side: 'buy', ticker: 'VGT', shares: '1', usd_amount: '-100' } },
   { source_index: 3, action: 'Buy', category: 'trade', default_status: 'import', status: 'duplicate', item: { side: 'buy', ticker: 'VGT', shares: '1', usd_amount: '-100' } },
   { source_index: 4, action: 'Dividend', category: 'cash_event', default_status: 'import', status: 'import', item: { event_type: 'dividend', ticker: 'VGT', usd_amount: '1.25' } },
-  { source_index: 5, action: 'Buy', category: 'ignored', default_status: 'ignore', status: 'ignore', item: { side: 'buy', ticker: 'AAPL', shares: '1', usd_amount: '-10' }, reason: '证券类型为个股，不属于单组合 ETF 账本。' },
+  { source_index: 5, action: 'Unsupported', category: 'ignored', default_status: 'ignore', status: 'ignore', reason: '来源行不属于可写入的交易或现金事件。' },
   { source_index: 6, action: 'Withdrawal', category: 'error', default_status: 'block', status: 'block', reason: '金额无法解析。' },
 ];
 const statusCounts = { import: 2, duplicate: 1, ignore: 1, block: 1 };
@@ -214,6 +218,15 @@ assert.equal(firstImport.skipped, 3, 'skipped is every row that produced no new 
 assert.equal(firstImport.imported + firstImport.skipped, firstImport.total, 'the four numbers reconcile');
 assert.equal(firstImport.ignored, 1, 'ignored rows stay separately reported');
 assert.equal(firstImport.blocked, 1, 'blocked rows stay separately reported');
+
+const filteredAppend = summarizeImportReceipt({
+  result: { added: 2, unchanged: 0, removed: 0 },
+  status_counts: { import: 2, duplicate: 3, ignore: 1, block: 0 },
+  total_rows: 6,
+  prefiltered_duplicates: 3,
+});
+assert.equal(filteredAppend.duplicates, 3, 'known duplicates remain in the receipt after being filtered from the request');
+assert.equal(filteredAppend.skipped, 4, 'filtered append receipt still reconciles imported and skipped rows');
 
 // A receipt can never claim more imported rows than the file supplied.
 const overreport = summarizeImportReceipt({

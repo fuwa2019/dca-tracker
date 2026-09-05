@@ -19,7 +19,7 @@ export interface LedgerImportReceiptCounts {
 export interface ImportReceiptSummary {
   /** Rows the database newly wrote. */
   imported: number;
-  /** Rows that were sent but already existed under the same import key. */
+  /** Rows known to be duplicates before the write, plus any write-time races. */
   duplicates: number;
   /** Every source row that did not produce a new record, duplicates included. */
   skipped: number;
@@ -43,12 +43,17 @@ export function summarizeImportReceipt(input: {
   result: LedgerImportReceiptCounts;
   status_counts: Record<ImportRowStatus, number>;
   total_rows: number;
+  /** Known duplicates omitted from an append payload before it reached the RPC. */
+  prefiltered_duplicates?: number;
 }): ImportReceiptSummary {
   const total = Math.max(0, input.total_rows);
   const imported = Math.max(0, Math.min(input.result.added, total));
+  const duplicateCandidates = Math.max(0, input.prefiltered_duplicates ?? 0)
+    + Math.max(0, input.result.unchanged);
+  const duplicates = Math.min(Math.max(0, total - imported), duplicateCandidates);
   return {
     imported,
-    duplicates: Math.max(0, input.result.unchanged),
+    duplicates,
     skipped: total - imported,
     total,
     ignored: input.status_counts.ignore,
