@@ -52,6 +52,14 @@ assert.match(
   /transaction_timestamp\(\) \+ \(v_row\.source_index \* interval ''1 microsecond''\)/,
 );
 assert.match(sourceOrderFix, /<> 2/);
+const batchValidationFix = readFileSync(
+  new URL('../supabase/migrations/0056_validate_imported_share_days.sql', import.meta.url),
+  'utf8',
+);
+assert.match(batchValidationFix, /_validate_import_transaction_timelines\(p_user_id uuid\)/);
+assert.match(batchValidationFix, /current_setting\('dca\.import_portfolio_ledger', true\)/);
+assert.match(batchValidationFix, /group by upper\(ticker\), trade_date/);
+assert.match(batchValidationFix, /perform public\._validate_import_transaction_timelines\(v_user_id\)/);
 assert.doesNotMatch(sourceOrderFix, /alter\s+table\s+public\.transactions/i);
 
 console.log('portfolio ledger migration contract checks passed');

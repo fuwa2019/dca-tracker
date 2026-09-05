@@ -14,13 +14,13 @@ including IBKR multi-currency and individual/foreign-market securities, while
 keeping calculations, privacy, and the existing single-owner portfolio boundary
 safe.
 
-The implementation and production release are complete. Migrations 0054 and
-0055 are applied, the Pages/Worker changes are deployed, and public smoke checks
+The implementation and production release are complete. Migrations 0054, 0055,
+and 0056 are applied, the Pages/Worker changes are deployed, and public smoke checks
 pass. A real private IBKR file remains
 intentionally unverified in this session; the owner can select it in the
 production importer for the final account-specific check.
 
-The follow-up database fix was applied as migration `0055` to production. The
+The follow-up database fixes were applied as migrations `0055` and `0056` to production. The
 frontend error-detail fix is included in this release and is deployed through
 the existing Pages Git integration.
 
@@ -29,7 +29,7 @@ the existing Pages Git integration.
 | Area | State |
 |---|---|
 | Frontend | Portfolio Ledger is live on the existing `dca-tracker-git` Pages project; the importer fix is released through its Git integration |
-| Supabase | Migrations applied through `0055`; the same-day importer ordering fix is live; **no user is on `ledger_twr_v2`** |
+| Supabase | Migrations applied through `0056`; same-day import ordering and post-batch share validation are live; **no user is on `ledger_twr_v2`** |
 | Quote Worker | Version `a6164e6b-2777-4be4-9198-81147c59ada2`, deployed 2026-09-04; foreign symbols route to Yahoo and compatible US symbols keep Schwab |
 | Email Worker | Version `b949cda2-f64d-4920-bcc8-eb69abb8d600`, deployed 2026-09-04; reminder copy uses Portfolio Ledger and generic cross-broker wording |
 | Working tree | Import-order release changes are limited to the migration, importer UI, and regression contracts; existing untracked artifacts remain outside the release |
@@ -76,6 +76,18 @@ Repository: `/Users/junxihuo/Workspace/dca_system`, branch `master` tracking
 
 
 ## Release completed — 2026-09-04
+## Release completed — 2026-09-05 (0056)
+
+- Applied `0056_validate_imported_share_days` to Supabase project
+  `igwacbeojogblacektxr` as version `20260905093842`.
+- During the authenticated import transaction only, the row-level share trigger
+  now defers validation until the complete batch is present. The new private
+  helper nets transactions by ticker and trade date, then rejects any negative
+  running position; manual writes retain the strict trigger.
+- Structural checks confirmed the trigger marker, post-batch helper call,
+  helper grouping, and authenticated/anonymous execute privileges. No account
+  rows were read, imported, repaired, or deleted by the migration release.
+
 
 - Supabase project `igwacbeojogblacektxr` registered migration
   `0054_portfolio_multi_currency` at version `20260904053829`. Metadata checks
