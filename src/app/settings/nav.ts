@@ -24,7 +24,7 @@ export const SETTINGS_NAV: ReadonlyArray<SettingsNavGroup> = [
   {
     title: '投资',
     items: [
-      { href: 'goal', title: '目标与定投', subtitle: '目标金额、预期年化与月定投', icon: Target },
+      { href: 'goal', title: '目标与定投', subtitle: '目标金额、月定投与概率规划', icon: Target },
       { href: 'basis', title: '口径与基准', subtitle: '成本口径、自选股与业绩基准', icon: Scale },
     ],
   },

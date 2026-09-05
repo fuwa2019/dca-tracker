@@ -2,20 +2,21 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Input } from '@/components/ui/input';
 import { SettingsField, SettingsPaneHeader, SettingsSaveRow } from '../components';
 import { useSettingsForm } from '../formState';
+import { QqqmGoalPlanner } from './QqqmGoalPlanner';
 
 export function GoalPane() {
   const { form, setForm } = useSettingsForm();
   return (
     <div className="space-y-5">
-      <SettingsPaneHeader heading="目标与定投" text="决定 $1M 进度环的终点，以及入金提醒里建议的金额。" />
+      <SettingsPaneHeader heading="目标与定投" text="设置目标终点、月定投金额，并查看基于 QQQM 研究模型的达标概率。" />
 
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">进度目标</CardTitle>
-          <CardDescription className="text-xs">进度环按当前净值与这两个参数推算达成年份</CardDescription>
+          <CardDescription className="text-xs">目标金额会用于总览进度环和下方的概率规划</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <SettingsField htmlFor="target" label="目标金额 (USD)" description="长期净值目标，进度环的分母">
+          <SettingsField htmlFor="target" label="目标金额 (USD)" description="长期净值目标；概率规划按今天购买力的 USD 解读">
             <Input
               id="target"
               type="number"
@@ -24,7 +25,7 @@ export function GoalPane() {
               onChange={(e) => setForm((f) => ({ ...f, target_usd: e.target.value }))}
             />
           </SettingsField>
-          <SettingsField htmlFor="ret" label="预期年化 (%)" description="仅用于推算，不影响任何已实现收益">
+          <SettingsField htmlFor="ret" label="总览参考年化 (%)" description="仅用于总览的单一路径推算；概率规划使用下方 QQQM 研究模型">
             <Input
               id="ret"
               type="number"
@@ -40,7 +41,7 @@ export function GoalPane() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">定投计划</CardTitle>
-          <CardDescription className="text-xs">每月入金提醒邮件会带上这个金额</CardDescription>
+          <CardDescription className="text-xs">每月入金提醒邮件会带上这个金额，概率规划按今天购买力的固定月投读取</CardDescription>
         </CardHeader>
         <CardContent>
           <SettingsField
@@ -60,6 +61,11 @@ export function GoalPane() {
           </SettingsField>
         </CardContent>
       </Card>
+
+      <QqqmGoalPlanner
+        targetUsdText={form.target_usd}
+        monthlyContributionUsdText={form.monthly_dca_usd}
+      />
 
       <SettingsSaveRow />
     </div>
