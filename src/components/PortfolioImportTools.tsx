@@ -326,7 +326,9 @@ export function PortfolioImportTools({ transactions }: Props) {
 
   const canCommit = !!preview
     && preview.can_commit
-    && preview.status_counts.import > 0
+    // Append needs at least one new row; replacement modes intentionally
+    // rebuild rows that the preview currently labels as duplicates.
+    && (mode !== 'append' || preview.status_counts.import > 0)
     && preview.errors.length === 0
     && !parsing
     && !classifying

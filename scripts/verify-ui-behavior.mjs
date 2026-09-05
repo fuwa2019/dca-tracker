@@ -101,6 +101,11 @@ assert.match(portfolioImport, /p_cash_events:\s*ledgerToImport\.cash_events/, 'a
 assert.match(portfolioImport, /新增行已提交，重复行未写入/, 'append success notice explains that duplicates were not written');
 assert.match(portfolioImport, /replace_source/, 'source-neutral preview exposes source replacement');
 assert.match(portfolioImport, /reset_all/, 'source-neutral preview exposes full reset mode');
+assert.match(
+  portfolioImport,
+  /\(mode !== 'append' \|\| preview\.status_counts\.import > 0\)/,
+  'replacement modes remain committable when every source row is currently a duplicate',
+);
 assert.match(portfolioImport, /导入/, 'source-neutral preview labels import rows');
 assert.match(portfolioImport, /重复/, 'source-neutral preview labels duplicate rows');
 assert.match(portfolioImport, /忽略/, 'source-neutral preview labels ignored rows');
