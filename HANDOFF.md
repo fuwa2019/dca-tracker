@@ -1,6 +1,6 @@
 # Current Handoff
 
-Updated: 2026-09-04
+Updated: 2026-09-05
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
@@ -24,14 +24,37 @@ production importer for the final account-specific check.
 
 | Area | State |
 |---|---|
-| Frontend | Portfolio Ledger is live on Pages at deployment `9a4c9291`; production domain and login smoke checks passed 2026-09-04 |
+| Frontend | Portfolio Ledger is live on Pages at deployment `18bedc32`; production domain and login fetch smoke checks passed 2026-09-05 |
 | Supabase | Migrations applied through `0054`; native-currency columns and the authenticated-only import RPC are live; **no user is on `ledger_twr_v2`** |
 | Quote Worker | Version `a6164e6b-2777-4be4-9198-81147c59ada2`, deployed 2026-09-04; foreign symbols route to Yahoo and compatible US symbols keep Schwab |
 | Email Worker | Version `b949cda2-f64d-4920-bcc8-eb69abb8d600`, deployed 2026-09-04; reminder copy uses Portfolio Ledger and generic cross-broker wording |
-| Working tree | `master` synced with `origin/master`, with the import, multi-currency, branding, docs, and verification changes listed below |
+| Working tree | `master` at `168351d` synced with `origin/master`; tracked files are clean and existing untracked artifacts remain outside the release |
 
 Repository: `/Users/junxihuo/Workspace/dca_system`, branch `master` tracking
 `origin/master`.
+
+## Release completed — 2026-09-05
+
+- Fixed the unified importer guard that incorrectly disabled `replace_source`
+  and `reset_all` when every valid source row was already marked duplicate.
+  Append still requires at least one new row; replacement modes can now rebuild
+  the complete normalized payload after the explicit scope confirmation.
+- Cloudflare Pages project `dca-tracker-git` deployed commit `168351d` as
+  deployment `18bedc32`; the preview URL was
+  `https://18bedc32.dca-tracker-git.pages.dev`.
+- Cache-busted canonical and preview checks returned 200. The current
+  production bundle is `index-Bjp8lZEY.js`, stylesheet is
+  `index-Dr32G4PZ.css`, and the login chunk is `login-sEDiYWjV.js`; all loaded
+  with HTTP 200.
+- The production entry bundle contained the Supabase host and no entry-level
+  `http://localhost` stub. In a clean real-browser session, `/login` rendered
+  with zero console errors/warnings; same-origin Auth health returned 200, and
+  a local route mock verified the application POST to `/auth/v1/otp` without
+  sending an OTP or reading account data.
+- Cache-busted `/`, `/login`, `/transactions`, `/transactions/all`,
+  `/performance`, `/exposure`, `/cashflows`, `/health`, and `/settings` all
+  returned 200. No database migration, Worker deployment, or production data
+  write was performed.
 
 ## Release completed — 2026-09-04
 
