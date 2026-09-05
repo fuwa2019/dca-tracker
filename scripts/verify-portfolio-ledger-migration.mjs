@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 
 const path = new URL('../supabase/migrations/0050_portfolio_ledger_import.sql', import.meta.url);
 const sql = readFileSync(path, 'utf8');
+const sourceOrderFix = readFileSync(
+  new URL('../supabase/migrations/0055_fix_portfolio_import_source_order.sql', import.meta.url),
+  'utf8',
+);
 
 const requiredFragments = [
   'add column if not exists effective_date date',
@@ -37,5 +41,17 @@ assert.match(sql, /delete\s+from\s+public\.funding_batches\s+where\s+user_id\s*=
 assert.match(sql, /perform\s+public\._clear_performance_daily_pnl_cache_for_user\(v_user_id\);/);
 assert.ok(sql.includes('source_amount <> round(source_amount, 10)'));
 assert.ok(sql.includes('usd_amount <> round(usd_amount, 10)'));
+
+assert.match(sourceOrderFix, /_import_portfolio_ledger_legacy\(text,jsonb,jsonb,text\)/);
+assert.match(
+  sourceOrderFix,
+  /transaction_timestamp\(\) - \(v_row\.source_index \* interval ''1 microsecond''\)/,
+);
+assert.match(
+  sourceOrderFix,
+  /transaction_timestamp\(\) \+ \(v_row\.source_index \* interval ''1 microsecond''\)/,
+);
+assert.match(sourceOrderFix, /<> 2/);
+assert.doesNotMatch(sourceOrderFix, /alter\s+table\s+public\.transactions/i);
 
 console.log('portfolio ledger migration contract checks passed');

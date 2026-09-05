@@ -20,15 +20,19 @@ deployed, and public smoke checks pass. A real private IBKR file remains
 intentionally unverified in this session; the owner can select it in the
 production importer for the final account-specific check.
 
+The follow-up database fix was applied as migration `0055` to production. The
+frontend error-detail fix is included in this release and is deployed through
+the existing Pages Git integration.
+
 ## Where things stand
 
 | Area | State |
 |---|---|
-| Frontend | Portfolio Ledger is live on Pages at deployment `18bedc32`; production domain and login fetch smoke checks passed 2026-09-05 |
-| Supabase | Migrations applied through `0054`; native-currency columns and the authenticated-only import RPC are live; **no user is on `ledger_twr_v2`** |
+| Frontend | Portfolio Ledger is live on the existing `dca-tracker-git` Pages project; the importer fix is released through its Git integration |
+| Supabase | Migrations applied through `0055`; the same-day importer ordering fix is live; **no user is on `ledger_twr_v2`** |
 | Quote Worker | Version `a6164e6b-2777-4be4-9198-81147c59ada2`, deployed 2026-09-04; foreign symbols route to Yahoo and compatible US symbols keep Schwab |
 | Email Worker | Version `b949cda2-f64d-4920-bcc8-eb69abb8d600`, deployed 2026-09-04; reminder copy uses Portfolio Ledger and generic cross-broker wording |
-| Working tree | `master` at `168351d` synced with `origin/master`; tracked files are clean and existing untracked artifacts remain outside the release |
+| Working tree | Import-order release changes are limited to the migration, importer UI, and regression contracts; existing untracked artifacts remain outside the release |
 
 Repository: `/Users/junxihuo/Workspace/dca_system`, branch `master` tracking
 `origin/master`.
@@ -55,6 +59,21 @@ Repository: `/Users/junxihuo/Workspace/dca_system`, branch `master` tracking
   `/performance`, `/exposure`, `/cashflows`, `/health`, and `/settings` all
   returned 200. No database migration, Worker deployment, or production data
   write was performed.
+
+## Follow-up import incident — 2026-09-05
+
+- Production API/Postgres logs show the unified import RPC reaches the database
+  and then rolls back during same-day share-order validation; the local parser
+  preview itself reports all 51 rows as importable.
+- The defect is in the 0050 write contract: rows are inserted by ascending
+  `source_index`, but `created_at` was offset by subtracting that index, so a
+  later same-day source row sorted before an earlier one.
+- Production migration `0055_fix_portfolio_import_source_order.sql` patches the
+  renamed legacy function used by the 0054 wrapper. The importer UI keeps
+  PostgREST `message`, `details`, `hint`, and `code` visible on failure.
+- No account-data write was performed for this follow-up; the migration and
+  frontend release use separate, audited paths.
+
 
 ## Release completed — 2026-09-04
 

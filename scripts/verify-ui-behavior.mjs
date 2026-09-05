@@ -95,6 +95,9 @@ assert.match(transactionTools, /Schwab_Transactions_/, 'combined export uses a t
 
 const portfolioImport = readFileSync(new URL('../src/components/PortfolioImportTools.tsx', import.meta.url), 'utf8');
 assert.match(portfolioImport, /import_portfolio_ledger/, 'source-neutral preview writes through the generic ledger RPC');
+assert.match(portfolioImport, /function importErrorMessage/, 'import failures have a dedicated error formatter');
+assert.match(portfolioImport, /importErrorField\(error, 'details'\)/, 'Supabase import details are not hidden behind a generic error');
+assert.match(portfolioImport, /错误码 \$\{code\}/, 'Supabase import error codes remain visible for diagnosis');
 assert.match(portfolioImport, /newLedgerItemsForAppend/, 'append imports filter known duplicates before the RPC payload');
 assert.match(portfolioImport, /p_trades:\s*ledgerToImport\.trades/, 'append RPC payload uses the filtered trade list');
 assert.match(portfolioImport, /p_cash_events:\s*ledgerToImport\.cash_events/, 'append RPC payload uses the filtered cash-event list');

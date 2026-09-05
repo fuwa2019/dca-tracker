@@ -85,6 +85,21 @@ const STATUS_META: Record<ImportPreviewRow['status'], { label: string; tone: Sta
   block: { label: '阻止', tone: 'bad', icon: AlertTriangle },
 };
 
+function importErrorField(error: unknown, key: 'message' | 'details' | 'hint' | 'code'): string {
+  if (!error || typeof error !== 'object' || !(key in error)) return '';
+  const value = (error as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function importErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message.trim() : importErrorField(error, 'message');
+  const details = importErrorField(error, 'details');
+  const hint = importErrorField(error, 'hint');
+  const code = importErrorField(error, 'code');
+  const context = [details, hint, code ? `错误码 ${code}` : ''].filter(Boolean).join(' ');
+  return [message || '导入失败，原有数据未改变。', context].filter(Boolean).join(' ');
+}
+
 type ImportStep = 'upload' | 'mode' | 'assets' | 'review' | 'commit';
 
 const STEP_LABELS: Record<ImportStep, string> = {
@@ -300,7 +315,7 @@ export function PortfolioImportTools({ transactions }: Props) {
         qc.invalidateQueries({ queryKey: ['quotes'] }),
       ]);
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : '导入失败，原有数据未改变。');
+      setError(importErrorMessage(importError));
     } finally {
       setImporting(false);
     }
