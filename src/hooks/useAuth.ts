@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { assertSupabaseConfig, SUPABASE_CONFIG_READY, supabase } from '@/lib/supabase';
 import { LOCAL_MODE, LOCAL_USER } from '@/lib/localMode';
 
 const DEV_BYPASS_AUTH = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH !== '0';
@@ -17,6 +17,11 @@ export function useAuth() {
   useEffect(() => {
     // Local build: no Supabase session, inject a synthetic user and skip auth.
     if (LOCAL_MODE) return;
+    if (!SUPABASE_CONFIG_READY) {
+      setUser(DEV_BYPASS_AUTH ? DEV_USER : null);
+      setLoading(false);
+      return;
+    }
     let mounted = true;
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
@@ -48,6 +53,7 @@ export function useAuth() {
  * the token: `Your verification code is: {{ .Token }}`.
  */
 export async function sendOtp(email: string) {
+  assertSupabaseConfig();
   return supabase.auth.signInWithOtp({
     email,
     options: { shouldCreateUser: true },
@@ -55,6 +61,7 @@ export async function sendOtp(email: string) {
 }
 
 export async function verifyEmailOtp(email: string, token: string) {
+  assertSupabaseConfig();
   return supabase.auth.verifyOtp({ email, token, type: 'email' });
 }
 

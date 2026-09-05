@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
@@ -12,7 +12,24 @@ function gitCommitDate() {
   }
 }
 
-export default defineConfig({
+const REQUIRED_PUBLIC_BUILD_VARS = [
+  'VITE_SUPABASE_URL',
+  'VITE_SUPABASE_ANON_KEY',
+  'VITE_QUOTE_WORKER_URL',
+] as const;
+
+function assertProductionPublicEnv(env: Record<string, string>) {
+  if (env.VITE_LOCAL_MODE === '1') return;
+  const missing = REQUIRED_PUBLIC_BUILD_VARS.filter((key) => !env[key]?.trim());
+  if (missing.length > 0) {
+    throw new Error(
+      `[build] Missing required public environment variables: ${missing.join(', ')}. `
+      + 'Use npm run build:local for the offline demo or configure the Pages build environment.',
+    );
+  }
+}
+
+const appConfig = {
   define: {
     __APP_COMMIT_DATE__: JSON.stringify(gitCommitDate()),
   },
@@ -85,4 +102,10 @@ export default defineConfig({
       },
     },
   },
+};
+
+export default defineConfig(({ command, mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  if (command === 'build') assertProductionPublicEnv(env);
+  return appConfig;
 });
