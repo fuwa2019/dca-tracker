@@ -14,9 +14,9 @@ including IBKR multi-currency and individual/foreign-market securities, while
 keeping calculations, privacy, and the existing single-owner portfolio boundary
 safe.
 
-The implementation and production release are complete. Migration
-`0054_portfolio_multi_currency.sql` is applied, the Pages/Worker changes are
-deployed, and public smoke checks pass. A real private IBKR file remains
+The implementation and production release are complete. Migrations 0054 and
+0055 are applied, the Pages/Worker changes are deployed, and public smoke checks
+pass. A real private IBKR file remains
 intentionally unverified in this session; the owner can select it in the
 production importer for the final account-specific check.
 
@@ -43,13 +43,13 @@ Repository: `/Users/junxihuo/Workspace/dca_system`, branch `master` tracking
   and `reset_all` when every valid source row was already marked duplicate.
   Append still requires at least one new row; replacement modes can now rebuild
   the complete normalized payload after the explicit scope confirmation.
-- Cloudflare Pages project `dca-tracker-git` deployed commit `168351d` as
-  deployment `18bedc32`; the preview URL was
-  `https://18bedc32.dca-tracker-git.pages.dev`.
-- Cache-busted canonical and preview checks returned 200. The current
-  production bundle is `index-Bjp8lZEY.js`, stylesheet is
-  `index-Dr32G4PZ.css`, and the login chunk is `login-sEDiYWjV.js`; all loaded
-  with HTTP 200.
+- Cloudflare Pages project `dca-tracker-git` deployed commit `28a8557` as
+  deployment `560ace9b`; the preview URL was
+  `https://560ace9b.dca-tracker-git.pages.dev`.
+- Cache-busted canonical and preview checks returned 200. The deployed entry
+  is `index-Czlx6YmQ.js`, and the transaction chunk is
+  `transactions-C0chZhyW.js`; both loaded with HTTP 200 and the latter contains
+  the RPC error-detail formatter and import call.
 - The production entry bundle contained the Supabase host and no entry-level
   `http://localhost` stub. In a clean real-browser session, `/login` rendered
   with zero console errors/warnings; same-origin Auth health returned 200, and
@@ -57,8 +57,8 @@ Repository: `/Users/junxihuo/Workspace/dca_system`, branch `master` tracking
   sending an OTP or reading account data.
 - Cache-busted `/`, `/login`, `/transactions`, `/transactions/all`,
   `/performance`, `/exposure`, `/cashflows`, `/health`, and `/settings` all
-  returned 200. No database migration, Worker deployment, or production data
-  write was performed.
+  returned 200. Migration 0055 is applied; no account-data write was performed
+  for this follow-up.
 
 ## Follow-up import incident — 2026-09-05
 
