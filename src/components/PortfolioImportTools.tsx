@@ -366,7 +366,7 @@ export function PortfolioImportTools({ transactions }: Props) {
       >
         <DialogContent
           closeLabel="取消"
-          className="left-0 top-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 grid-rows-[auto_1fr_auto] gap-0 rounded-none border-0 p-0 sm:rounded-none"
+          className="left-0 top-0 h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 grid-rows-[auto_1fr_auto] gap-0 overflow-hidden rounded-none border-0 p-0 sm:rounded-none"
         >
           <DialogHeader className="border-b border-border px-4 py-3 sm:px-6">
             <DialogTitle className="flex items-center gap-2 text-base">
@@ -383,10 +383,10 @@ export function PortfolioImportTools({ transactions }: Props) {
             )}
           </DialogHeader>
 
-          {/* The takeover body scrolls, and most steps are read-only content, so
-              it must be reachable and scrollable from the keyboard (WCAG 2.1.1). */}
+          {/* Keep one vertical scroll port for the takeover. It must be reachable
+              and scrollable from the keyboard (WCAG 2.1.1). */}
           <div
-            className="min-h-0 overflow-y-auto px-4 py-5 sm:px-6"
+            className="min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-5 sm:px-6"
             tabIndex={0}
             role="region"
             aria-label={`导入步骤：${STEP_LABELS[step]}`}
@@ -790,7 +790,7 @@ function ImportRows({ rows, adapter, fixingSourceIndex, fixDraft, onStartFix, on
         <span className="text-xs text-muted-foreground">{rows.length} 行</span>
       </div>
       <div
-        className="max-h-[24rem] min-w-0 overflow-auto rounded-lg border border-border"
+        className="min-w-0 overflow-x-auto rounded-lg border border-border"
         tabIndex={0}
         role="region"
         aria-label="逐行结果，可滚动"
