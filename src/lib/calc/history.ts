@@ -1,7 +1,7 @@
 import type { TransactionRow, CashflowRow } from '@/lib/database.types';
 import type { PriceMap } from '@/hooks/useDailyPrices';
 import { isoDateInNewYork } from '../nyse-calendar.ts';
-import { transactionCashAmount } from './transactionAmounts.ts';
+import { transactionCashAmount, transactionUsdPrice } from './transactionAmounts.ts';
 
 export const BENCHMARK_TICKER = 'SPY';
 
@@ -93,7 +93,7 @@ export function buildAccountValueHistory(input: BuildHistoryInput): HistoryPoint
     const dayTxns = txnsByDate.get(iso) ?? [];
     for (const txn of dayTxns) {
       const quantity = Number(txn.shares) || 0;
-      const price = Number(txn.price) || 0;
+      const price = transactionUsdPrice(txn) || 0;
       if (!(quantity > 0) || !(price > 0)) continue;
       const cashAmount = transactionCashAmount(txn);
       const delta = txn.side === 'buy' ? quantity : -quantity;
@@ -126,7 +126,7 @@ export function buildAccountValueHistory(input: BuildHistoryInput): HistoryPoint
         side: txn.side,
         ticker: txn.ticker,
         shares: Number(txn.shares),
-        price: Number(txn.price),
+        price: transactionUsdPrice(txn),
         fees_usd: Number(txn.fees_usd) || 0,
         settled_amount_usd: txn.settled_amount_usd == null
           ? undefined
@@ -183,7 +183,7 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
       side: t.side,
       ticker: t.ticker,
       shares: Number(t.shares),
-      price: Number(t.price),
+      price: transactionUsdPrice(t),
       fees_usd: Number(t.fees_usd) || 0,
       settled_amount_usd: t.settled_amount_usd == null
         ? undefined
@@ -237,7 +237,7 @@ export function buildEquityHistory(input: BuildHistoryInput): HistoryPoint[] {
     for (const t of dayTxns) {
       const delta = t.side === 'buy' ? t.shares : -t.shares;
       netShares.set(t.ticker, (netShares.get(t.ticker) ?? 0) + delta);
-      lastTradePrice.set(t.ticker, t.price);
+      lastTradePrice.set(t.ticker, transactionUsdPrice(t));
       const cashAmount = transactionCashAmount(t);
       costBasis += t.side === 'buy' ? cashAmount : -cashAmount;
     }

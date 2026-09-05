@@ -5,6 +5,20 @@ export interface TransactionAmountInput {
   fees_usd?: number | string | null;
   /** Signed settled cash from the broker: negative buy, positive sell. */
   settled_amount_usd?: number | string | null;
+  source_currency?: string | null;
+  source_price?: number | string | null;
+  fx_rate_to_usd?: number | string | null;
+}
+/** Return the transaction price in the calculation ledger's canonical USD. */
+export function transactionUsdPrice(transaction: TransactionAmountInput): number {
+  const sourcePrice = Number(transaction.source_price);
+  const fxRate = Number(transaction.fx_rate_to_usd);
+  if (transaction.source_currency && transaction.source_currency.toUpperCase() !== "USD"
+      && Number.isFinite(sourcePrice) && sourcePrice > 0
+      && Number.isFinite(fxRate) && fxRate > 0) {
+    return sourcePrice * fxRate;
+  }
+  return Number(transaction.price);
 }
 
 function settledCashEffect(transaction: TransactionAmountInput): number | null {
@@ -23,7 +37,7 @@ export function transactionFee(transaction: TransactionAmountInput): number {
 
 export function transactionNotional(transaction: TransactionAmountInput): number {
   const shares = Number(transaction.shares);
-  const price = Number(transaction.price);
+  const price = transactionUsdPrice(transaction);
   if (!Number.isFinite(shares) || !Number.isFinite(price)) return 0;
   return shares * price;
 }

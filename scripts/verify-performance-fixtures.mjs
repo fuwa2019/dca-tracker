@@ -4,6 +4,7 @@ import { buildEquityHistory } from '../src/lib/calc/history.ts';
 import {
   transactionCashAmount,
   transactionCashEffect,
+  transactionUsdPrice,
 } from '../src/lib/calc/transactionAmounts.ts';
 import { summarizeCashflows } from '../src/lib/calc/cashflows.ts';
 import { calculateBrokerCashBalance } from '../src/lib/calc/cashBalance.ts';
@@ -156,6 +157,20 @@ const settledBuy = transaction({
 assert.equal(transactionCashAmount(settledBuy), 100);
 assert.equal(transactionCashEffect(settledBuy), -100);
 
+const hkdTrade = transaction({
+  id: 'hkd-trade',
+  trade_date: '2026-01-05',
+  side: 'buy',
+  ticker: '0700.HK',
+  shares: 1,
+  price: 945.6,
+  source_currency: 'HKD',
+  source_price: 945.6,
+  fx_rate_to_usd: 0.1278,
+});
+approx(transactionUsdPrice(hkdTrade), 120.84768);
+approx(transactionCashAmount(hkdTrade), 120.84768);
+
 const [feePosition] = aggregatePositions([buyWithFee, sellWithFee]);
 approx(feePosition.shares, 6);
 approx(feePosition.avgCost, 11);
@@ -210,6 +225,9 @@ function transaction(overrides) {
     shares: overrides.shares,
     fees_usd: overrides.fees_usd ?? 0,
     settled_amount_usd: overrides.settled_amount_usd ?? null,
+    source_currency: overrides.source_currency ?? null,
+    source_price: overrides.source_price ?? null,
+    fx_rate_to_usd: overrides.fx_rate_to_usd ?? null,
     kind: 'dca',
     note: null,
     source_description: null,
