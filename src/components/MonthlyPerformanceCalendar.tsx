@@ -26,7 +26,7 @@ const MODE_OPTIONS: ReadonlyArray<{ value: CalendarMode; label: string }> = [
   { value: 'percent', label: '百分比' },
 ];
 
-const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五'];
 
 export function MonthlyPerformanceCalendar({
   history,
@@ -101,7 +101,7 @@ export function MonthlyPerformanceCalendar({
         <div>
           <div className="text-sm font-semibold tracking-tight">月度盈亏日历</div>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            只显示 {normalizedBenchmark} 实际价格日；周末、休市日和未来日期留空。
+            只显示工作日和 {normalizedBenchmark} 实际价格日；休市日和未来日期留空。
           </p>
         </div>
         <div className="grid w-full grid-cols-[2rem_minmax(5.75rem,1fr)_2rem_auto] items-center gap-2 sm:flex sm:w-auto">
@@ -145,7 +145,7 @@ export function MonthlyPerformanceCalendar({
       )}
 
       <div className="px-2 py-3 min-[380px]:px-3 sm:px-4 sm:py-4">
-        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-border bg-border">
+        <div className="grid grid-cols-5 gap-px overflow-hidden rounded-lg border border-border bg-border">
           {WEEKDAYS.map((weekday) => (
             <div key={weekday} className="bg-surface-elevated px-1 py-2 text-center text-[10px] font-medium text-muted-foreground sm:text-[11px]">
               {weekday}

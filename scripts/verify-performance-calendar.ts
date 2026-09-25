@@ -13,12 +13,25 @@ assert.equal(monthDateRange('2025-04').days, 30, 'April has 30 days');
 assert.equal(monthDateRange('2025-01').days, 31, 'January has 31 days');
 assert.equal(shiftMonth('2025-01', -1), '2024-12', 'month navigation crosses years backward');
 assert.equal(shiftMonth('2024-12', 1), '2025-01', 'month navigation crosses years forward');
-assert.equal(buildMonthCalendar('2024-02').length, 42, 'a five-row month still fills six rows');
-assert.equal(buildMonthCalendar('2026-08').length, 42, 'a six-row month is the same height as a five-row one');
+assert.equal(buildMonthCalendar('2024-02').length, 25, 'a four-row month still fills five rows');
+assert.equal(buildMonthCalendar('2026-08').length, 25, 'a month spanning six calendar weeks still fits five weekday rows');
 assert.equal(buildMonthCalendar('2025-09').at(0), '2025-09-01', 'month starting on Monday has no leading blank');
+assert.equal(buildMonthCalendar('2026-08').at(0), '2026-08-03', 'month starting on Saturday begins with its first Monday');
+assert.equal(buildMonthCalendar('2026-05').slice(0, 5).join(), ',,,,2026-05-01', 'month starting on Friday has four leading blanks');
+for (const month of ['2024-02', '2025-03', '2026-05', '2026-08', '2026-09']) {
+  const cells = buildMonthCalendar(month);
+  assert.ok(
+    cells.every((date) => date == null || ![0, 6].includes(new Date(`${date}T00:00:00Z`).getUTCDay())),
+    `${month} has no weekend cells`,
+  );
+  cells.forEach((date, index) => {
+    if (date) assert.equal(new Date(`${date}T00:00:00Z`).getUTCDay(), (index % 5) + 1, `${date} sits in its weekday column`);
+  });
+}
+assert.equal(buildMonthCalendar('2025-03').filter(Boolean).length, 21, 'every weekday of the month is present');
 assert.deepEqual(
-  buildMonthCalendar('2024-02').slice(32),
-  Array.from({ length: 10 }, () => null),
+  buildMonthCalendar('2025-03').slice(21),
+  Array.from({ length: 4 }, () => null),
   'trailing padding is blank, so the extra row renders as empty cells',
 );
 

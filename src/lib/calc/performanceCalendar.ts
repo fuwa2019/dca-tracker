@@ -26,13 +26,23 @@ export function monthDateRange(month: string): { start: string; end: string; day
   };
 }
 
-/** A month needs at most six Monday-first rows: 6 leading blanks plus 31 days. */
-export const CALENDAR_CELLS = 42;
+/** Monday-to-Friday columns. US equities do not trade on weekends. */
+export const CALENDAR_COLUMNS = 5;
 
 /**
- * Monday-first calendar cells, including leading/trailing blanks.
+ * A month's weekdays span at most five Monday-first weeks: a sixth week only
+ * appears when the month starts on a Saturday or Sunday, and then the first
+ * week holds no weekday at all.
+ */
+export const CALENDAR_CELLS = 25;
+
+/**
+ * Monday-to-Friday calendar cells, including leading/trailing blanks.
  *
- * Always `CALENDAR_CELLS` long, even for a month that fits in five rows. The
+ * Weekends are left out: the ledger rolls weekend events onto the next trading
+ * day, so a Saturday or Sunday never carries its own daily result.
+ *
+ * Always `CALENDAR_CELLS` long, even for a month that fits in four rows. The
  * grid is then the same height for every month, so the calendar cannot change
  * size when the selected month moves — which it does on load, from the current
  * month to the last month with performance data. That jump was a real layout
@@ -41,10 +51,13 @@ export const CALENDAR_CELLS = 42;
 export function buildMonthCalendar(month: string): Array<string | null> {
   const { days } = monthDateRange(month);
   const [year, monthNumber] = month.split('-').map(Number);
-  const firstWeekday = new Date(Date.UTC(year, monthNumber - 1, 1)).getUTCDay();
-  const leadingBlanks = firstWeekday === 0 ? 6 : firstWeekday - 1;
-  const cells: Array<string | null> = Array.from({ length: leadingBlanks }, () => null);
+  const cells: Array<string | null> = [];
   for (let day = 1; day <= days; day += 1) {
+    const weekday = new Date(Date.UTC(year, monthNumber - 1, day)).getUTCDay();
+    if (weekday === 0 || weekday === 6) continue;
+    if (cells.length === 0) {
+      for (let blank = 1; blank < weekday; blank += 1) cells.push(null);
+    }
     cells.push(`${month}-${String(day).padStart(2, '0')}`);
   }
   while (cells.length < CALENDAR_CELLS) cells.push(null);
