@@ -48,3 +48,21 @@ export async function coordinateEtfHoldings(queryClient: QueryClient): Promise<v
     if (import.meta.env.DEV) console.warn('[etf-holdings] background coordination failed:', error);
   }
 }
+
+/**
+ * Recompute the ledger (V2) share cache for the signed-in owner. The quote
+ * Worker runs the same `portfolioLedger` engine as the private pages and
+ * writes only percentages. Best effort: the private pages never depend on it.
+ */
+export async function refreshLedgerShareCache(): Promise<{ status: string; points: number } | null> {
+  if (!WORKER_BASE) return null;
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return null;
+  const response = await fetch(`${WORKER_BASE}/api/ledger-performance/refresh`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) return null;
+  return (await response.json().catch(() => null)) as { status: string; points: number } | null;
+}

@@ -11,7 +11,11 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DEFAULT_TXN_SORT, sortLedgerRows, TxnList, type TxnSort } from '@/components/TxnList';
-import { useTransactions } from '@/hooks/usePortfolio';
+import { useCashflows, useTransactions } from '@/hooks/usePortfolio';
+import { Card } from '@/components/ui/card';
+import { StatusBadge } from '@/components/StatusBadge';
+import { cashEventChip } from '@/lib/ledgerEvents';
+import { changeColor, shortDate, signedUsd } from '@/lib/format';
 import { transactionCashAmount } from '@/lib/calc/transactionAmounts';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +25,18 @@ const SIDES = [
   { value: 'buy', label: '买入' },
   { value: 'sell', label: '卖出' },
 ] as const;
+
+/** Cash event filters; imported FX legs and daily FX P&L share one entry. */
+const CASH_TYPES = [
+  { value: 'broker_deposit', label: '入金', kinds: ['broker_deposit'] },
+  { value: 'broker_withdrawal', label: '出金', kinds: ['broker_withdrawal'] },
+  { value: 'dividend', label: '股息', kinds: ['dividend'] },
+  { value: 'interest', label: '利息', kinds: ['interest'] },
+  { value: 'tax_fee', label: '税款 / 费用', kinds: ['tax', 'fee'] },
+  { value: 'fx', label: '换汇', kinds: ['fx_conversion', 'fx_transfer'] },
+  { value: 'stock_allocation', label: '个股划转', kinds: ['stock_allocation'] },
+] as const;
+type CashType = (typeof CASH_TYPES)[number]['value'];
 
 const KINDS = [
   { value: 'dca', label: '定投' },
@@ -39,19 +55,49 @@ function toggle<T>(set: ReadonlySet<T>, value: T): Set<T> {
 
 export function TransactionsAllPage() {
   const { data: txns = [] } = useTransactions();
+  const { data: cashRows = [] } = useCashflows();
   const [q, setQ] = useState('');
   const [sides, setSides] = useState<ReadonlySet<Side>>(() => new Set());
+  const [cashTypes, setCashTypes] = useState<ReadonlySet<CashType>>(() => new Set());
   const [kinds, setKinds] = useState<ReadonlySet<Kind>>(() => new Set());
   const [tickers, setTickers] = useState<ReadonlySet<string>>(() => new Set());
   const [notesOnly, setNotesOnly] = useState(false);
   const [sort, setSort] = useState<TxnSort>(DEFAULT_TXN_SORT);
   const [page, setPage] = useState(1);
 
-  const activeCount = sides.size + kinds.size + tickers.size + (notesOnly ? 1 : 0);
+  const activeCount = sides.size + cashTypes.size + kinds.size + tickers.size + (notesOnly ? 1 : 0);
+  // A type filter that names only cash kinds hides trades, and vice versa.
+  const showTrades = cashTypes.size === 0 || sides.size > 0;
+  const showCash = (sides.size === 0 || cashTypes.size > 0) && kinds.size === 0;
 
   useEffect(() => {
     setPage(1);
-  }, [q, sides, kinds, tickers, notesOnly]);
+  }, [q, sides, cashTypes, kinds, tickers, notesOnly]);
+
+  const filteredCash = useMemo(() => {
+    if (!showCash) return [];
+    const needle = q.trim().toLowerCase();
+    const allowed = cashTypes.size === 0
+      ? null
+      : new Set(CASH_TYPES.filter((type) => cashTypes.has(type.value)).flatMap((type) => [...type.kinds] as string[]));
+    return cashRows
+      .filter((row) => {
+        if (allowed && !allowed.has(row.cashflow_kind)) return false;
+        if (tickers.size > 0 && !(row.ticker && tickers.has(row.ticker))) return false;
+        if (notesOnly && !(row.note ?? '').trim()) return false;
+        if (!needle) return true;
+        const hay = [
+          row.effective_date ?? row.cny_out_date,
+          row.ticker ?? '',
+          row.note ?? '',
+          row.source_description ?? '',
+          cashEventChip(row.cashflow_kind).label,
+          Number(row.usd_amount ?? 0).toFixed(2),
+        ].join(' ').toLowerCase();
+        return hay.includes(needle);
+      })
+      .sort((a, b) => (b.effective_date ?? b.cny_out_date).localeCompare(a.effective_date ?? a.cny_out_date));
+  }, [cashRows, showCash, cashTypes, tickers, notesOnly, q]);
 
   const allTickers = useMemo(
     () => Array.from(new Set(txns.map((t) => t.ticker))).sort(),
@@ -60,6 +106,7 @@ export function TransactionsAllPage() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
+    if (!showTrades) return [];
     return txns.filter((t) => {
       if (sides.size > 0 && !sides.has(t.side as Side)) return false;
       if (kinds.size > 0 && !kinds.has(t.kind as Kind)) return false;
@@ -77,7 +124,7 @@ export function TransactionsAllPage() {
       ].join(' ').toLowerCase();
       return hay.includes(needle);
     });
-  }, [txns, q, sides, kinds, tickers, notesOnly]);
+  }, [txns, q, sides, kinds, tickers, notesOnly, showTrades]);
 
   // Sort the whole filtered set, then paginate: a header must not reorder
   // only the rows that happen to be on screen.
@@ -92,7 +139,7 @@ export function TransactionsAllPage() {
   return (
     <div className="workbench-page max-w-5xl space-y-3">
       <header className="workbench-intro">
-        <p className="workbench-lede">搜索、筛选并核对每一笔已入账的交易。</p>
+        <p className="workbench-lede">搜索、筛选并核对每一笔已入账的交易与现金事件。</p>
       </header>
 
       {/* Toolbar row: search on the left, add-a-filter chips beside it. */}
@@ -107,14 +154,26 @@ export function TransactionsAllPage() {
           />
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <FilterChip label="类型" count={sides.size}>
-            <DropdownMenuLabel>交易方向</DropdownMenuLabel>
+          <FilterChip label="类型" count={sides.size + cashTypes.size}>
+            <DropdownMenuLabel>交易</DropdownMenuLabel>
             {SIDES.map(({ value, label }) => (
               <DropdownMenuCheckboxItem
                 key={value}
                 checked={sides.has(value)}
                 onSelect={(event) => event.preventDefault()}
                 onCheckedChange={() => setSides((current) => toggle(current, value))}
+              >
+                {label}
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>现金事件</DropdownMenuLabel>
+            {CASH_TYPES.map(({ value, label }) => (
+              <DropdownMenuCheckboxItem
+                key={value}
+                checked={cashTypes.has(value)}
+                onSelect={(event) => event.preventDefault()}
+                onCheckedChange={() => setCashTypes((current) => toggle(current, value))}
               >
                 {label}
               </DropdownMenuCheckboxItem>
@@ -166,6 +225,7 @@ export function TransactionsAllPage() {
               className="h-8 gap-1 px-2 text-xs text-muted-foreground"
               onClick={() => {
                 setSides(new Set());
+                setCashTypes(new Set());
                 setKinds(new Set());
                 setTickers(new Set());
                 setNotesOnly(false);
@@ -193,7 +253,7 @@ export function TransactionsAllPage() {
         />
       </div>
 
-      <TxnList rows={pageRows} emptyText="没有匹配的交易" sort={sort} onSortChange={setSort} />
+      {showTrades && <TxnList rows={pageRows} emptyText="没有匹配的交易" sort={sort} onSortChange={setSort} />}
 
       {filtered.length > PAGE_SIZE && (
         <div className="flex justify-end">
@@ -206,6 +266,36 @@ export function TransactionsAllPage() {
             onNext={() => setPage((p) => Math.min(pageCount, p + 1))}
           />
         </div>
+      )}
+
+      {showCash && (
+        <section aria-labelledby="cash-events-title" className="space-y-2 pt-2">
+          <h2 id="cash-events-title" className="text-sm font-semibold">
+            现金事件 <span className="font-normal text-muted-foreground tnum">{filteredCash.length} 条</span>
+          </h2>
+          {filteredCash.length === 0 ? (
+            <p className="text-xs text-muted-foreground">没有匹配的现金事件。</p>
+          ) : (
+            <Card className="divide-y divide-border overflow-hidden p-0">
+              {filteredCash.map((row) => {
+                const chip = cashEventChip(row.cashflow_kind);
+                const amount = Number(row.usd_amount ?? 0);
+                const date = row.effective_date ?? row.usd_in_date ?? row.cny_out_date;
+                return (
+                  <div key={row.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                    <span className="w-12 shrink-0 text-xs text-muted-foreground tnum">{shortDate(date)}</span>
+                    <StatusBadge tone={chip.tone} dot className="shrink-0 text-[10px]">{chip.label}</StatusBadge>
+                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                      {[row.ticker, row.source_description ?? row.note, row.import_source ? row.import_source.toUpperCase() : '手工'].filter(Boolean).join(' · ')}
+                    </span>
+                    <span className={cn('shrink-0 font-medium tnum', changeColor(amount))}>{signedUsd(amount)}</span>
+                  </div>
+                );
+              })}
+            </Card>
+          )}
+          <p className="text-[11px] text-muted-foreground">在「资金流水」中新增、编辑或删除现金事件。</p>
+        </section>
       )}
     </div>
   );

@@ -1,7 +1,9 @@
 import { useEffect, useMemo } from 'react';
 import { useQuotes } from '@/hooks/useQuotes';
 import { registerTrackedSymbols } from '@/lib/trackedSymbols';
-import { useTransactions, useSettings, useCashBalance } from '@/hooks/usePortfolio';
+import { useTransactions, useSettings, useCashflows } from '@/hooks/usePortfolio';
+import { buildLedger, ledgerCashBalance } from '@/lib/calc/portfolioLedger';
+import { toUsdQuotes, usdRatesByTicker } from '@/lib/usdQuotes';
 import { aggregatePositions, type Position } from '@/lib/calc/position';
 import type { Quote } from '@/lib/quote';
 import { getSelectedBenchmark, getWatchlist } from '@/lib/settings';
@@ -31,7 +33,10 @@ export interface PositionsModel {
 export function usePositionsModel(): PositionsModel {
   const { data: txns = [] } = useTransactions();
   const { data: settings } = useSettings();
-  const { cash } = useCashBalance();
+  const { data: cashflows = [] } = useCashflows();
+  // Same ledger cash as the overview: every cash event plus every trade.
+  const ledger = useMemo(() => buildLedger(txns, cashflows), [txns, cashflows]);
+  const cash = useMemo(() => ledgerCashBalance(ledger), [ledger]);
 
   const selectedBenchmark = useMemo(() => getSelectedBenchmark(settings), [settings]);
   const watchlist = useMemo(() => getWatchlist(settings), [settings]);
@@ -52,7 +57,7 @@ export function usePositionsModel(): PositionsModel {
     });
   }, [symbols]);
 
-  const quoteByTicker = useMemo(() => new Map(quotes.map((q) => [q.ticker, q])), [quotes]);
+  const quoteByTicker = useMemo(() => toUsdQuotes(quotes, usdRatesByTicker(ledger.trades)), [quotes, ledger]);
   const quotesNone = !quotesLoading && quotes.length === 0 && positions.length > 0;
   const quotesPartial = !quotesLoading && positions.length > 0 && positions.some((p) => {
     const q = quoteByTicker.get(p.ticker);

@@ -15,7 +15,8 @@ export type LedgerCashEventType =
   | 'dividend'
   | 'interest'
   | 'tax'
-  | 'fee';
+  | 'fee'
+  | 'fx_conversion';
 
 export interface ImportInput {
   text: string;

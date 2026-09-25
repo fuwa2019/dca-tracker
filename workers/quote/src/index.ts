@@ -52,7 +52,7 @@ import {
   type EtfHoldingFetchWarning,
   type SupportedEtf,
 } from './etfHoldings.js';
-import { runLedgerPerformanceSync } from './ledgerPerformance';
+import { refreshLedgerPerformanceForUser, runLedgerPerformanceSync } from './ledgerPerformance';
 
 export interface Env {
   QUOTE_CACHE: KVNamespace;
@@ -155,6 +155,10 @@ export default {
       if (url.pathname === '/api/history') {
         return withCors(await handleHistory(url, env, ctx), corsHeaders);
       }
+      if (url.pathname === '/api/ledger-performance/refresh') {
+        if (req.method !== 'POST') return withCors(json({ error: 'method_not_allowed' }, 405), corsHeaders);
+        return withCors(await handleLedgerPerformanceRefresh(req, env), corsHeaders);
+      }
       if (url.pathname === '/api/etf-holdings/refresh') {
         if (req.method !== 'POST') return withCors(json({ error: 'method_not_allowed' }, 405), corsHeaders);
         return withCors(await handleEtfHoldingsRefresh(req, env), corsHeaders);
@@ -204,6 +208,38 @@ type EtfRefreshItem = {
   constituentCount?: number;
   error?: string;
 };
+
+/**
+ * Owner-triggered refresh of the ledger performance cache, so the share page
+ * follows an import immediately instead of at the next nightly sync. The
+ * caller's own session identifies the owner; the ledger is read and the
+ * percentage-only cache is written under the service role.
+ */
+async function handleLedgerPerformanceRefresh(req: Request, env: Env): Promise<Response> {
+  if (!hasSupabase(env)) return json({ error: 'service_unavailable' }, 503);
+  const authorization = req.headers.get('authorization') ?? '';
+  if (!/^Bearer\s+\S+$/i.test(authorization)) return json({ error: 'unauthorized' }, 401);
+  const userResponse = await fetch(`${env.SUPABASE_URL!}/auth/v1/user`, {
+    headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY!, Authorization: authorization },
+  });
+  if (userResponse.status === 401 || userResponse.status === 403) return json({ error: 'unauthorized' }, 401);
+  if (!userResponse.ok) throw new Error(`auth_user_${userResponse.status}`);
+  const user = (await userResponse.json()) as { id?: string };
+  if (!user.id || !/^[0-9a-f-]{36}$/i.test(user.id)) return json({ error: 'unauthorized' }, 401);
+
+  const settingsResponse = await fetch(
+    `${env.SUPABASE_URL!}/rest/v1/settings?select=selected_benchmark,benchmarks&user_id=eq.${user.id}`,
+    { headers: supabaseHeaders(env) },
+  );
+  if (!settingsResponse.ok) throw new Error(`settings_${settingsResponse.status}`);
+  const [settings] = (await settingsResponse.json()) as Array<{ selected_benchmark?: string | null; benchmarks?: string[] | null }>;
+  const benchmarks = (settings?.benchmarks ?? []).map((value) => normalizeSymbol(value)).filter(Boolean);
+  const selected = normalizeSymbol(settings?.selected_benchmark ?? '');
+  const benchmark = selected && benchmarks.includes(selected) ? selected : benchmarks[0] ?? 'SPY';
+
+  const result = await refreshLedgerPerformanceForUser(env, user.id, benchmark);
+  return json({ status: result.status, points: result.points ?? 0, complete: result.complete ?? null, reason: result.reason ?? null });
+}
 
 async function handleEtfHoldingsRefresh(req: Request, env: Env): Promise<Response> {
   if (!hasSupabase(env)) return json({ error: 'service_unavailable' }, 503);

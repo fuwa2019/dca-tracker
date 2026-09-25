@@ -5,23 +5,17 @@ import {
   useTransactions,
   useCashflows,
   useSettings,
-  useTotalInvested,
-  useCashBalance,
-  usePortfolioHistory,
 } from '@/hooks/usePortfolio';
 import { usePerformanceCacheStatus } from '@/hooks/usePerformanceCache';
+import { useLedger } from '@/hooks/useLedger';
 import { aggregatePositions, unrealizedPL, type Position } from '@/lib/calc/position';
 import { monthsToTarget } from '@/lib/calc/target';
-import { computeXirr, buildXirrEvents } from '@/lib/calc/xirr';
-import { buildAccountValueHistory, type HistoryPoint } from '@/lib/calc/history';
-import { useDailyPrices } from '@/hooks/useDailyPrices';
+import type { HistoryPoint } from '@/lib/calc/history';
+import type { LedgerSummary } from '@/lib/calc/portfolioLedger';
+import type { LedgerCheck } from '@/lib/calc/ledgerChecks';
 import type { Quote } from '@/lib/quote';
+import { toUsdQuotes, usdRatesByTicker } from '@/lib/usdQuotes';
 import { getSelectedBenchmark, getWatchlist } from '@/lib/settings';
-import etfHoldings from '@/data/etf-holdings.json';
-
-const CASH_LIKE_TICKERS = new Set(
-  (etfHoldings._meta.cashLike ?? []).map((ticker) => ticker.toUpperCase()),
-);
 
 /**
  * Shared dashboard data + derived figures. Both dashboard variants render the
@@ -33,6 +27,7 @@ export interface DashboardModel {
   positions: Position[];
   selectedBenchmark: string;
   quotes: Quote[];
+  /** Quotes converted to USD, so foreign listings value correctly. */
   quoteByTicker: Map<string, Quote>;
   quotesLoading: boolean;
   quotesError: boolean;
@@ -64,6 +59,12 @@ export interface DashboardModel {
   benchmarkCumulative: number;
   excessVsBenchmark: number;
   isEmpty: boolean;
+  ledgerSummary: LedgerSummary;
+  ledgerChecks: LedgerCheck[];
+  /** A blocking accounting check failed; figures are shown as unreconciled. */
+  unreconciled: boolean;
+  /** False when some position had to be valued without a market price. */
+  seriesComplete: boolean;
 }
 
 export function useDashboardModel(): DashboardModel {
@@ -74,8 +75,6 @@ export function useDashboardModel(): DashboardModel {
   const cashflows = cashflowsQuery.data ?? [];
   const settings = settingsQuery.data;
   const coreLoading = transactionsQuery.isPending || cashflowsQuery.isPending || settingsQuery.isPending;
-  const { total: totalInvested } = useTotalInvested();
-  const { cash } = useCashBalance();
   const selectedBenchmark = useMemo(() => getSelectedBenchmark(settings), [settings]);
   const cacheStatus = usePerformanceCacheStatus(selectedBenchmark);
 
@@ -91,12 +90,6 @@ export function useDashboardModel(): DashboardModel {
       : [...new Set([...txns.map((t) => t.ticker), ...watchlist, selectedBenchmark])],
     [coreLoading, txns, watchlist, selectedBenchmark],
   );
-  const accountValueSymbols = useMemo(
-    () => [...new Set(txns
-      .filter((txn) => !CASH_LIKE_TICKERS.has(txn.ticker.toUpperCase()))
-      .map((txn) => txn.ticker))],
-    [txns],
-  );
   const { data: quotes = [], isLoading: quotesLoading, isError: quotesError } = useQuotes(symbols);
   useEffect(() => {
     if (symbols.length === 0) return;
@@ -104,87 +97,55 @@ export function useDashboardModel(): DashboardModel {
       if (import.meta.env.DEV) console.warn('[tracked-symbols] dashboard registration failed:', error);
     });
   }, [symbols]);
-  const quoteByTicker = useMemo(() => new Map(quotes.map((q) => [q.ticker, q])), [quotes]);
+
+  const ledgerModel = useLedger({ quotes });
+  const { summary, series } = ledgerModel;
+
+  // Foreign listings are quoted in their own currency; the holdings view and
+  // the day P&L work in USD, at the same rate the ledger values them.
+  const quoteByTicker = useMemo(
+    () => toUsdQuotes(quotes, usdRatesByTicker(ledgerModel.ledger.trades)),
+    [quotes, ledgerModel.ledger],
+  );
   const quotesNone = !quotesLoading && quotes.length === 0 && positions.length > 0;
   const quotesPartial = !quotesLoading && positions.length > 0 && positions.some((p) => {
     const q = quoteByTicker.get(p.ticker);
     return !q || q.price == null;
   });
 
-  const portfolioHistory = usePortfolioHistory(selectedBenchmark);
-  const accountValueStartDate = useMemo(() => {
-    const dates = txns
-      .filter((txn) => !CASH_LIKE_TICKERS.has(txn.ticker.toUpperCase()))
-      .map((txn) => txn.trade_date)
-      .filter(Boolean)
-      .sort();
-    return dates[0] ?? null;
-  }, [txns]);
-  const dailyPrices = useDailyPrices(accountValueSymbols, accountValueStartDate);
-  const rawHistory: HistoryPoint[] = useMemo(() => {
-    const rows = portfolioHistory.data?.series ?? [];
-    return rows.map((p) => ({
-      date: p.date,
-      tradingDate: p.trading_date ?? p.date,
-      asOfTimestamp: p.as_of_timestamp ?? null,
-      provisional: !!p.is_provisional,
-      invested: Number(p.invested) || 0,
-      costBasis: Number(p.cost_basis) || 0,
-      navUser: Number(p.nav_user) || 0,
-      navSpy: Number(p.nav_spy) || 0,
-      returnPctUser: Number(p.return_pct_user) || 0,
-      returnPctSpy: Number(p.return_pct_spy) || 0,
-      pnlUser: Number(p.pnl_user) || 0,
-      pnlSpy: Number(p.pnl_spy) || 0,
-      txns: p.txns ?? [],
-    }));
-  }, [portfolioHistory.data]);
-
   const costBasisMode = (settings?.cost_basis_default as 'avg' | 'fifo') ?? 'avg';
 
   const aggregates = useMemo(() => {
-    let stockMv = 0;
     let costBasis = 0;
     let dayPL = 0;
+    let quotedMv = 0;
     for (const p of positions) {
       const q = quoteByTicker.get(p.ticker);
       const { marketValue, costBasis: cb } = unrealizedPL(p, q?.price ?? null, costBasisMode);
-      stockMv += marketValue;
+      quotedMv += marketValue;
       costBasis += cb;
       if (q?.change != null) dayPL += p.shares * q.change;
     }
     const realizedPL = allPositions.reduce((sum, p) => sum + p.realizedUsd, 0);
-    const nav = stockMv + cash;
+    // NAV, cash and total return come from the ledger so every page agrees.
+    const stockMv = positions.length > 0 ? summary.marketValueUsd : 0;
     return {
-      nav,
-      stockMv,
-      cash,
+      nav: summary.navUsd,
+      stockMv: stockMv || quotedMv,
+      cash: summary.cashUsd,
       costBasis,
       dayPL,
-      totalPL: nav - totalInvested,
-      unrealizedPL: stockMv - costBasis,
+      totalPL: summary.totalReturnUsd,
+      unrealizedPL: (stockMv || quotedMv) - costBasis,
       realizedPL,
     };
-  }, [positions, allPositions, quoteByTicker, totalInvested, cash, costBasisMode]);
+  }, [positions, allPositions, quoteByTicker, costBasisMode, summary]);
 
-  const history = useMemo(
-    () => rawHistory,
-    [rawHistory],
-  );
-  const accountValueHistory = useMemo(
-    () => buildAccountValueHistory({
-      transactions: txns,
-      cashflows,
-      prices: dailyPrices.data ?? new Map(),
-      todayQuotes: new Map(quotes.filter((quote) => quote.price != null).map((quote) => [quote.ticker, quote.price as number])),
-      excludedValueTickers: CASH_LIKE_TICKERS,
-    }),
-    [txns, cashflows, dailyPrices.data, quotes],
-  );
+  const history = ledgerModel.history;
 
   const prevNav = aggregates.nav - aggregates.dayPL;
   const dayChangePct = prevNav > 0 ? aggregates.dayPL / prevNav : 0;
-  const totalReturnPct = totalInvested > 0 ? aggregates.totalPL / totalInvested : 0;
+  const totalReturnPct = summary.totalReturnOnInvested ?? 0;
 
   const target = Number(settings?.target_usd ?? 1_000_000);
   const annualRet = Number(settings?.expected_annual_ret ?? 0.08);
@@ -196,23 +157,11 @@ export function useDashboardModel(): DashboardModel {
     targetUsd: target,
   });
 
-  const xirrEvents = useMemo(
-    () => buildXirrEvents({ cashflows, currentMarketValueUsd: aggregates.nav }),
-    [cashflows, aggregates.nav],
-  );
-  const xirr = useMemo(() => computeXirr(xirrEvents), [xirrEvents]);
-
   const last = history[history.length - 1];
-  const portfolioCumulative = last?.returnPctUser ?? 0;
-  const benchmarkCumulative = last?.returnPctSpy ?? 0;
-  const excessVsBenchmark = Number.isFinite((1 + portfolioCumulative) / (1 + benchmarkCumulative) - 1)
-    ? (1 + portfolioCumulative) / (1 + benchmarkCumulative) - 1
-    : 0;
-
   const isEmpty = positions.length === 0 && cashflows.length === 0 && txns.length === 0;
 
   return {
-    loading: coreLoading || (positions.length > 0 && quotesLoading),
+    loading: coreLoading || (positions.length > 0 && quotesLoading) || ledgerModel.loading,
     positions,
     selectedBenchmark,
     quotes,
@@ -223,7 +172,7 @@ export function useDashboardModel(): DashboardModel {
     quotesPartial,
     cacheDirty: !!cacheStatus.data?.dirty,
     history,
-    accountValueHistory,
+    accountValueHistory: history,
     last,
     costBasisMode,
     aggregates,
@@ -233,10 +182,14 @@ export function useDashboardModel(): DashboardModel {
     annualRet,
     monthlyDca,
     monthsToTarget: months,
-    xirr,
-    portfolioCumulative,
-    benchmarkCumulative,
-    excessVsBenchmark,
+    xirr: summary.xirr,
+    portfolioCumulative: summary.twr ?? 0,
+    benchmarkCumulative: summary.benchmarkReturn ?? 0,
+    excessVsBenchmark: summary.excessReturn ?? 0,
     isEmpty,
+    ledgerSummary: summary,
+    ledgerChecks: ledgerModel.checks,
+    unreconciled: ledgerModel.unreconciled,
+    seriesComplete: series.complete,
   };
 }

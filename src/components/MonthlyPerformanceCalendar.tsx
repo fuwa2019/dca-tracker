@@ -28,7 +28,17 @@ const MODE_OPTIONS: ReadonlyArray<{ value: CalendarMode; label: string }> = [
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-export function MonthlyPerformanceCalendar({ history, benchmark = 'SPY' }: { history: HistoryPoint[]; benchmark?: string }) {
+export function MonthlyPerformanceCalendar({
+  history,
+  benchmark = 'SPY',
+  amountsFromHistory = false,
+}: {
+  history: HistoryPoint[];
+  benchmark?: string;
+  /** The history carries real NAV and flows (ledger series): derive daily P&L locally. */
+  amountsFromHistory?: boolean;
+}) {
+  const localAmounts = LOCAL_MODE || amountsFromHistory;
   const normalizedBenchmark = normalizeSymbol(benchmark) || 'SPY';
   const calendarHistory = useMemo(() => {
     if (!LOCAL_MODE) return history;
@@ -71,7 +81,7 @@ export function MonthlyPerformanceCalendar({ history, benchmark = 'SPY' }: { his
     benchmark: normalizedBenchmark,
     startDate: monthBounds.start,
     endDate: monthBounds.end,
-    enabled: mode === 'amount',
+    enabled: mode === 'amount' && !localAmounts,
   });
   const remotePnlByDate = useMemo(
     () => new Map((dailyPnlQuery.data?.series ?? []).map((row) => [row.date, row.daily_pnl_user])),
@@ -81,8 +91,8 @@ export function MonthlyPerformanceCalendar({ history, benchmark = 'SPY' }: { his
   const canNavigate = !!firstMonth && !!latestMonth;
   const previousDisabled = !canNavigate || month <= firstMonth!;
   const nextDisabled = !canNavigate || month >= latestMonth!;
-  const amountReady = LOCAL_MODE || !!dailyPnlQuery.data || dailyPnlQuery.isError;
-  const amountError = mode === 'amount' && dailyPnlQuery.isError;
+  const amountReady = localAmounts || !!dailyPnlQuery.data || dailyPnlQuery.isError;
+  const amountError = mode === 'amount' && !localAmounts && dailyPnlQuery.isError;
   const noPerformance = calendarHistory.length === 0;
 
   return (
@@ -145,7 +155,7 @@ export function MonthlyPerformanceCalendar({ history, benchmark = 'SPY' }: { his
             const point = date ? pointByDate.get(date) : undefined;
             const percentValue = date ? percentByDate.get(date) : undefined;
             const amountValue = date
-              ? (LOCAL_MODE ? localPnlByDate.get(date) : remotePnlByDate.get(date))
+              ? (localAmounts ? localPnlByDate.get(date) : remotePnlByDate.get(date))
               : undefined;
             return (
               <CalendarCell
@@ -167,7 +177,7 @@ export function MonthlyPerformanceCalendar({ history, benchmark = 'SPY' }: { his
         ) : (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
             <span>{mode === 'amount' ? '金额币种：USD' : '百分比按相邻累计 TWR 点计算'}</span>
-            {mode === 'amount' && !LOCAL_MODE && dailyPnlQuery.isFetching && (
+            {mode === 'amount' && !localAmounts && dailyPnlQuery.isFetching && (
               <span className="inline-flex items-center gap-1 text-brand"><RefreshCw className="h-3 w-3 animate-spin" />读取金额缓存</span>
             )}
           </div>

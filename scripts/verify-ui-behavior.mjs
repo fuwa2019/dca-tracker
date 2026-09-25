@@ -37,7 +37,9 @@ assert.equal(shouldAutoFillField({ isEdit: false, touched: true, currentValue: '
 assert.equal(shouldAutoFillField({ isEdit: true, touched: false, currentValue: '' }), false, 'edit form is not overwritten');
 
 const performance = readFileSync(new URL('../src/app/performance.tsx', import.meta.url), 'utf8');
-assert.match(performance, /相对 \$\{selectedBenchmark\}/, 'performance summary uses selected benchmark');
+assert.match(performance, /相对 \$\{benchmark\}/, 'performance summary uses selected benchmark');
+assert.match(performance, /useLedger\(/, 'performance figures come from the unified ledger');
+assert.doesNotMatch(performance, /usePortfolioHistory/, 'performance figures never read amounts from the share cache');
 assert.doesNotMatch(performance, /相对 SPY。/, 'performance summary must not hard-code SPY');
 assert.match(performance, /MonthlyPerformanceCalendar/, 'performance page includes the monthly calendar');
 
@@ -166,7 +168,7 @@ assert.equal(ledgerEventChip('stock_allocation').direction, 'neutral', 'stock al
 assert.equal(ledgerEventChip('buy').label, '买入');
 assert.equal(ledgerEventChip('sell').label, '卖出');
 assert.equal(ledgerEventChip('broker_deposit').label, '入金');
-assert.equal(ledgerEventChip('broker_withdrawal').label, '提款');
+assert.equal(ledgerEventChip('broker_withdrawal').label, '出金');
 assert.equal(ledgerEventChip('dividend').label, '股息');
 assert.equal(ledgerEventChip('interest').label, '利息');
 assert.equal(ledgerEventChip('tax').label, '税款');
@@ -178,7 +180,8 @@ assert.equal(cashEventChip('dividend').group, 'cash', 'dividends are cash events
 // An unknown kind stays visible instead of being relabelled as a known event.
 assert.equal(ledgerEventChip('not_a_kind').label, '未知事件', 'unknown kinds are labelled, not silently mapped');
 assert.equal(ledgerEventChip(undefined).label, '未知事件', 'a missing kind is labelled, not silently mapped');
-assert.equal(LEDGER_EVENT_KINDS.length, 10, 'every trade side and cashflow kind has a chip');
+assert.equal(LEDGER_EVENT_KINDS.length, 11, 'every trade side and cashflow kind has a chip');
+assert.equal(ledgerEventChip('fx_conversion').label, '换汇损益');
 
 const txnList = readFileSync(new URL('../src/components/TxnList.tsx', import.meta.url), 'utf8');
 assert.match(txnList, /tradeEventChip/, 'transaction rows use the shared event chip');

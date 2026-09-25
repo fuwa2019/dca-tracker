@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { computeLedgerTwr } from '../src/lib/calc/ledgerTwr.ts';
-import { buildLedgerXirrEvents, computeXirr } from '../src/lib/calc/xirr.ts';
+import {
+  buildLedger,
+  buildLedgerSeries,
+  solveXirr as solveLedgerXirr,
+} from '../src/lib/calc/portfolioLedger.ts';
 
 const fixtureDir = 'docs/research/competitive/2026-08/fixtures';
 const canonical = JSON.parse(readFileSync(`${fixtureDir}/canonical-ledger.json`, 'utf8'));
@@ -34,84 +37,73 @@ const cashEvents = canonical.events
     usd_amount: event.usd_amount,
   }));
 
-const engine = computeLedgerTwr({ trades, cash_events: cashEvents, prices, as_of_date: '2026-01-15' });
-assert.ok(engine?.complete, `ledger TWR must be complete: ${engine?.warnings.join('; ')}`);
 const referenceTtwr = referenceDailyTtwr(trades, cashEvents, prices);
-const twrDifference = Math.abs((engine?.cumulative_return_pct ?? NaN) - referenceTtwr);
-assert.ok(twrDifference <= 0.00000001, `TTWROR difference too large: ${twrDifference}`);
-
-const endingMarketValue = Number(canonical.expected.ending_cash_usd)
-  + Number(canonical.expected.ending_shares.VGT) * 111
-  + Number(canonical.expected.ending_shares.SMH) * 203;
-const ledgerXirrEvents = buildLedgerXirrEvents({
-  cashflows: cashEvents.map((event) => ({
-    effective_date: event.effective_date,
-    usd_amount: event.usd_amount,
-    cashflow_kind: event.event_type,
-  })),
-  currentMarketValueUsd: endingMarketValue,
-  asOf: new Date('2026-01-15T00:00:00Z'),
-});
-const engineXirr = computeXirr(ledgerXirrEvents);
-const referenceXirr = solveXirr(ledgerXirrEvents);
-assert.ok(engineXirr != null, 'XIRR engine must converge for canonical fixture');
-assert.ok(Math.abs(engineXirr - referenceXirr) <= 0.0001, `XIRR difference exceeds 1bp: ${engineXirr} vs ${referenceXirr}`);
-
-console.log(JSON.stringify({
-  reference: 'portfolio-performance-daily-flow-formula',
-  twr_engine: engine.cumulative_return_pct,
-  twr_reference: referenceTtwr,
-  twr_difference: twrDifference,
-  xirr_engine: engineXirr,
-  xirr_reference: referenceXirr,
-  xirr_difference: Math.abs(engineXirr - referenceXirr),
-}));
-
-// The block above is a mathematical gate against the documented formula. The
-// block below is the application gate: the same shipped engine, fed Portfolio
-// Performance's own stored ledger, must reproduce what the application
-// displayed. Anything left over is a formula disagreement, not a rounding one.
 const stored = JSON.parse(readFileSync(`${fixtureDir}/portfolio-performance-stored-ledger.json`, 'utf8'));
-const observed = reproduceObservedPortfolioPerformance(stored);
-assert.equal(
-  observed.final_value_display,
-  stored.observed.final_value_usd,
-  `PP final value mismatch: ${observed.final_value_display} vs ${stored.observed.final_value_usd}`,
-);
-assert.equal(
-  observed.ttwror_display,
-  stored.observed.ttwror_pct,
-  `PP TTWROR mismatch: ${observed.ttwror_display} vs ${stored.observed.ttwror_pct}`,
-);
-assert.equal(
-  observed.irr_display,
-  stored.observed.irr_pct,
-  `PP IRR mismatch: ${observed.irr_display} vs ${stored.observed.irr_pct}`,
-);
-console.log(JSON.stringify({
-  reference: 'portfolio-performance-0.86.0-application-output',
-  ...observed,
-}));
 
-/**
- * Rebuild the application's displayed figures from its own stored integers.
- * Money is stored in cents and shares in 1e-8 units, so this reads the
- * application's rounding rather than re-applying the canonical fixture's
- * full precision. With no quote provider configured the application values a
- * security at the gross price of its latest transaction.
- */
-function reproduceObservedPortfolioPerformance(fixture) {
+// Two gates for the unified ledger (portfolioLedger), the engine every page
+// and the share cache use: (1) the documented Portfolio Performance daily-flow
+// formula on the canonical ledger, and (2) Portfolio Performance 0.86.0's own
+// stored ledger, whose displayed figures it must reproduce to the cent.
+{
+  const unified = runUnifiedLedger(trades, cashEvents, prices, '2026-01-15');
+  const difference = Math.abs(unified.twr - referenceTtwr);
+  assert.ok(difference <= 0.00000001, `unified TTWROR difference too large: ${difference}`);
+  const endingValue = Number(canonical.expected.ending_cash_usd)
+    + Number(canonical.expected.ending_shares.VGT) * 111
+    + Number(canonical.expected.ending_shares.SMH) * 203;
+  const xirrEvents = [
+    ...cashEvents
+      .filter((event) => ['broker_deposit', 'broker_withdrawal', 'stock_allocation'].includes(event.event_type))
+      .map((event) => ({ amount: -Number(event.usd_amount), when: new Date(`${event.effective_date}T00:00:00Z`) })),
+    { amount: endingValue, when: new Date('2026-01-15T00:00:00Z') },
+  ];
+  const engineXirr = solveLedgerXirr(xirrEvents);
+  const referenceXirr = solveXirr(xirrEvents);
+  assert.ok(Math.abs(engineXirr - referenceXirr) <= 0.0001, `XIRR difference exceeds 1bp: ${engineXirr} vs ${referenceXirr}`);
+  console.log(JSON.stringify({ reference: 'portfolio-performance-daily-flow-formula', twr_engine: unified.twr, twr_reference: referenceTtwr, xirr_engine: engineXirr, xirr_reference: referenceXirr }));
+}
+{
+  const { storedTrades, storedCashEvents, storedPrices, ledgerEnd } = storedLedgerInputs(stored);
+  const unified = runUnifiedLedger(storedTrades, storedCashEvents, storedPrices, ledgerEnd);
+  const finalValue = Math.round(unified.finalValue * 100) / 100;
+  assert.equal(finalValue.toFixed(2), stored.observed.final_value_usd, 'unified PP final value');
+  assert.equal((unified.twr * 100).toFixed(2), stored.observed.ttwror_pct, 'unified PP TTWROR');
+  const irr = solveLedgerXirr([
+    ...storedCashEvents
+      .filter((event) => event.event_type === 'broker_deposit' || event.event_type === 'broker_withdrawal')
+      .map((event) => ({ amount: -Number(event.usd_amount), when: new Date(`${event.effective_date}T00:00:00Z`) })),
+    { amount: finalValue, when: new Date(`${stored.observed.run_date}T00:00:00Z`) },
+  ]);
+  assert.equal((irr * 100).toFixed(2), stored.observed.irr_pct, 'unified PP IRR');
+  console.log(JSON.stringify({ reference: 'unified-ledger-vs-portfolio-performance-0.86.0', final_value: finalValue, ttwror_pct: unified.twr * 100, irr_pct: irr * 100 }));
+}
+
+function runUnifiedLedger(inputTrades, inputCashEvents, priceMap, asOfDate) {
+  const ledger = buildLedger(
+    inputTrades.map((trade) => ({
+      trade_date: trade.effective_date,
+      ticker: trade.ticker,
+      side: trade.side,
+      shares: trade.shares,
+      price: trade.price,
+      settled_amount_usd: trade.usd_amount,
+    })),
+    inputCashEvents.map((event) => ({
+      effective_date: event.effective_date,
+      cashflow_kind: event.event_type,
+      usd_amount: event.usd_amount,
+    })),
+  );
+  const series = buildLedgerSeries({ ledger, closes: priceMap, asOfDate });
+  assert.ok(series.complete, `unified ledger must be complete: ${series.warnings.map((w) => w.message).join('; ')}`);
+  const last = series.points.at(-1);
+  return { twr: last.cumulativeTwr, finalValue: last.navUsd };
+}
+
+function storedLedgerInputs(fixture) {
   const SHARE_UNIT = 1e-8;
-  const CASH_KINDS = {
-    deposit: 'broker_deposit',
-    removal: 'broker_withdrawal',
-    dividend: 'dividend',
-    interest: 'interest',
-    tax: 'tax',
-    fee: 'fee',
-  };
+  const CASH_KINDS = { deposit: 'broker_deposit', removal: 'broker_withdrawal', dividend: 'dividend', interest: 'interest', tax: 'tax', fee: 'fee' };
   const SIGNED = { deposit: 1, removal: -1, dividend: 1, interest: 1, tax: -1, fee: -1 };
-
   const storedTrades = [];
   const storedCashEvents = [];
   const storedPrices = new Map();
@@ -121,59 +113,16 @@ function reproduceObservedPortfolioPerformance(fixture) {
       const shares = row.shares_1e8 * SHARE_UNIT;
       const grossCents = row.kind === 'buy' ? row.net_cents - row.fee_cents : row.net_cents + row.fee_cents;
       const price = grossCents / 100 / shares;
-      storedTrades.push({
-        effective_date: row.date,
-        side: row.kind,
-        ticker: row.security,
-        shares,
-        price,
-        usd_amount: row.kind === 'buy' ? -amount : amount,
-      });
+      storedTrades.push({ effective_date: row.date, side: row.kind, ticker: row.security, shares, price, usd_amount: row.kind === 'buy' ? -amount : amount });
       const daily = storedPrices.get(row.security) ?? new Map();
       daily.set(row.date, price);
       storedPrices.set(row.security, daily);
       continue;
     }
-    storedCashEvents.push({
-      effective_date: row.date,
-      event_type: CASH_KINDS[row.kind],
-      usd_amount: SIGNED[row.kind] * amount,
-    });
+    storedCashEvents.push({ effective_date: row.date, event_type: CASH_KINDS[row.kind], usd_amount: SIGNED[row.kind] * amount });
   }
-
   const ledgerEnd = fixture.transactions.map((row) => row.date).sort().at(-1);
-  const twr = computeLedgerTwr({
-    trades: storedTrades,
-    cash_events: storedCashEvents,
-    prices: storedPrices,
-    as_of_date: ledgerEnd,
-  });
-  assert.ok(twr?.complete, `PP-stored TWR must be complete: ${twr?.warnings.join('; ')}`);
-  const finalValue = twr.points.at(-1).ending_nav_usd;
-
-  // The report period ends on the run date, not on the last ledger date. No
-  // price moves in between, so only the annualization window changes.
-  const irrEvents = buildLedgerXirrEvents({
-    cashflows: storedCashEvents.map((event) => ({
-      effective_date: event.effective_date,
-      usd_amount: event.usd_amount,
-      cashflow_kind: event.event_type,
-    })),
-    currentMarketValueUsd: Math.round(finalValue * 100) / 100,
-    asOf: new Date(`${fixture.observed.run_date}T00:00:00Z`),
-  });
-  const irr = computeXirr(irrEvents);
-  assert.ok(irr != null, 'PP-stored XIRR must converge');
-
-  return {
-    final_value_usd: finalValue,
-    final_value_display: (Math.round(finalValue * 100) / 100).toFixed(2),
-    ttwror_pct: twr.cumulative_return_pct * 100,
-    ttwror_display: (twr.cumulative_return_pct * 100).toFixed(2),
-    irr_pct: irr * 100,
-    irr_display: (irr * 100).toFixed(2),
-    quote_gap_pct: (engine.cumulative_return_pct - twr.cumulative_return_pct) * 100,
-  };
+  return { storedTrades, storedCashEvents, storedPrices, ledgerEnd };
 }
 
 function referenceDailyTtwr(inputTrades, inputCashEvents, priceMap) {

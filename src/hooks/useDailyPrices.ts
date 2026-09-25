@@ -9,6 +9,14 @@ const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ??
 
 export type PriceMap = Map<string, Map<string, number>>; // ticker → date → close
 
+/**
+ * `adjusted` is the total-return proxy used for benchmarks and the legacy
+ * curve. `close` is the ordinary close the ledger values positions at:
+ * dividends are explicit cash events there, so adjusted prices would count
+ * them twice.
+ */
+export type PriceBasis = 'adjusted' | 'close';
+
 interface DailyPriceRow {
   ticker: string;
   trade_date: string;
@@ -23,7 +31,7 @@ interface WorkerHistoryResponse {
   }>;
 }
 
-async function readFromSupabase(symbols: string[], earliestDate: string): Promise<PriceMap> {
+async function readFromSupabase(symbols: string[], earliestDate: string, basis: PriceBasis): Promise<PriceMap> {
   const { data, error } = await supabase
     .from('daily_prices')
     .select('ticker,trade_date,close,adjusted_close')
@@ -38,7 +46,7 @@ async function readFromSupabase(symbols: string[], earliestDate: string): Promis
       m = new Map();
       map.set(row.ticker, m);
     }
-    m.set(row.trade_date, Number(row.adjusted_close ?? row.close));
+    m.set(row.trade_date, Number(basis === 'close' ? row.close : (row.adjusted_close ?? row.close)));
   }
   return map;
 }
@@ -78,7 +86,7 @@ function mergePriceMaps(base: PriceMap, extra: PriceMap): PriceMap {
   return merged;
 }
 
-function workerHistoryToMap(data: WorkerHistoryResponse): PriceMap {
+function workerHistoryToMap(data: WorkerHistoryResponse, basis: PriceBasis): PriceMap {
   const map: PriceMap = new Map();
   for (const row of data.series ?? []) {
     const ticker = normalizeSymbol(row.ticker);
@@ -88,7 +96,7 @@ function workerHistoryToMap(data: WorkerHistoryResponse): PriceMap {
       map.set(ticker, prices);
     }
     for (const point of row.points ?? []) {
-      const px = point.adjustedClose ?? point.close;
+      const px = basis === 'close' ? point.close : (point.adjustedClose ?? point.close);
       if (point.date && Number.isFinite(px)) prices.set(point.date, Number(px));
     }
   }
@@ -115,13 +123,13 @@ function pickRange(earliestDate: string): string {
   return 'max';
 }
 
-async function backfillViaWorker(symbols: string[], earliestDate: string): Promise<PriceMap> {
+async function backfillViaWorker(symbols: string[], earliestDate: string, basis: PriceBasis): Promise<PriceMap> {
   if (!WORKER_BASE) return new Map();
   const range = pickRange(earliestDate);
   const url = `${WORKER_BASE}/api/history?symbols=${encodeURIComponent(symbols.join(','))}&range=${range}`;
   const r = await fetch(url);
   if (!r.ok) throw new Error(`worker /api/history ${r.status}`);
-  const workerMap = workerHistoryToMap((await r.json()) as WorkerHistoryResponse);
+  const workerMap = workerHistoryToMap((await r.json()) as WorkerHistoryResponse, basis);
   // Give the waitUntil a moment to land before re-querying.
   await new Promise((resolve) => setTimeout(resolve, 800));
   return workerMap;
@@ -132,11 +140,11 @@ async function backfillViaWorker(symbols: string[], earliestDate: string): Promi
  * Reads from Supabase first; if any symbol's coverage falls short, triggers a
  * one-shot backfill via the quote worker, then re-reads.
  */
-export function useDailyPrices(symbols: string[], earliestDate: string | null) {
+export function useDailyPrices(symbols: string[], earliestDate: string | null, basis: PriceBasis = 'adjusted') {
   const uniqSorted = normalizeSymbols(symbols);
   const enabled = uniqSorted.length > 0 && !!earliestDate;
   return useQuery<PriceMap>({
-    queryKey: ['daily_prices', uniqSorted.join(','), earliestDate],
+    queryKey: ['daily_prices', uniqSorted.join(','), earliestDate, basis],
     enabled,
     staleTime: 10 * 60 * 1000,
     queryFn: async () => {
@@ -149,10 +157,10 @@ export function useDailyPrices(symbols: string[], earliestDate: string | null) {
         return map;
       }
       const ed = earliestDate as string;
-      let map = await readFromSupabase(uniqSorted, ed);
+      let map = await readFromSupabase(uniqSorted, ed, basis);
       if (!coverageOk(map, uniqSorted, ed)) {
-        const workerMap = await backfillViaWorker(uniqSorted, ed);
-        map = await readFromSupabase(uniqSorted, ed);
+        const workerMap = await backfillViaWorker(uniqSorted, ed, basis);
+        map = await readFromSupabase(uniqSorted, ed, basis);
         map = mergePriceMaps(map, workerMap);
       }
       return map;

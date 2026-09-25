@@ -225,32 +225,28 @@ for the production application.
 
 ## Financial Contracts
 
-- Account NAV is holdings market value plus cash reconstructed from imported
-  broker deposits, dated stock allocations, and ETF trade cash. Trade-only
-  imports without broker deposits retain the legacy zero-cash behavior.
-- Portfolio CSV imports keep confirmed ETF trades, exclude individual-stock
-  trades, preserve recognized `Deposit` rows, and record the stock sleeve's net
-  required funding as a negative allocation on the actual stock trade date.
-- Stock sale proceeds fund later stock buys before any additional stock funding
-  is allocated. Stock funding that exceeds deposits available by that date
-  blocks import. A temporary negative retained-ETF cash timeline is a
-  non-blocking warning because dividends, interest, and other non-Deposit cash
-  events are intentionally omitted; the importer never invents a balancing
-  deposit.
-- A Schwab transaction's signed `Amount` is authoritative for cash, cost, and
-  proceeds. Quantity times price plus/minus fees is only the fallback for
-  six-column Portfolio CSV and manually entered transactions.
-- Manual cashflows remain available for FX-loss reporting. Imported broker
-  deposits plus dated stock allocations drive account cash, invested capital,
-  and XIRR; when no broker deposit exists, XIRR falls back to legacy manual
-  cashflows.
-- The performance chart is daily-linked TWR using inferred trade-funding flows;
-  XIRR is a separate money-weighted metric and never draws the curve.
-- A flow on day `t` enters the next sub-period's starting NAV.
+- `src/lib/calc/portfolioLedger.ts` is the single engine for every private
+  return figure. Transactions and cashflows become one dated ledger; NAV,
+  cash, net invested, total return, TWR, XIRR, the NAV bridge and daily P&L
+  all derive from that one series. See
+  `docs/decisions/2026-09-25-unified-portfolio-ledger.md`.
+- External flows are broker deposits, broker withdrawals and stock-sleeve
+  allocations. Inflows count at the start of their day, outflows at the end.
+  Dividends, interest, taxes, fees and FX conversion P&L are internal return.
+  Manual CNY->USD transfers only fund the ledger when no broker deposit
+  exists; otherwise they are exchange-loss records.
+- Positions are valued at the ordinary close in their own currency times the
+  USD rate; the benchmark uses the adjusted close as its total-return proxy.
+- A trade-only ledger infers funding from unfunded buys and is flagged.
+- A broker's signed settlement amount is authoritative for trade cash;
+  quantity times price plus/minus fees is only the fallback.
+- `src/lib/calc/ledgerChecks.ts` reconciles cash to the cent and positions
+  exactly; a failed blocking check marks figures "数据未对账".
+- The quote Worker writes the percentage-only `ledger_twr_v2` share cache with
+  the same module. The SQL V1 curve remains only for accounts still on
+  `adjusted_proxy_v1`.
 - Average cost is the default; FIFO is supported. Oversells must return a
   validation error.
-- Adjusted close is the benchmark total-return proxy.
-- Dashboard and public share performance must use the same cached TWR series.
 - Form default dates use local calendar dates, not UTC date truncation.
 
 ## Database Discipline

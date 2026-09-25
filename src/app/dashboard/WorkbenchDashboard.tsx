@@ -14,6 +14,7 @@ import {
 import { Area, AreaChart, ResponsiveContainer, Tooltip, YAxis } from 'recharts';
 import { HoldingsList } from '@/components/HoldingsList';
 import { StatusBadge } from '@/components/StatusBadge';
+import { UnreconciledBadge } from '@/components/UnreconciledBadge';
 import { Button } from '@/components/ui/button';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { signedPct, signedUsd, usd, changeColor } from '@/lib/format';
@@ -74,6 +75,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
     excessVsBenchmark,
     isEmpty,
     costBasisMode,
+    ledgerChecks,
   } = model;
 
   const [range, setRange] = useState<OverviewRange>('1Y');
@@ -159,6 +161,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <HeroValue value={aggregates.nav} />
+          <UnreconciledBadge checks={ledgerChecks} className="mt-2" />
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
             <span className={changeColor(rangeChange.amount)}>{signedUsd(rangeChange.amount)}</span>
             <span className={changeColor(rangeChange.amount)}>

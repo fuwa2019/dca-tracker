@@ -1,5 +1,12 @@
 # Performance Calculation Spec
 
+> **Current contract (2026-09-25):** every private figure comes from the
+> unified ledger in `src/lib/calc/portfolioLedger.ts`, and the share cache is
+> written by the quote Worker with the same module (`ledger_twr_v2`). See
+> `docs/decisions/2026-09-25-unified-portfolio-ledger.md`. The sections below
+> describe the SQL V1 trade-funding curve, which remains only for accounts
+> still on `adjusted_proxy_v1`.
+
 This project uses an IBKR PortfolioAnalyst-style performance curve for the
 dashboard and public share view. The UI is intentionally report-like; the
 important contract is that the dashboard chart and share chart read the same

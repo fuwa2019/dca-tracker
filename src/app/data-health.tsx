@@ -16,6 +16,8 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { useSettings, useTransactions } from '@/hooks/usePortfolio';
+import { useLedger } from '@/hooks/useLedger';
+import type { LedgerCheck } from '@/lib/calc/ledgerChecks';
 import { useDemoDcaData } from '@/hooks/useDemoDcaData';
 import {
   usePerformanceCacheStatus,
@@ -79,6 +81,7 @@ export function DataHealthPage() {
   }, [txns]);
   const cacheStatus = usePerformanceCacheStatus(selectedBenchmark);
   const refreshCache = useRefreshPerformanceCache(selectedBenchmark);
+  const ledger = useLedger({ live: true });
   const [backfillProgress, setBackfillProgress] = useState<BackfillRunProgress | null>(null);
   const schwabAuth = useSchwabAuthStatus();
   const reauthorize = useSchwabReauthorize();
@@ -199,10 +202,10 @@ export function DataHealthPage() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <HealthTile
           icon={Activity}
-          label="输入数据"
-          value={healthLoading ? '检查中' : hasEvents ? '可计算' : '缺数据'}
-          tone={healthLoading ? 'info' : hasEvents ? 'ok' : 'bad'}
-          detail={healthLoading ? '正在读取交易记录' : `${txns.length} 笔交易`}
+          label="账务对账"
+          value={ledger.loading ? '检查中' : !hasEvents && ledger.ledger.cash.length === 0 ? '缺数据' : ledger.unreconciled ? '未对账' : '已对账'}
+          tone={ledger.loading ? 'info' : !hasEvents && ledger.ledger.cash.length === 0 ? 'bad' : ledger.unreconciled ? 'bad' : ledger.checks.some((c) => c.status === 'warn') ? 'warn' : 'ok'}
+          detail={ledger.loading ? '正在读取账本' : `${txns.length} 笔交易 · ${ledger.ledger.cash.length} 条现金事件`}
         />
         <HealthTile
           icon={Database}
@@ -226,6 +229,8 @@ export function DataHealthPage() {
           detail={healthLoading ? '正在读取分享链接' : `${(shareLinks.data ?? []).length} 个总链接`}
         />
       </div>
+
+      <LedgerChecksCard checks={ledger.checks} loading={ledger.loading} />
 
       <Card>
         <CardHeader className="pb-3">
@@ -663,6 +668,54 @@ function StatusLine({
       <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={cn('mt-1 truncate text-sm font-medium tnum', tone && toneClass[tone])}>{value}</div>
     </div>
+  );
+}
+
+const CHECK_TONE: Record<LedgerCheck['status'], StatusTone> = {
+  pass: 'ok',
+  fail: 'bad',
+  warn: 'warn',
+  unavailable: 'neutral',
+};
+
+const CHECK_LABEL: Record<LedgerCheck['status'], string> = {
+  pass: '通过',
+  fail: '未通过',
+  warn: '需关注',
+  unavailable: '无法校验',
+};
+
+/** Accounting checks: the numbers are only shown as reconciled when these pass. */
+function LedgerChecksCard({ checks, loading }: { checks: LedgerCheck[]; loading: boolean }) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">账务核对</CardTitle>
+        <CardDescription className="text-xs">
+          标记“阻断”的检查未通过时，总览和业绩页会在相关数字旁显示“数据未对账”。
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="h-40 animate-pulse rounded-lg bg-surface-elevated" aria-busy="true" />
+        ) : (
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {checks.map((check) => (
+              <li key={check.id} className="flex flex-col gap-1 px-3 py-2.5 sm:flex-row sm:items-start sm:gap-3">
+                <div className="flex shrink-0 items-center gap-2 sm:w-44">
+                  <StatusBadge tone={CHECK_TONE[check.status]} dot>{CHECK_LABEL[check.status]}</StatusBadge>
+                  <span className="text-sm font-medium">{check.label}</span>
+                </div>
+                <p className="min-w-0 flex-1 text-xs leading-5 text-muted-foreground">
+                  {check.blocking && <span className="mr-1 rounded border border-border px-1 text-[10px]">阻断</span>}
+                  {check.message}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

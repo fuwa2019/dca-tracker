@@ -2,8 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { Database, PerformanceHistory, PortfolioHistory, SharedHistory } from '@/lib/database.types';
 import { aggregatePositions } from '@/lib/calc/position';
-import { calculateBrokerCashBalance } from '@/lib/calc/cashBalance';
-import { totalTradeFunding } from '@/lib/calc/history';
 import { normalizeSymbol } from '@/lib/symbols';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { summarizeCashflows } from '@/lib/calc/cashflows';
@@ -158,44 +156,6 @@ export function usePositions() {
   const txns = useTransactions();
   const positions = txns.data ? aggregatePositions(txns.data).filter((p) => p.shares > 1e-9) : [];
   return { ...txns, positions };
-}
-
-export function useTotalInvested() {
-  const cashflows = useCashflows();
-  const txns = useTransactions();
-  const brokerDeposits = (cashflows.data ?? []).filter((row) => row.cashflow_kind === 'broker_deposit');
-  const brokerCashEvents = (cashflows.data ?? []).filter((row) =>
-    row.cashflow_kind === 'broker_deposit' || row.cashflow_kind === 'stock_allocation');
-  const total = brokerDeposits.length > 0
-    ? summarizeCashflows(brokerCashEvents).totalUsdActual
-    : totalTradeFunding(txns.data ?? []);
-  return {
-    ...txns,
-    total,
-    isLoading: txns.isLoading || cashflows.isLoading,
-    isError: txns.isError || cashflows.isError,
-  };
-}
-
-/**
- * Broker deposits and dated stock allocations participate in account cash.
- * Manual FX rows remain available for exchange-loss reporting without being counted twice.
- */
-export function useCashBalance() {
-  const cashflows = useCashflows();
-  const txns = useTransactions();
-  const brokerDeposits = (cashflows.data ?? []).filter((row) => row.cashflow_kind === 'broker_deposit');
-  const brokerCashEvents = (cashflows.data ?? []).filter((row) =>
-    row.cashflow_kind === 'broker_deposit' || row.cashflow_kind === 'stock_allocation');
-  const cash = brokerDeposits.length > 0
-    ? calculateBrokerCashBalance(brokerCashEvents, txns.data ?? [])
-    : 0;
-  return {
-    cash,
-    depositedUsd: summarizeCashflows(brokerCashEvents).totalUsdActual,
-    isLoading: cashflows.isLoading || txns.isLoading,
-    isError: cashflows.isError || txns.isError,
-  };
 }
 
 export function useExchangeLoss() {

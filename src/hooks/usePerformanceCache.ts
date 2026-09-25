@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { normalizeSymbol } from '@/lib/symbols';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { localCacheStatus } from '@/lib/localData';
+import { refreshLedgerShareCache } from '@/lib/etfHoldings';
 import type {
   HistoryCacheRefresh,
   PerformanceCacheStatus,
@@ -98,7 +99,11 @@ export function useRefreshPerformanceCache(benchmark?: string) {
     mutationFn: async () => {
       if (LOCAL_MODE) return localCacheStatus as unknown as HistoryCacheRefresh;
       const startedAt = performance.now();
+      // The ledger cache is what the share page reads once the owner is on
+      // the ledger method; refreshing it alongside keeps both current.
+      const ledgerRefresh = refreshLedgerShareCache().catch(() => null);
       const { data, error } = await rpcRefreshPerformanceCache(normalizedBenchmark);
+      await ledgerRefresh;
       const elapsedMs = Math.max(0, Math.round(performance.now() - startedAt));
       if (error) {
         if (!isMissingRpc(error)) throw error;

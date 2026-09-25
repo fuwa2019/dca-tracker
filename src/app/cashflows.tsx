@@ -6,12 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { CashflowForm } from '@/components/CashflowForm';
+import { CashEventForm, MANUAL_CASH_KINDS } from '@/components/CashEventForm';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { StatCard } from '@/components/StatCard';
 import { EmptyState } from '@/components/EmptyState';
 import { Kicker } from '@/components/Kicker';
 import { StatusBadge } from '@/components/StatusBadge';
 import { cashEventChip } from '@/lib/ledgerEvents';
 import { useCashflows, useExchangeLoss } from '@/hooks/usePortfolio';
+import { useLedger } from '@/hooks/useLedger';
 import { useEnterMotion } from '@/hooks/useEnterMotion';
 import { supabase } from '@/lib/supabase';
 import { cny, usd, signedUsd, signedPct, changeColor, shortDate } from '@/lib/format';
@@ -25,12 +28,14 @@ export function CashflowsPage() {
   const enter = useEnterMotion();
   const { data: rows = [] } = useCashflows();
   const stats = useExchangeLoss();
+  const { summary, ledger } = useLedger();
+  const externalCount = ledger.cash.filter((event) => event.role === 'external' && !event.inferred).length;
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
+  const [addMode, setAddMode] = useState<'event' | 'fx'>('event');
   const [editing, setEditing] = useState<CashRow | null>(null);
   const [deleting, setDeleting] = useState<CashRow | null>(null);
   const manualFxTransferCount = rows.filter((row) => row.cashflow_kind === 'fx_transfer' && row.cny_amount !== null && row.target_rate !== null).length;
-  const externalCashflowCount = rows.filter((row) => row.cashflow_kind !== 'stock_allocation').length;
 
   const del = useMutation({
     mutationFn: async (id: string) => {
@@ -54,7 +59,7 @@ export function CashflowsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Kicker en="Cash Flow" zh="资金流水" />
-          <p className="mt-1.5 text-[11px] text-muted-foreground">手工换汇用于汇损统计；导入的原始入金与个股划转参与账户现金和 XIRR。</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">入金与出金是外部资金流，决定 TWR 子区间与 XIRR；股息、利息、税费与换汇损益属于投资收益。手工换汇 (CNY) 只用于汇损统计。</p>
         </div>
         <Dialog open={adding} onOpenChange={setAdding}>
           <DialogTrigger asChild>
@@ -62,13 +67,30 @@ export function CashflowsPage() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>新增资金流</DialogTitle></DialogHeader>
-            <CashflowForm onDone={() => setAdding(false)} />
+            <SegmentedControl
+              value={addMode}
+              onChange={setAddMode}
+              name="cash-add-mode"
+              ariaLabel="选择资金流类型"
+              size="sm"
+              options={[
+                { value: 'event', label: '券商现金事件' },
+                { value: 'fx', label: '手工换汇 (CNY)' },
+              ]}
+            />
+            {addMode === 'event'
+              ? <CashEventForm onDone={() => setAdding(false)} />
+              : <CashflowForm onDone={() => setAdding(false)} />}
           </DialogContent>
         </Dialog>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard label="累计 USD 到账" value={usd.format(stats.totalUsdActual)} sub={`${externalCashflowCount} 笔外部资金记录`} />
+        <StatCard
+          label="净投入 (入金 − 出金)"
+          value={usd.format(summary.netInvestedUsd)}
+          sub={`${externalCount} 笔外部资金 · 投资收入 ${signedUsd(summary.incomeUsd)} · 税费 ${signedUsd(summary.costsUsd)}`}
+        />
         <StatCard
           label="累计损耗"
           value={signedUsd(-stats.totalLoss)}
@@ -102,7 +124,8 @@ export function CashflowsPage() {
               const rate = Number(c.target_rate);
               const ideal = rate > 0 ? (cnyAmt + feesCny) / rate : 0;
               const loss = ideal - usdAmt;
-              const displayDate = c.usd_in_date ?? c.cny_out_date;
+              const displayDate = c.effective_date ?? c.usd_in_date ?? c.cny_out_date;
+              const isManualEvent = !c.import_source && MANUAL_CASH_KINDS.some((item) => item.value === c.cashflow_kind);
               return (
                 <motion.div
                   key={c.id}
@@ -141,7 +164,7 @@ export function CashflowsPage() {
                       {isManualFxTransfer && usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      {isManualFxTransfer && (
+                      {(isManualFxTransfer || isManualEvent) && (
                         <Button aria-label={`编辑 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -183,7 +206,7 @@ export function CashflowsPage() {
                         {c.note && <span className="truncate">· {c.note}</span>}
                       </div>
                       <div className="ml-2 flex shrink-0 gap-1">
-                        {isManualFxTransfer && (
+                        {(isManualFxTransfer || isManualEvent) && (
                           <Button aria-label={`编辑 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -205,9 +228,15 @@ export function CashflowsPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>编辑资金流</DialogTitle>
-            <DialogDescription>{editing && `${editing.cny_out_date} · ${cny.format(Number(editing.cny_amount))}`}</DialogDescription>
+            <DialogDescription>
+              {editing && (editing.cashflow_kind === 'fx_transfer'
+                ? `${editing.cny_out_date} · ${cny.format(Number(editing.cny_amount))}`
+                : `${editing.effective_date ?? editing.cny_out_date} · ${signedUsd(Number(editing.usd_amount ?? 0))}`)}
+            </DialogDescription>
           </DialogHeader>
-          {editing && <CashflowForm initial={editing} onDone={() => setEditing(null)} />}
+          {editing && (editing.cashflow_kind === 'fx_transfer'
+            ? <CashflowForm initial={editing} onDone={() => setEditing(null)} />
+            : <CashEventForm initial={editing} onDone={() => setEditing(null)} />)}
         </DialogContent>
       </Dialog>
 

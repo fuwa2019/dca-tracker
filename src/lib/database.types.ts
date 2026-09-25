@@ -27,7 +27,8 @@ export type LedgerCashflowKind =
   | 'dividend'
   | 'interest'
   | 'tax'
-  | 'fee';
+  | 'fee'
+  | 'fx_conversion';
 
 export interface CashflowRow {
   id: string;

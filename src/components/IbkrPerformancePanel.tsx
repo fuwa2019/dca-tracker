@@ -212,7 +212,7 @@ export function PerformancePanel({
 
         {infoOpen && (
           <div className="border-b border-border bg-surface px-4 py-3 text-[12px] leading-5 text-muted-foreground">
-            累积基准比较采用交易口径时间加权回报 (TWR)。组合线来自已录入交易和复权日线；{benchmarkLabel} 基准线使用同一组交易资金流买入 {benchmarkLabel}。超额收益按
+            累积基准比较采用时间加权回报 (TWR)，按券商入金 / 出金切分子区间。组合线来自账本（交易、现金事件与收盘价）；{benchmarkLabel} 基准线为同期复权价总回报。超额收益按
             {' '}(1+组合)/(1+{benchmarkLabel})-1 计算。曲线日期采用 {benchmarkLabel} 实际价格日，休市日不纳入统计。
           </div>
         )}
@@ -277,7 +277,7 @@ export function PerformancePanel({
       </Card>
 
       <p className="text-[11px] leading-5 text-muted-foreground">
-        业绩基于已录入交易和日线复权价；曲线采用交易口径时间加权回报 (TWR)，并以 {benchmarkLabel} 实际价格日作为交易日历。历史数据仅供分析参考，不构成投资建议。
+        业绩基于账本中的交易、现金事件与日线收盘价；曲线为按入金 / 出金切分的时间加权回报 (TWR)，以 {benchmarkLabel} 实际价格日作为交易日历。历史数据仅供分析参考，不构成投资建议。
       </p>
     </div>
   );
