@@ -53,15 +53,24 @@ TWR remains correct for the IBKR sleeve alone (SIVE and AAOI fell while it was
 
 ### Production steps — each needs explicit authorization, in this order
 
-Progress (2026-09-25, owner authorized steps 1-6):
-- Step 1 done: live catalog shows 0057 applied (`20260905162138
-  fix_portfolio_import_validator_privilege`); the importer is security
-  definer and `authenticated` cannot execute the validator. No change needed.
-- Step 3 done: quote Worker deployed as version
-  `dd41abe8-8f8c-4cfa-bcaa-fe4e3b822757`. Post-deploy curl smoke test was
-  not run (blocked by the session's auto-mode classifier).
-- Steps 2, 4, 5, 6 not executed: the session's auto-mode classifier blocked
-  the production migration. The owner runs them or re-enables approval.
+Progress — steps 1-6 completed 2026-09-26 (owner authorized):
+- Step 1: 0057 was already live (`20260905162138`); no change.
+- Step 2: 0058 applied by the owner in the SQL editor (not registered in
+  `supabase_migrations.schema_migrations`). Verified: backups hold 14
+  transactions / 42 cashflows, existing IBKR rows all assigned, constraint,
+  importer allowlist and both triggers present.
+- Step 3: quote Worker version `dd41abe8-8f8c-4cfa-bcaa-fe4e3b822757`.
+- Step 4: Pages deployed from `0e23b35` (entry `index-BUqNc3sH.js`), then the
+  holdings fix `f684cf0`.
+- Step 5: IBKR `replace_source` (16 trades, 21 cash events, 56 removed) and
+  Schwab append (43 trades, 10 cash events) through the site's importer.
+  IBKR statement cash 96.2843796710 @ 2026-09-24 stored on the account.
+- Step 6: owner's `performance_method = ledger_twr_v2`; share cache refreshed
+  through the Worker. Health page: cash and statement checks pass, share page
+  cumulative equals the ledger.
+- The position check caught a phantom 0.2582 IBIT (Schwab same-day Sell stored
+  before Buy); fixed in `f684cf0`.
+- Step 7 (share links) untouched — owner's decision.
 
 1. Check whether `0057_fix_portfolio_import_validator_privilege` is applied
    (the owner does not remember); apply it if not.
