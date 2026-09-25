@@ -9,9 +9,9 @@ import {
 import { usePerformanceCacheStatus } from '@/hooks/usePerformanceCache';
 import { useLedger } from '@/hooks/useLedger';
 import { aggregatePositions, unrealizedPL, type Position } from '@/lib/calc/position';
-import { monthsToTarget } from '@/lib/calc/target';
+import { QQQM_GOAL_UI_PATHS, simulateQqqmGoal } from '@/lib/calc/goalProbability';
 import type { HistoryPoint } from '@/lib/calc/history';
-import type { LedgerSummary } from '@/lib/calc/portfolioLedger';
+import type { LedgerSeries, LedgerSummary } from '@/lib/calc/portfolioLedger';
 import type { LedgerCheck } from '@/lib/calc/ledgerChecks';
 import type { Quote } from '@/lib/quote';
 import { toUsdQuotes, usdRatesByTicker } from '@/lib/usdQuotes';
@@ -51,15 +51,20 @@ export interface DashboardModel {
   dayChangePct: number;
   totalReturnPct: number;
   target: number;
-  annualRet: number;
   monthlyDca: number;
-  monthsToTarget: number | null;
+  /**
+   * Goal outlook from the same probability model as the settings planner
+   * (QQQM research model, baseline scenario). Null until NAV, target and a
+   * monthly contribution are all known.
+   */
+  goal: { p50Years: number; within20Years: number | null } | null;
   xirr: number | null;
   portfolioCumulative: number;
   benchmarkCumulative: number;
   excessVsBenchmark: number;
   isEmpty: boolean;
   ledgerSummary: LedgerSummary;
+  ledgerSeries: LedgerSeries;
   ledgerChecks: LedgerCheck[];
   /** A blocking accounting check failed; figures are shown as unreconciled. */
   unreconciled: boolean;
@@ -148,14 +153,25 @@ export function useDashboardModel(): DashboardModel {
   const totalReturnPct = summary.totalReturnOnInvested ?? 0;
 
   const target = Number(settings?.target_usd ?? 1_000_000);
-  const annualRet = Number(settings?.expected_annual_ret ?? 0.08);
   const monthlyDca = Number(settings?.monthly_dca_usd ?? 0);
-  const { months } = monthsToTarget({
-    currentValueUsd: aggregates.nav,
-    monthlyContributionUsd: monthlyDca,
-    annualReturn: annualRet,
-    targetUsd: target,
-  });
+  const hasMonthly = settings?.monthly_dca_usd != null;
+  // Rounded so live quote ticks do not rerun thousands of paths.
+  const navForGoal = Math.round(aggregates.nav / 10) * 10;
+  const goal = useMemo(() => {
+    if (ledgerModel.loading || !hasMonthly || target <= 0 || navForGoal < 0) return null;
+    const simulation = simulateQqqmGoal({
+      initialValueUsd: navForGoal,
+      monthlyContributionUsd: monthlyDca,
+      targetUsd: target,
+      stress: 'baseline',
+      pathCount: QQQM_GOAL_UI_PATHS,
+    });
+    if (!simulation) return null;
+    return {
+      p50Years: simulation.quantiles.p50,
+      within20Years: simulation.successByYear.find((point) => point.years === 20)?.probability ?? null,
+    };
+  }, [ledgerModel.loading, hasMonthly, target, navForGoal, monthlyDca]);
 
   const last = history[history.length - 1];
   const isEmpty = positions.length === 0 && cashflows.length === 0 && txns.length === 0;
@@ -179,15 +195,15 @@ export function useDashboardModel(): DashboardModel {
     dayChangePct,
     totalReturnPct,
     target,
-    annualRet,
     monthlyDca,
-    monthsToTarget: months,
+    goal,
     xirr: summary.xirr,
     portfolioCumulative: summary.twr ?? 0,
     benchmarkCumulative: summary.benchmarkReturn ?? 0,
     excessVsBenchmark: summary.excessReturn ?? 0,
     isEmpty,
     ledgerSummary: summary,
+    ledgerSeries: series,
     ledgerChecks: ledgerModel.checks,
     unreconciled: ledgerModel.unreconciled,
     seriesComplete: series.complete,

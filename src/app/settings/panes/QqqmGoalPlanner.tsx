@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { Calculator, Info, TriangleAlert } from '@/components/icons';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { usePositionsModel } from '@/hooks/usePositionsModel';
-import { unrealizedPL } from '@/lib/calc/position';
+import { useLedger } from '@/hooks/useLedger';
+import { formatGoalYears } from '@/lib/format';
 import {
   QQQM_GOAL_UI_PATHS,
   simulateQqqmGoal,
@@ -47,29 +47,12 @@ export function QqqmGoalPlanner({ targetUsdText, monthlyContributionUsdText }: P
   const [stress, setStress] = useState<GoalStressScenario>('baseline');
   const targetUsd = parseAmount(targetUsdText);
   const monthlyContributionUsd = parseAmount(monthlyContributionUsdText);
-  const portfolio = usePositionsModel();
-
-  const currentValueUsd = useMemo(() => {
-    if (portfolio.quotesError || portfolio.quotesNone || portfolio.quotesPartial) return null;
-    const holdingsValue = portfolio.positions.reduce((sum, position) => {
-      const price = portfolio.quoteByTicker.get(position.ticker)?.price;
-      if (price == null || !Number.isFinite(price)) return Number.NaN;
-      return sum + unrealizedPL(position, price, portfolio.costBasisMode).marketValue;
-    }, 0);
-    if (!Number.isFinite(holdingsValue) || !Number.isFinite(portfolio.cash)) return null;
-    return Math.max(0, holdingsValue + portfolio.cash);
-  }, [
-    portfolio.cash,
-    portfolio.costBasisMode,
-    portfolio.positions,
-    portfolio.quoteByTicker,
-    portfolio.quotesError,
-    portfolio.quotesNone,
-    portfolio.quotesPartial,
-  ]);
+  // Same NAV as the overview: the unified ledger valued at live quotes.
+  const ledger = useLedger({ live: true });
+  const currentValueUsd = ledger.loading || !ledger.series.complete ? null : Math.max(0, ledger.summary.navUsd);
 
   const simulation = useMemo<QqqmGoalSimulation | null>(() => {
-    if (portfolio.quotesLoading || currentValueUsd === null || targetUsd === null || monthlyContributionUsd === null) {
+    if (currentValueUsd === null || targetUsd === null || monthlyContributionUsd === null) {
       return null;
     }
     if (targetUsd <= 0 || monthlyContributionUsd < 0) return null;
@@ -83,7 +66,6 @@ export function QqqmGoalPlanner({ targetUsdText, monthlyContributionUsdText }: P
   }, [
     currentValueUsd,
     monthlyContributionUsd,
-    portfolio.quotesLoading,
     stress,
     targetUsd,
   ]);
@@ -111,12 +93,12 @@ export function QqqmGoalPlanner({ targetUsdText, monthlyContributionUsdText }: P
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {portfolio.quotesLoading ? (
-          <PlannerStatus text="正在读取当前持仓行情，准备计算起点净值…" />
-        ) : portfolio.quotesError || portfolio.quotesNone || portfolio.quotesPartial ? (
+        {ledger.loading ? (
+          <PlannerStatus text="正在读取账本与行情，准备计算起点净值…" />
+        ) : !ledger.series.complete ? (
           <PlannerStatus
             tone="warning"
-            text="当前持仓行情不完整，暂不生成达标概率；完成行情修复后再试。"
+            text="部分持仓缺少价格，暂不生成达标概率；到「数据健康」补齐价格后再试。"
           />
         ) : hasInvalidAmount || targetUsd === null || monthlyContributionUsd === null ? (
           <PlannerStatus
@@ -163,12 +145,12 @@ function PlannerResult({
       <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3">
         <PlannerMetric
           label="P50 中位达标"
-          value={formatYears(simulation.quantiles.p50)}
+          value={formatGoalYears(simulation.quantiles.p50)}
           detail="一半模拟路径在此之前达到"
         />
         <PlannerMetric
           label="P75 较稳妥"
-          value={formatYears(simulation.quantiles.p75)}
+          value={formatGoalYears(simulation.quantiles.p75)}
           detail="四分之三模拟路径在此之前达到"
         />
         <PlannerMetric
@@ -227,7 +209,7 @@ function PlannerResult({
                 <span className="font-num w-8 text-xs font-semibold text-brand">{row.label}</span>
                 <span className="truncate text-xs text-muted-foreground">{row.detail}</span>
               </div>
-              <span className="shrink-0 font-num text-sm font-semibold">{formatYears(simulation.quantiles[row.key])}</span>
+              <span className="shrink-0 font-num text-sm font-semibold">{formatGoalYears(simulation.quantiles[row.key])}</span>
             </div>
           ))}
         </div>
@@ -277,15 +259,4 @@ function parseAmount(value: string): number | null {
 
 function formatPercent(value: number): string {
   return String(Math.round(value * 100)) + '%';
-}
-
-function formatYears(value: number): string {
-  if (!Number.isFinite(value)) return '>40 年';
-  if (value <= 0) return '已达成';
-  const totalMonths = Math.max(1, Math.round(value * 12));
-  const years = Math.floor(totalMonths / 12);
-  const months = totalMonths % 12;
-  if (years === 0) return String(months) + ' 个月';
-  if (months === 0) return String(years) + ' 年';
-  return String(years) + ' 年 ' + String(months) + ' 个月';
 }

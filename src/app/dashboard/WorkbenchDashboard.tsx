@@ -17,11 +17,12 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { UnreconciledBadge } from '@/components/UnreconciledBadge';
 import { Button } from '@/components/ui/button';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
-import { signedPct, signedUsd, usd, changeColor } from '@/lib/format';
+import { formatGoalYears, signedPct, signedUsd, usd, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { LEDGER_IMPORT_V2, LOCAL_MODE } from '@/lib/localMode';
 import type { DashboardModel } from './model';
 import type { HistoryPoint } from '@/lib/calc/history';
+import { summarizeLedgerWindow } from '@/lib/calc/portfolioLedger';
 
 /** Ranges the overview offers, matching the performance page's vocabulary. */
 const OVERVIEW_RANGES = ['1M', '3M', '6M', 'YTD', '1Y', 'ALL'] as const;
@@ -69,13 +70,14 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
     dayChangePct,
     totalReturnPct,
     target,
-    monthsToTarget,
+    goal,
     xirr,
     portfolioCumulative,
     excessVsBenchmark,
     isEmpty,
     costBasisMode,
     ledgerChecks,
+    ledgerSeries,
   } = model;
 
   const [range, setRange] = useState<OverviewRange>('1Y');
@@ -85,15 +87,19 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
     return sliceByRange(source, range);
   }, [accountValueHistory, history, range]);
 
-  // The hero change follows the selected range, the way the reference reads
-  // "-47.25% past year" instead of a fixed day-over-day number.
+  // The hero change follows the selected range and is split into its two
+  // causes, so a deposit is never read as a return: NAV change = net external
+  // flow + investment gain. The percentage is the range TWR, labelled as such.
   const rangeChange = useMemo(() => {
-    const first = rangedSource.find((point) => Number.isFinite(point.navUser));
-    const last = [...rangedSource].reverse().find((point) => Number.isFinite(point.navUser));
-    if (!first || !last) return { amount: 0, pct: Number.NaN };
-    const amount = last.navUser - first.navUser;
-    return { amount, pct: first.navUser > 0 ? amount / first.navUser : Number.NaN };
-  }, [rangedSource]);
+    const window = summarizeLedgerWindow(ledgerSeries, rangedSource[0]?.date ?? null);
+    if (!window) return null;
+    return {
+      navChange: window.endingNavUsd - window.startingNavUsd,
+      flow: window.externalFlowUsd,
+      gain: window.pnlUsd,
+      twr: window.periodTwr,
+    };
+  }, [ledgerSeries, rangedSource]);
 
   const chartRows = useMemo(() => {
     const source = rangedSource;
@@ -162,13 +168,24 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
         <div className="min-w-0">
           <HeroValue value={aggregates.nav} />
           <UnreconciledBadge checks={ledgerChecks} className="mt-2" />
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-            <span className={changeColor(rangeChange.amount)}>{signedUsd(rangeChange.amount)}</span>
-            <span className={changeColor(rangeChange.amount)}>
-              {Number.isFinite(rangeChange.pct) ? signedPct(rangeChange.pct) : '—'}
-            </span>
-            <span className="text-muted-foreground">{RANGE_LABELS[range]}</span>
-          </div>
+          {rangeChange && (
+            <div className="mt-1 space-y-0.5 text-[13px]">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-muted-foreground">{RANGE_LABELS[range]}净值变化</span>
+                <span className={cn('font-num', changeColor(rangeChange.navChange))}>{signedUsd(rangeChange.navChange)}</span>
+                <span className="text-muted-foreground">=</span>
+                <span className="text-muted-foreground">净投入 <span className="font-num text-foreground">{signedUsd(rangeChange.flow)}</span></span>
+                <span className="text-muted-foreground">+</span>
+                <span className="text-muted-foreground">投资收益 <span className={cn('font-num', changeColor(rangeChange.gain))}>{signedUsd(rangeChange.gain)}</span></span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                区间时间加权收益 (TWR){' '}
+                <span className={cn('font-num', changeColor(rangeChange.twr ?? 0))}>
+                  {rangeChange.twr === null ? '—' : signedPct(rangeChange.twr)}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm">
@@ -238,9 +255,10 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
         </div>
 
         <div className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
-          <span>累计 TWR <strong className={changeColor(portfolioCumulative)}>{signedPct(portfolioCumulative)}</strong></span>
+          <span className="basis-full text-center text-[11px]">以下为成立以来（{dateRange}），不随上方区间变化</span>
+          <span>TWR <strong className={changeColor(portfolioCumulative)}>{signedPct(portfolioCumulative)}</strong></span>
           <span>超额 vs {selectedBenchmark} <strong className={changeColor(excessVsBenchmark)}>{signedPct(excessVsBenchmark)}</strong></span>
-          <span>年化 XIRR <strong className={changeColor(xirr)}>{xirr === null ? '—' : signedPct(xirr)}</strong></span>
+          <span>年化 XIRR <strong className={changeColor(xirr ?? 0)}>{xirr === null ? '—' : signedPct(xirr)}</strong></span>
           <Link className="workbench-link" to="/performance">查看完整绩效 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
         </div>
       </section>
@@ -258,7 +276,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
             <PanelHeader title="组合摘要" id="summary-title" detail="当前口径" />
             <dl className="mt-4 space-y-3">
               <SummaryRow label="今日盈亏" value={signedUsd(aggregates.dayPL)} detail={Number.isFinite(dayChangePct) ? signedPct(dayChangePct) : '—'} tone={aggregates.dayPL} />
-              <SummaryRow label="总收益" value={signedUsd(aggregates.totalPL)} detail={Number.isFinite(totalReturnPct) ? signedPct(totalReturnPct) : '—'} tone={aggregates.totalPL} />
+              <SummaryRow label="总收益 · 净值 − 净投入" value={signedUsd(aggregates.totalPL)} detail={Number.isFinite(totalReturnPct) ? `${signedPct(totalReturnPct)} / 净投入` : '—'} tone={aggregates.totalPL} />
               <SummaryRow label="现金余额" value={usd.format(aggregates.cash)} detail={`${aggregates.nav > 0 ? ((aggregates.cash / aggregates.nav) * 100).toFixed(1) : '0.0'}% 净值`} />
             </dl>
           </section>
@@ -273,15 +291,21 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
           </section>
 
           <section className="workbench-panel" aria-labelledby="target-title">
-            <PanelHeader title="目标进度" id="target-title" detail="仅用于长期跟踪" />
+            <PanelHeader title="目标进度" id="target-title" detail="QQQM 研究模型 · 基线情景" action={<Link className="workbench-link" to="/settings/goal">概率规划 <ArrowUpRight className="h-3.5 w-3.5" /></Link>} />
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
                 <div className="font-num text-2xl font-semibold">{targetProgress.toFixed(1)}%</div>
                 <div className="mt-1 text-xs text-muted-foreground">{usd.format(aggregates.nav)} / {usd.format(target)}</div>
               </div>
               <div className="text-right text-xs text-muted-foreground">
-                <div className="font-num text-base text-foreground">{formatMonths(monthsToTarget)}</div>
-                <div>按当前目标参数</div>
+                {goal ? (
+                  <>
+                    <div className="font-num text-base text-foreground">P50 {formatGoalYears(goal.p50Years)}</div>
+                    <div>20 年内达标 {goal.within20Years === null ? '—' : `${Math.round(goal.within20Years * 100)}%`}</div>
+                  </>
+                ) : (
+                  <div>设置月定投后显示达标概率</div>
+                )}
               </div>
             </div>
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-elevated">
@@ -370,14 +394,6 @@ function StateRow({ icon: Icon, label, value, detail, tone }: { icon: LucideIcon
       </div>
     </div>
   );
-}
-
-function formatMonths(months: number | null) {
-  if (months === null || !Number.isFinite(months)) return '待设置月定投';
-  if (months < 12) return `${Math.max(0, Math.ceil(months))} 个月`;
-  const years = Math.floor(months / 12);
-  const remainder = Math.ceil(months % 12);
-  return remainder === 0 ? `${years} 年` : `${years} 年 ${remainder} 个月`;
 }
 
 function DashboardLoading() {

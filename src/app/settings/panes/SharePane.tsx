@@ -93,7 +93,20 @@ export function SharePane() {
           </div>
         </CardHeader>
         <CardContent>
-          {links.length === 0 ? (
+          {shareLinks.isPending ? (
+            // Loading used to fall through to the empty state, which read as
+            // "no links" while active links existed (the health audit, which
+            // shares this query, showed them).
+            <div className="space-y-2" aria-busy="true" aria-label="正在读取分享链接">
+              {[0, 1].map((index) => <div key={index} className="h-10 animate-pulse rounded-lg bg-surface-elevated" />)}
+            </div>
+          ) : shareLinks.isError ? (
+            <div className="rounded-lg border border-loss/30 bg-loss/5 px-3 py-2 text-xs">
+              <div className="font-medium text-loss">分享链接读取失败，无法确认是否存在有效链接</div>
+              <p className="mt-1 text-muted-foreground">{(shareLinks.error as Error)?.message ?? '请稍后重试'}</p>
+              <Button size="sm" variant="outline" className="mt-2" onClick={() => shareLinks.refetch()}>重试</Button>
+            </div>
+          ) : links.length === 0 ? (
             <EmptyState
               icon={ShieldCheck}
               title={LOCAL_MODE ? '本地模式不生成分享链接' : '还没有分享链接'}

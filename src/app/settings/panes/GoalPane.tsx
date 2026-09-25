@@ -13,7 +13,7 @@ export function GoalPane() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">进度目标</CardTitle>
-          <CardDescription className="text-xs">目标金额会用于总览进度环和下方的概率规划</CardDescription>
+          <CardDescription className="text-xs">目标金额用于总览进度与下方的概率规划；总览的达标时间与概率来自同一模型，不再使用单一年化假设</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <SettingsField htmlFor="target" label="目标金额 (USD)" description="长期净值目标；概率规划按今天购买力的 USD 解读">
@@ -23,16 +23,6 @@ export function GoalPane() {
               inputMode="decimal"
               value={form.target_usd}
               onChange={(e) => setForm((f) => ({ ...f, target_usd: e.target.value }))}
-            />
-          </SettingsField>
-          <SettingsField htmlFor="ret" label="总览参考年化 (%)" description="仅用于总览的单一路径推算；概率规划使用下方 QQQM 研究模型">
-            <Input
-              id="ret"
-              type="number"
-              step="0.1"
-              inputMode="decimal"
-              value={form.expected_annual_ret}
-              onChange={(e) => setForm((f) => ({ ...f, expected_annual_ret: e.target.value }))}
             />
           </SettingsField>
         </CardContent>

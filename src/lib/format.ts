@@ -59,3 +59,15 @@ export function changeColor(value: number | null | undefined): string {
   if (value < 0) return 'text-danger';
   return 'text-muted-foreground';
 }
+
+/** First-passage years from the goal model: "11 年 5 个月", ">40 年", "已达成". */
+export function formatGoalYears(value: number): string {
+  if (!Number.isFinite(value)) return '>40 年';
+  if (value <= 0) return '已达成';
+  const totalMonths = Math.max(1, Math.round(value * 12));
+  const years = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
+  if (years === 0) return String(months) + ' 个月';
+  if (months === 0) return String(years) + ' 年';
+  return String(years) + ' 年 ' + String(months) + ' 个月';
+}

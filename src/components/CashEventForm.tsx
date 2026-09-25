@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useAccounts } from '@/hooks/usePortfolio';
 import { todayLocalIso } from '@/lib/format';
 import { normalizeSymbol } from '@/lib/symbols';
 import { LOCAL_MODE, LOCAL_USER } from '@/lib/localMode';
@@ -37,6 +38,9 @@ export function CashEventForm({ initial, onDone }: Props) {
   const [amount, setAmount] = useState(initial?.usd_amount != null ? String(Math.abs(Number(initial.usd_amount))) : '');
   const [ticker, setTicker] = useState(initial?.ticker ?? '');
   const [note, setNote] = useState(initial?.note ?? '');
+  const accounts = useAccounts();
+  const hasAccounts = (accounts.data?.length ?? 0) > 0;
+  const [accountId, setAccountId] = useState<string>(initial?.account_id ?? 'none');
   const spec = MANUAL_CASH_KINDS.find((item) => item.value === kind) ?? MANUAL_CASH_KINDS[0];
   const needsTicker = kind === 'dividend' || kind === 'tax';
 
@@ -61,6 +65,7 @@ export function CashEventForm({ initial, onDone }: Props) {
         source_amount: signed,
         ticker: needsTicker && ticker.trim() ? normalizeSymbol(ticker) : null,
         note: note.trim() || null,
+        ...(hasAccounts ? { account_id: accountId === 'none' ? null : accountId } : {}),
       };
       if (LOCAL_MODE) {
         const now = new Date().toISOString();
@@ -133,6 +138,20 @@ export function CashEventForm({ initial, onDone }: Props) {
             required
           />
         </div>
+        {hasAccounts && (
+          <div className="space-y-1.5">
+            <Label htmlFor="cash-account">账户</Label>
+            <Select value={accountId} onValueChange={setAccountId}>
+              <SelectTrigger id="cash-account"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">未分配</SelectItem>
+                {(accounts.data ?? []).map((account) => (
+                  <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {needsTicker && (
           <div className="space-y-1.5">
             <Label htmlFor="cash-ticker">相关代码（可选）</Label>

@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
-import { useTransactions } from '@/hooks/usePortfolio';
+import { useAccounts, useTransactions } from '@/hooks/usePortfolio';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useQuotes } from '@/hooks/useQuotes';
 import { aggregatePositions } from '@/lib/calc/position';
 import { coordinateEtfHoldings } from '@/lib/etfHoldings';
@@ -20,6 +21,28 @@ import { transactionCashAmount } from '@/lib/calc/transactionAmounts';
 import type { Database } from '@/lib/database.types';
 
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
+
+/** Trading currencies offered for manual entry; imports carry any ISO code. */
+const CURRENCIES = ['USD', 'SEK', 'HKD', 'JPY', 'EUR', 'GBP', 'CAD', 'AUD', 'CNY'] as const;
+const UNASSIGNED = '__unassigned__';
+
+function round(value: number, places: number): number {
+  const factor = 10 ** places;
+  return Math.round(value * factor) / factor;
+}
+
+/** Native-currency view of a stored row: the form edits what the broker quoted. */
+function nativeFields(row: TxnRow | undefined) {
+  const currency = (row?.source_currency ?? 'USD').toUpperCase();
+  const fx = Number(row?.fx_rate_to_usd);
+  const foreign = currency !== 'USD' && Number.isFinite(fx) && fx > 0;
+  return {
+    currency: foreign ? currency : 'USD',
+    price: row ? String(foreign && row.source_price != null ? row.source_price : row.price) : '',
+    fx: foreign ? String(fx) : '1',
+    fee: row ? String(foreign ? round(Number(row.fees_usd ?? 0) / fx, 8) : row.fees_usd ?? 0) : '',
+  };
+}
 
 interface Props {
   initial?: TxnRow;
@@ -39,10 +62,15 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
   const [ticker, setTicker] = useState(initial?.ticker ?? defaultTicker);
   const [tickerTouched, setTickerTouched] = useState(false);
   const [side, setSide] = useState<'buy' | 'sell'>(initial?.side ?? defaultSide);
-  const [price, setPrice] = useState(initial ? String(initial.price) : '');
+  const initialNative = nativeFields(initial);
+  const [currency, setCurrency] = useState(initialNative.currency);
+  const [price, setPrice] = useState(initialNative.price);
+  const [fxRate, setFxRate] = useState(initialNative.fx);
   const [priceTouched, setPriceTouched] = useState(false);
   const [shares, setShares] = useState(initial ? String(initial.shares) : '');
-  const [feesUsd, setFeesUsd] = useState(initial ? String(initial.fees_usd ?? 0) : '');
+  const [feesNative, setFeesNative] = useState(initialNative.fee);
+  const accounts = useAccounts();
+  const [accountId, setAccountId] = useState<string>(initial?.account_id ?? UNASSIGNED);
   const [kind, setKind] = useState<'dca' | 'lumpsum'>(initial?.kind ?? defaultKind);
   const [note, setNote] = useState(initial?.note ?? '');
 
@@ -51,9 +79,13 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
       setTradeDate(initial.trade_date);
       setTicker(initial.ticker);
       setSide(initial.side);
-      setPrice(String(initial.price));
+      const native = nativeFields(initial);
+      setCurrency(native.currency);
+      setPrice(native.price);
+      setFxRate(native.fx);
       setShares(String(initial.shares));
-      setFeesUsd(String(initial.fees_usd ?? 0));
+      setFeesNative(native.fee);
+      setAccountId(initial.account_id ?? UNASSIGNED);
       setKind(initial.kind);
       setNote(initial.note ?? '');
       setTickerTouched(false);
@@ -99,15 +131,39 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
       if (sellOverflow) {
         throw new Error(`卖出数量 ${shares} 超过当前持仓 ${maxSellable.toFixed(4)} 股`);
       }
+      if (!(fx > 0)) throw new Error(`请填写 ${currency} 兑 USD 的汇率`);
+      // USD values are derived from what the broker quoted: native price and
+      // fee times the rate. An imported row keeps its broker settlement unless
+      // one of the money fields actually changed.
+      const quantity = Number(shares);
+      const moneyUnchanged = !!initial
+        && initial.side === side
+        && Number(initial.shares) === quantity
+        && Number(initialNative.price) === nativePrice
+        && Number(initialNative.fx) === fx
+        && Number(initialNative.fee) === parsedFee
+        && initialNative.currency === currency;
+      const priceUsd = moneyUnchanged ? Number(initial!.price) : round(nativePrice * fx, 12);
+      const feeUsd = moneyUnchanged ? Number(initial!.fees_usd ?? 0) : round(parsedFee * fx, 10);
+      const settled = moneyUnchanged && initial?.settled_amount_usd != null
+        ? Number(initial.settled_amount_usd)
+        : round(side === 'buy' ? -(quantity * priceUsd + feeUsd) : quantity * priceUsd - feeUsd, 10);
       const payload = {
         trade_date: tradeDate,
         ticker: normalizedTicker,
         side,
-        price: Number(price),
-        shares: Number(shares),
-        fees_usd: feesUsd.trim() === '' ? 0 : Number(feesUsd),
+        price: priceUsd,
+        shares: quantity,
+        fees_usd: feeUsd,
+        settled_amount_usd: currency === 'USD' && !initial?.settled_amount_usd && !moneyUnchanged ? null : settled,
+        source_currency: currency,
+        source_price: nativePrice,
+        source_amount: currency === 'USD' ? null : round(settled / fx, 10),
+        fx_rate_to_usd: currency === 'USD' ? null : fx,
         kind,
         note: note || null,
+        // Only once migration 0058 exists (the accounts table answered).
+        ...((accounts.data?.length ?? 0) > 0 ? { account_id: accountId === UNASSIGNED ? null : accountId } : {}),
       };
       if (LOCAL_MODE) {
         const now = new Date().toISOString();
@@ -124,7 +180,6 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
             source_description: null,
             import_source: null,
             import_key: null,
-            settled_amount_usd: null,
             created_at: now,
             updated_at: now,
           };
@@ -170,17 +225,16 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
     await mut.mutateAsync();
   }
 
-  const rawNotional = Number(price) * Number(shares);
-  const parsedFee = feesUsd.trim() === '' ? 0 : Number(feesUsd);
+  const nativePrice = Number(price);
+  const fx = currency === 'USD' ? 1 : Number(fxRate);
+  const rawNotional = nativePrice * Number(shares);
+  const parsedFee = feesNative.trim() === '' ? 0 : Number(feesNative);
   const feeInvalid = !Number.isFinite(parsedFee)
     || parsedFee < 0
     || (side === 'sell' && Number.isFinite(rawNotional) && rawNotional > 0 && parsedFee >= rawNotional);
-  const cashAmount = transactionCashAmount({
-    side,
-    price: Number(price),
-    shares: Number(shares),
-    fees_usd: parsedFee,
-  });
+  const cashAmount = fx > 0
+    ? transactionCashAmount({ side, price: nativePrice * fx, shares: Number(shares), fees_usd: parsedFee * fx })
+    : Number.NaN;
 
   return (
     <form onSubmit={submit} className="space-y-4">
@@ -235,9 +289,42 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
         </div>
       </div>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5 min-w-0">
+          <Label htmlFor="txn-currency">成交币种</Label>
+          <Select value={currency} onValueChange={(value) => { setCurrency(value); if (value === 'USD') setFxRate('1'); }}>
+            <SelectTrigger id="txn-currency"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {[...new Set([...CURRENCIES, currency])].map((code) => (
+                <SelectItem key={code} value={code}>{code}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {currency !== 'USD' ? (
+          <div className="space-y-1.5 min-w-0">
+            <Label htmlFor="txn-fx">成交汇率（1 {currency} = ? USD）</Label>
+            <Input
+              id="txn-fx"
+              type="number"
+              step="0.000000000001"
+              inputMode="decimal"
+              value={fxRate}
+              onChange={(e) => setFxRate(e.target.value)}
+              required
+            />
+          </div>
+        ) : (accounts.data?.length ?? 0) > 0 ? (
+          <AccountField accounts={accounts.data ?? []} value={accountId} onChange={setAccountId} />
+        ) : null}
+      </div>
+      {currency !== 'USD' && (accounts.data?.length ?? 0) > 0 && (
+        <AccountField accounts={accounts.data ?? []} value={accountId} onChange={setAccountId} />
+      )}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div className="space-y-1.5 min-w-0">
-          <Label htmlFor="price">成交价 (USD)</Label>
+          <Label htmlFor="price">成交价 ({currency})</Label>
           <Input
             id="price"
             type="number"
@@ -277,15 +364,15 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
           )}
         </div>
         <div className="space-y-1.5 min-w-0">
-          <Label htmlFor="fees-usd">手续费 (USD，可选)</Label>
+          <Label htmlFor="fees-usd">手续费 ({currency === 'USD' ? 'USD' : currency}，可选)</Label>
           <Input
             id="fees-usd"
             type="number"
             min="0"
             step="0.0000000001"
             inputMode="decimal"
-            value={feesUsd}
-            onChange={(e) => setFeesUsd(e.target.value)}
+            value={feesNative}
+            onChange={(e) => setFeesNative(e.target.value)}
             placeholder="0.00"
             aria-invalid={feeInvalid}
           />
@@ -304,7 +391,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
 
       {Number.isFinite(cashAmount) && cashAmount > 0 && (
         <div className="flex items-center justify-between rounded-lg border border-border bg-surface-elevated px-3 py-2 text-xs tnum">
-          <span className="text-muted-foreground">{side === 'buy' ? '买入总支出' : '卖出净收入'}</span>
+          <span className="text-muted-foreground">{side === 'buy' ? '买入总支出' : '卖出净收入'}{currency !== 'USD' ? '（按成交汇率折算 USD）' : ''}</span>
           <span className="font-medium">${cashAmount.toFixed(2)}</span>
         </div>
       )}
@@ -318,5 +405,30 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
         </Button>
       </div>
     </form>
+  );
+}
+
+function AccountField({
+  accounts,
+  value,
+  onChange,
+}: {
+  accounts: ReadonlyArray<{ id: string; name: string }>;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5 min-w-0">
+      <Label htmlFor="txn-account">账户</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger id="txn-account"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value={UNASSIGNED}>未分配</SelectItem>
+          {accounts.map((account) => (
+            <SelectItem key={account.id} value={account.id}>{account.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
