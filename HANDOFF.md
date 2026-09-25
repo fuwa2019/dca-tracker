@@ -53,6 +53,16 @@ TWR remains correct for the IBKR sleeve alone (SIVE and AAOI fell while it was
 
 ### Production steps — each needs explicit authorization, in this order
 
+Progress (2026-09-25, owner authorized steps 1-6):
+- Step 1 done: live catalog shows 0057 applied (`20260905162138
+  fix_portfolio_import_validator_privilege`); the importer is security
+  definer and `authenticated` cannot execute the validator. No change needed.
+- Step 3 done: quote Worker deployed as version
+  `dd41abe8-8f8c-4cfa-bcaa-fe4e3b822757`. Post-deploy curl smoke test was
+  not run (blocked by the session's auto-mode classifier).
+- Steps 2, 4, 5, 6 not executed: the session's auto-mode classifier blocked
+  the production migration. The owner runs them or re-enables approval.
+
 1. Check whether `0057_fix_portfolio_import_validator_privilege` is applied
    (the owner does not remember); apply it if not.
 2. Apply `0058` (it backs up `transactions`/`cashflows` into
