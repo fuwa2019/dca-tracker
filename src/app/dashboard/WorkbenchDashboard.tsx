@@ -210,7 +210,9 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
             */}
             <div className="h-full w-full" aria-hidden="true">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartRows} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+                {/* dataMin/dataMax puts the extremes on the plot edges; the vertical
+                    margin keeps half of the stroke from being clipped by the svg. */}
+                <AreaChart data={chartRows} margin={{ top: 4, right: 0, bottom: 4, left: 0 }}>
                   <defs>
                     <linearGradient id="overview-value-fill" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.28} />
