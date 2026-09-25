@@ -10,6 +10,7 @@ import {
   ledgerCashBalance,
 } from '../src/lib/calc/portfolioLedger.ts';
 import { runLedgerChecks, hasBlockingFailure } from '../src/lib/calc/ledgerChecks.ts';
+import { aggregatePositions } from '../src/lib/calc/position.ts';
 
 const close = (entries) => new Map(entries);
 const near = (actual, expected, tolerance, label) => {
@@ -255,6 +256,25 @@ function bisectXirr(flows) {
   });
   const bridge = summarizeLedgerWindow(series);
   assert.equal(bridge.status, 'unverifiable');
+}
+
+// Schwab lists a same-day Sell above its Buy, so the sell can be stored first.
+// Holdings must still net to zero, and agree with the ledger's position check.
+{
+  const rows = [
+    { ...sell('2026-06-02', 'IBIT', 0.2582, 38.045), created_at: '2026-06-02T00:00:01Z' },
+    { ...buy('2026-06-02', 'IBIT', 0.2582, 38.725), created_at: '2026-06-02T00:00:02Z' },
+  ];
+  const ibit = aggregatePositions(rows).find((p) => p.ticker === 'IBIT');
+  near(ibit.shares, 0, 1e-12, 'same-day sell listed before buy nets to zero');
+  near(ibit.realizedUsd, 0.2582 * (38.045 - 38.725), 1e-9, 'the round trip realizes its loss');
+  const { ledger, series, summary } = run({
+    transactions: rows,
+    cashflows: [cash('2026-06-02', 'broker_deposit', 20)],
+    closes: new Map([['IBIT', close([['2026-06-02', 38.5]])]]),
+  });
+  const checks = runLedgerChecks({ ledger, series, summary, displayedShares: new Map([['IBIT', ibit.shares]]) });
+  assert.equal(checks.find((c) => c.id === 'position_reconciliation').status, 'pass');
 }
 
 console.log('portfolio ledger contract passed');

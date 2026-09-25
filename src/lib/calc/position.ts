@@ -38,7 +38,14 @@ export function aggregatePositions(transactions: TxnRow[]): Position[] {
 
   const out: Position[] = [];
   for (const [ticker, txns] of byTicker) {
-    const sorted = [...txns].sort((a, b) => a.trade_date.localeCompare(b.trade_date) || a.created_at.localeCompare(b.created_at));
+    // Within one trade date, buys are applied before sells. Broker exports
+    // are often newest-first (Schwab lists a same-day Sell above its Buy), so
+    // insertion order cannot be trusted; applying the sell first would find
+    // no lot, drop it, and leave a phantom holding.
+    const sorted = [...txns].sort((a, b) =>
+      a.trade_date.localeCompare(b.trade_date)
+      || (a.side === b.side ? 0 : a.side === 'buy' ? -1 : 1)
+      || a.created_at.localeCompare(b.created_at));
 
     // Average-cost tracking
     let avgShares = 0;
