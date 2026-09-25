@@ -1,13 +1,79 @@
 # Current Handoff
 
-Updated: 2026-09-05
+Updated: 2026-09-25
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
 
-## Current Goal
+## 2026-09-25 — unified ledger rebuild (local, not deployed)
+
+Commits `5573e11`, `c2615d5`, `cd0cfbd`, `8dfe3ea`, `6dd71b8` on local
+`master`; **not pushed** (a push deploys Pages through the Git integration).
+
+What changed, in contract terms (details in
+`docs/decisions/2026-09-25-unified-portfolio-ledger.md` and
+`docs/architecture/import-and-ledger.md`):
+
+- Every private figure (NAV, cash, net invested, total return, TWR, XIRR, NAV
+  bridge, daily P&L, goal outlook) comes from `src/lib/calc/portfolioLedger.ts`
+  through `useLedger`. External flows are broker deposits/withdrawals; the old
+  trade-inferred SQL V1 curve is no longer read by private pages.
+- `src/lib/calc/ledgerChecks.ts` drives the Data Health "账务核对" list and the
+  "数据未对账" markers; the NAV bridge reports "无法校验" for empty windows.
+- Only Schwab/IBKR files import; TradingView is export-only. IBKR FX legs and
+  FX Translations P&L merge into one daily `fx_conversion` event; the IBKR
+  statement's ending cash is stored on the account and reconciled.
+- Exports: full ledger CSV and TradingView six-column CSV.
+- Migration `0058_ledger_accounts_and_fx_conversion.sql` (backup schema,
+  `accounts`, `account_id`, `fx_conversion`). Replayed 0001-0058 on local
+  Postgres 15 and imported the owner's real IBKR + Schwab exports through the
+  real RPC there: accounts assigned, re-import idempotent, RLS isolated, IBKR
+  ledger cash = statement ending cash to the cent. Rollback:
+  `docs/runbooks/0058-ledger-accounts-rollback.sql`.
+- Quote Worker: V2 cache writer now uses `portfolioLedger`; new authenticated
+  `POST /api/ledger-performance/refresh`.
+
+Real-data figures (engine on public Yahoo closes, 2026-09-24):
+
+| | Live before | IBKR rows as in DB | After re-import IBKR + Schwab |
+|---|---|---|---|
+| Total return | +$27.66 | +$30.04 | +$17.27 |
+| TWR | −73.74% | −24.62% | −1.83% |
+| XIRR | +15.48% | +17.42% | +2.21% |
+| Excess vs SPY | −74.31% | −27.74% | −4.75% |
+| Cash reconciliation | not checked (display $19.65 vs ledger $22.03) | $0.00 | IBKR statement $96.28 = ledger $96.28 |
+| Goal ($60/mo → $1M) | "19 年 1 个月" (single path) vs model ">40 年" | P50 >40 年 · 20 年 0% | P50 >40 年 · 20 年 0% · 40 年 8% |
+
+The −73.74% came from 2026-06-04: V1 charged the SIVE buy's same-day
+valuation gap to a $3.03 SGOV base (−0.24% → −58.37% in one day). A negative
+TWR remains correct for the IBKR sleeve alone (SIVE and AAOI fell while it was
+~$100); XIRR/total return are positive because most money arrived later.
+
+### Production steps — each needs explicit authorization, in this order
+
+1. Check whether `0057_fix_portfolio_import_validator_privilege` is applied
+   (the owner does not remember); apply it if not.
+2. Apply `0058` (it backs up `transactions`/`cashflows` into
+   `ledger_backup.*_0058` first and prints unassigned manual-row counts).
+3. Deploy the quote Worker (`workers/quote`).
+4. Push `master` (Pages deploy). Must follow step 2: the new IBKR adapter
+   emits `fx_conversion`, which production rejects until 0058 exists.
+5. Re-import: IBKR with `replace_source`, then Schwab (approved in principle
+   by the owner on 2026-09-25; confirm again before writing).
+6. Set the owner's `settings.performance_method = 'ledger_twr_v2'` and refresh
+   the share cache, so the share page shows the new TWR. Until then the
+   health page flags the share cache (`share_cache` check).
+7. Share links: 1 active link `4dc395…1982` (146 visits, last 2026-08-30) and
+   3 revoked — the owner decides; nothing was revoked.
+
+Known limits: foreign positions without a daily FX series are valued at the
+trade rate (flagged as a warning); a daily FX source (e.g. SEKUSD) is a
+follow-up. The in-repo TradingView parser still expects signed cash outflows;
+it is no longer an import path.
+
+## Current Goal (before 2026-09-25)
 
 Complete the Portfolio Ledger transition: accept trusted cross-broker imports,
 including IBKR multi-currency and individual/foreign-market securities, while
