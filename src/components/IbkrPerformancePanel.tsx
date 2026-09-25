@@ -171,7 +171,7 @@ export function PerformancePanel({
           </div>
 
           {/* Mobile: scrollable segmented control */}
-          <div className="overflow-x-auto sm:hidden">
+          <div className="relative overflow-x-auto sm:hidden">
             {filteredRanges.length > 0 ? (
               <SegmentedControl
                 value={safeRange}
@@ -361,7 +361,7 @@ function SummaryTable({
         <div className="text-[11px] text-muted-foreground tnum">{dateLabel}</div>
       </div>
       <div className="px-4 pb-3 pt-3">
-        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="历史业绩表格">
+        <div className="relative overflow-x-auto" tabIndex={0} role="region" aria-label="历史业绩表格">
           <table className="w-full min-w-[360px] border-separate border-spacing-0 text-[13px]">
             <caption className="sr-only">历史业绩：各区间的组合与基准回报</caption>
             <thead>
@@ -640,7 +640,7 @@ function PerformanceDetailTable({
 
   return (
     <div className="border-t border-border">
-      <div className="overflow-x-auto">
+      <div className="relative overflow-x-auto">
         <table className="w-full text-[13px] sm:min-w-[520px]">
           <caption className="sr-only">每日累计回报</caption>
           <thead>

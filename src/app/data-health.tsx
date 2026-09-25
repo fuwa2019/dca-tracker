@@ -377,7 +377,7 @@ export function DataHealthPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0 sm:px-5 sm:pb-5">
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full min-w-[920px] text-sm">
               <caption className="sr-only">价格覆盖：每个代码的历史价格区间与缺失天数</caption>
               <thead>
@@ -485,7 +485,8 @@ export function DataHealthPage() {
         </CardContent>
       </Card>
 
-      {!LOCAL_MODE && <DemoDataPanel />}
+      {/* Seeding writes real rows, so it exists only in development builds. */}
+      {!LOCAL_MODE && import.meta.env.DEV && <DemoDataPanel />}
 
       {healthLoading && (
         <p className="text-xs text-muted-foreground">正在读取数据健康状态…</p>

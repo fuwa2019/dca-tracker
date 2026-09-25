@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Layers, ArrowUpRight, Plus, Info, ShieldQuestion, Wifi, RefreshCw, TriangleAlert } from '@/components/icons';
+import { Layers, ArrowUpRight, Plus, Info, Wifi, RefreshCw, TriangleAlert } from '@/components/icons';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -111,7 +111,9 @@ export function ExposurePage() {
         className="workbench-intro"
       >
         <div>
-          <p className="workbench-lede">看穿 ETF 成分，得到真实的单票权重与监控线余量。</p>
+          {/* TODO: concentration monitor lines (per-stock caps) are a separate
+              product decision; the page shows weights only until then. */}
+          <p className="workbench-lede">看穿 ETF 成分，得到真实的单票权重。</p>
           {priceStale && (
             <div className="mt-2 flex flex-wrap gap-2">
               <StatusBadge tone="warn" dot>
@@ -236,17 +238,10 @@ export function ExposurePage() {
           </div>
         </Card>
 
-        {/* 三分法:三块加起来 = 总净值 100% */}
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <FootStat label="已穿透到个股" zh="加总到底层股票" value={fmtPct(decomposedValue / nav, 1)} />
-          <FootStat label="未穿透长尾" zh="ETF 未列出成分" value={fmtPct(lookThrough.unclassifiedValue / nav, 1)} icon={ShieldQuestion} />
-          <FootStat label="现金 / 国债" zh="SGOV 等,不拆股" value={fmtPct(lookThrough.cashValue / nav, 1)} />
-        </div>
-
         <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
           <Info className="mt-0.5 h-3 w-3 shrink-0" />
           {isFallback
-            ? '当前使用内置静态成分表；其余归入未穿透长尾。上面三块加起来等于总净值。'
+            ? '当前使用内置静态成分表；其余归入未穿透长尾。页首“已穿透到个股 + 未穿透长尾 + 现金 / 国债”加起来等于总净值。'
             : `当前使用官网完整成分快照；无法识别的现金、衍生品和权重残差归入未穿透长尾。${Object.values(sources).length > 0 ? ` 最近抓取 ${latestFetchedAt(sources)}。` : ''}`}
         </p>
       </motion.section>
@@ -308,29 +303,6 @@ function ExposureSummaryCard({ label, value, sub }: { label: string; value: stri
       <div className="kicker">{label}</div>
       <div className="font-num mt-1 text-2xl font-semibold">{value}</div>
       <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>
-    </div>
-  );
-}
-
-function FootStat({
-  label,
-  zh,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  zh: string;
-  value: string;
-  icon?: typeof ShieldQuestion;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-surface px-4 py-3">
-      <div className="flex items-center gap-1.5 kicker">
-        {Icon && <Icon className="h-3 w-3" />}
-        {label}
-      </div>
-      <div className="font-num mt-1 text-2xl font-semibold">{value}</div>
-      <div className="text-[11px] text-muted-foreground">{zh}</div>
     </div>
   );
 }
