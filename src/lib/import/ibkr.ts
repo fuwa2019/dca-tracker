@@ -1,6 +1,7 @@
 import {
   addDuplicateOrdinals,
   buildImportPreview,
+  decimalAdd,
   decimalDivide,
   decimalMultiply,
   decimalSubtract,
@@ -147,11 +148,11 @@ const ACTION_ALIASES: Record<string, 'buy' | 'sell' | LedgerCashEventType | null
   fees: 'fee',
   commission: 'fee',
   手续费: 'fee',
-  'fx transfer': 'fx_transfer',
-  'forex trade component': 'fx_transfer',
-  forex: 'fx_transfer',
-  外汇交易组成部分: 'fx_transfer',
-  换汇: 'fx_transfer',
+  'fx transfer': 'fx_conversion',
+  'forex trade component': 'fx_conversion',
+  forex: 'fx_conversion',
+  外汇交易组成部分: 'fx_conversion',
+  换汇: 'fx_conversion',
 };
 
 const IBKR_ADJUSTMENT_ACTIONS = new Set(['adjustment', 'adjust', 'adj', '调整']);
@@ -314,7 +315,7 @@ function actionKind(value: string, amount?: string): 'buy' | 'sell' | LedgerCash
     ?? (normalized.includes('withholding') || normalized.includes('预扣') || normalized.includes('tax') || normalized.includes('税') ? 'tax' : null)
     ?? (normalized.includes('deposit') || normalized.includes('wire received') || normalized.includes('入金') ? 'broker_deposit' : null)
     ?? (normalized.includes('withdrawal') || normalized.includes('wire sent') || normalized.includes('提款') ? 'broker_withdrawal' : null)
-    ?? (normalized.includes('forex') || normalized.includes('fx') || normalized.includes('换汇') ? 'fx_transfer' : null)
+    ?? (normalized.includes('forex') || normalized.includes('fx') || normalized.includes('换汇') ? 'fx_conversion' : null)
     ?? (normalized.includes('fee') || normalized.includes('commission') || normalized.includes('费用') || normalized.includes('手续费') ? 'fee' : null)
     ?? (normalized.includes('transfer') ? (amount && Number(amount) < 0 ? 'broker_withdrawal' : 'broker_deposit') : null);
 }
@@ -418,22 +419,18 @@ function rowContextFrom(detection: ImportDetection): IbkrRowContext {
 function parseIbkrRow(sourceIndex: number, fields: IbkrFields, context: IbkrRowContext): ParsedImportRow {
   const description = (fields.description ?? '').trim();
   const actionText = (fields.action ?? '').trim() || description;
-  if (isFxTranslationPnlAdjustment(actionText, description)) {
-    return {
-      source_index: sourceIndex,
-      action: actionText,
-      category: 'ignored',
-      default_status: 'ignore',
-      reason: 'IBKR FX Translations P&L 为非现金汇兑估值调整，不写入现金账本。',
-    };
-  }
+  // IBKR books the revaluation of non-base cash as an "FX Translations P&L"
+  // adjustment. It is part of the statement's cash change, so it joins the
+  // day's FX conversion P&L; without it the ledger misses the statement's
+  // ending cash by exactly this amount.
+  const isTranslation = isFxTranslationPnlAdjustment(actionText, description);
   const rawAmount = (fields.amount ?? '').trim();
   const rawUsdAmount = (fields.usd_amount ?? '').trim();
   const rawCurrency = (fields.currency ?? '').trim();
   const errors: string[] = [];
   const date = parseDate(fields.date ?? '');
   const rawActionAmount = parseNumericField(firstValue(rawAmount, rawUsdAmount), 10, '金额', []);
-  const kind = actionKind(actionText, rawActionAmount ?? undefined);
+  const kind = isTranslation ? 'fx_conversion' : actionKind(actionText, rawActionAmount ?? undefined);
   const currencyWasMissing = isPlaceholder(rawCurrency);
   const currency = inferCurrency(rawCurrency, description, context.defaultCurrency, errors);
   const parsedAmount = parseNumericField(rawAmount, 10, '金额', errors);
@@ -760,8 +757,9 @@ function parseInput(input: ImportInput): IbkrParsedImport {
     }
   }
 
-  addDuplicateOrdinals(items);
-  const itemBySource = new Map(items.map((item) => [item.source_index, item]));
+  const merged = mergeDailyFxConversion(items, rows);
+  addDuplicateOrdinals(merged);
+  const itemBySource = new Map(merged.map((item) => [item.source_index, item]));
   for (const row of rows) {
     const item = itemBySource.get(row.source_index);
     if (item) {
@@ -769,7 +767,117 @@ function parseInput(input: ImportInput): IbkrParsedImport {
       row.default_status = 'import';
     }
   }
+  const statement = statementSummary(table.rows);
+  if (statement) {
+    detection.context = {
+      ...detection.context,
+      [STATEMENT_CASH_CONTEXT_KEY]: statement.endingCash,
+      [STATEMENT_AS_OF_CONTEXT_KEY]: statement.asOf ?? lastItemDate(merged) ?? '',
+    };
+  }
   return { detection, rows: rows.sort((left, right) => left.source_index - right.source_index), warnings: [], columns };
+}
+
+export const STATEMENT_CASH_CONTEXT_KEY = 'statement_ending_cash';
+export const STATEMENT_AS_OF_CONTEXT_KEY = 'statement_as_of';
+
+/**
+ * IBKR lists every FX leg (and the translation adjustment) separately; most
+ * are fractions of a cent. They are merged into one internal "换汇损益" event
+ * per day, so the ledger stays readable while cash still reconciles. The
+ * merged event is attached to the day's first contributing row; the others
+ * stay visible in the preview with the reason.
+ */
+function mergeDailyFxConversion(
+  items: Array<LedgerTrade | LedgerCashEvent>,
+  rows: ParsedImportRow[],
+): Array<LedgerTrade | LedgerCashEvent> {
+  const byDate = new Map<string, LedgerCashEvent[]>();
+  const kept: Array<LedgerTrade | LedgerCashEvent> = [];
+  for (const item of items) {
+    if ('event_type' in item && item.event_type === 'fx_conversion') {
+      const list = byDate.get(item.effective_date) ?? [];
+      list.push(item);
+      byDate.set(item.effective_date, list);
+    } else {
+      kept.push(item);
+    }
+  }
+  const rowBySource = new Map(rows.map((row) => [row.source_index, row]));
+  for (const [date, events] of byDate) {
+    events.sort((a, b) => a.source_index - b.source_index);
+    const total = events.reduce((sum, event) => decimalAdd(sum, event.usd_amount, 10), '0');
+    const first = events[0];
+    const nonZero = Number(total) !== 0;
+    if (nonZero) {
+      kept.push({
+        source: 'ibkr',
+        source_index: first.source_index,
+        effective_date: date,
+        event_type: 'fx_conversion',
+        source_currency: 'USD',
+        source_amount: fixedDecimal(total, 10),
+        usd_amount: fixedDecimal(total, 10),
+        fx_rate_to_usd: fixedDecimal('1', 12),
+        source_action: '换汇损益（按日合并）',
+        source_description: `${events.length} 笔换汇与汇兑调整合并`,
+        duplicate_ordinal: 0,
+        import_key: makeImportKey(['ibkr', 'fx_conversion', date, fixedDecimal(total, 10)]),
+      });
+    }
+    for (const event of events) {
+      const row = rowBySource.get(event.source_index);
+      if (!row || (nonZero && event === first)) continue;
+      row.item = undefined;
+      row.category = 'cash_event';
+      row.default_status = 'ignore';
+      row.reason = nonZero
+        ? `已并入 ${date} 换汇损益（第 ${first.source_index} 行）。`
+        : `${date} 换汇损益合计为 0，不写入。`;
+    }
+  }
+  return kept.sort((a, b) => a.source_index - b.source_index);
+}
+
+const CHINESE_MONTHS: Record<string, string> = {
+  一月: '01', 二月: '02', 三月: '03', 四月: '04', 五月: '05', 六月: '06',
+  七月: '07', 八月: '08', 九月: '09', 十月: '10', 十一月: '11', 十二月: '12',
+};
+const ENGLISH_MONTHS: Record<string, string> = {
+  january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
+  july: '07', august: '08', september: '09', october: '10', november: '11', december: '12',
+};
+
+/** "九月 24, 2026" / "September 24, 2026" -> 2026-09-24. */
+function parseStatementDate(text: string): string | null {
+  const match = text.trim().match(/^(\S+)\s+(\d{1,2}),\s*(\d{4})$/);
+  if (!match) return parseDate(text);
+  const month = CHINESE_MONTHS[match[1]] ?? ENGLISH_MONTHS[match[1].toLowerCase()];
+  return month ? `${match[3]}-${month}-${match[2].padStart(2, '0')}` : null;
+}
+
+/** The statement's ending cash (base currency) and the period end it is as of. */
+function statementSummary(tableRows: string[][]): { endingCash: string; asOf: string | null } | null {
+  let endingCash: string | null = null;
+  let asOf: string | null = null;
+  for (const row of tableRows) {
+    const field = normalizeHeader(row[2] ?? '');
+    const value = String(row[3] ?? '').trim();
+    if (normalizeHeader(row[1] ?? '') !== 'data') continue;
+    if (field === '期末现金' || field === 'ending cash') {
+      const parsed = Number(value.replace(/,/g, ''));
+      if (Number.isFinite(parsed)) endingCash = parsed.toFixed(10);
+    }
+    if (field === 'period' || field === '期间') {
+      const end = value.split(/\s+-\s+/).at(-1);
+      if (end) asOf = parseStatementDate(end);
+    }
+  }
+  return endingCash === null ? null : { endingCash, asOf };
+}
+
+function lastItemDate(items: Array<LedgerTrade | LedgerCashEvent>): string | null {
+  return items.reduce<string | null>((max, item) => (max === null || item.effective_date > max ? item.effective_date : max), null);
 }
 
 export const ibkrImportAdapter: PortfolioImportAdapter<IbkrParsedImport> = {

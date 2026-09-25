@@ -30,10 +30,29 @@ export type LedgerCashflowKind =
   | 'fee'
   | 'fx_conversion';
 
+export interface AccountRow {
+  id: string;
+  user_id: string;
+  name: string;
+  broker: 'schwab' | 'ibkr' | 'other';
+  base_currency: string;
+  /** Latest broker-reported cash, for reconciliation. */
+  statement_cash_usd: number | null;
+  statement_as_of: string | null;
+  created_at: string;
+}
+export type AccountInsert = Omit<AccountRow, 'id' | 'created_at' | 'statement_cash_usd' | 'statement_as_of'> & {
+  id?: string;
+  statement_cash_usd?: number | null;
+  statement_as_of?: string | null;
+};
+
 export interface CashflowRow {
   id: string;
   user_id: string;
   batch_id: string | null;
+  /** Owning broker account (migration 0058); null for unassigned manual rows. */
+  account_id?: string | null;
   cny_out_date: string;
   cny_amount: number | null;
   usd_in_date: string | null;
@@ -57,6 +76,7 @@ export interface CashflowRow {
 export interface CashflowInsert {
   id?: string;
   user_id: string;
+  account_id?: string | null;
   batch_id?: string | null;
   cny_out_date: string;
   cny_amount?: number | null;
@@ -84,6 +104,8 @@ export interface TransactionRow {
   id: string;
   user_id: string;
   batch_id: string | null;
+  /** Owning broker account (migration 0058); null for unassigned manual rows. */
+  account_id?: string | null;
   trade_date: string;
   ticker: string;
   side: 'buy' | 'sell';
@@ -106,6 +128,7 @@ export interface TransactionRow {
 export interface TransactionInsert {
   id?: string;
   user_id: string;
+  account_id?: string | null;
   batch_id?: string | null;
   trade_date: string;
   ticker: string;
@@ -393,6 +416,7 @@ export interface Database {
   public: {
     Tables: {
       funding_batches: { Row: FundingBatchRow; Insert: FundingBatchInsert; Update: FundingBatchUpdate };
+      accounts: { Row: AccountRow; Insert: AccountInsert; Update: Partial<AccountInsert> };
       cashflows: { Row: CashflowRow; Insert: CashflowInsert; Update: CashflowUpdate };
       transactions: { Row: TransactionRow; Insert: TransactionInsert; Update: TransactionUpdate };
       quote_snapshots: { Row: QuoteSnapshotRow; Insert: QuoteSnapshotInsert; Update: QuoteSnapshotUpdate };

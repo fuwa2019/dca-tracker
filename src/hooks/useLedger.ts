@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useCashflows, usePortfolioHistory, useSettings, useTransactions } from '@/hooks/usePortfolio';
+import { useAccounts, useCashflows, usePortfolioHistory, useSettings, useTransactions } from '@/hooks/usePortfolio';
 import { useDailyPrices } from '@/hooks/useDailyPrices';
 import { aggregatePositions } from '@/lib/calc/position';
 import {
@@ -103,7 +103,26 @@ export function useLedger(options: Options = {}): LedgerModel {
     ? Number(shareSeries[shareSeries.length - 1].return_pct_user)
     : null;
 
-  const statementCash = options.statementCash;
+  const accounts = useAccounts();
+  const statementCash = useMemo<readonly StatementCash[] | undefined>(() => {
+    if (options.statementCash) return options.statementCash;
+    const rows = (accounts.data ?? []).filter((account) => account.statement_cash_usd != null && account.statement_as_of);
+    if (rows.length === 0) return undefined;
+    return rows.map((account) => {
+      const asOf = account.statement_as_of!;
+      let cash = 0;
+      for (const trade of ledger.trades) if (trade.account === account.id && trade.date <= asOf) cash += trade.cashUsd;
+      for (const event of ledger.cash) {
+        if (event.account === account.id && event.role !== 'excluded' && event.date <= asOf) cash += event.amountUsd;
+      }
+      return {
+        label: account.name,
+        asOf,
+        statementCashUsd: Number(account.statement_cash_usd),
+        ledgerCashUsd: Math.round(cash * 1e8) / 1e8,
+      };
+    });
+  }, [options.statementCash, accounts.data, ledger]);
   const checks = useMemo(
     () => runLedgerChecks({
       ledger,

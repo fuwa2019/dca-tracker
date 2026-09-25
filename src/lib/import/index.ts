@@ -33,6 +33,17 @@ export const portfolioImportAdapters: ReadonlyArray<PortfolioImportAdapter> = [
   schwabLedgerImportAdapter,
 ];
 
+/**
+ * Only broker files write the ledger. A TradingView portfolio is typed by
+ * hand and duplicates both brokers, so it is detected (to keep the Schwab
+ * fallback from claiming it) but never imported; it is an export target.
+ */
+export const IMPORTABLE_SOURCES: ReadonlySet<string> = new Set(['schwab', 'ibkr']);
+
+export function isImportableSource(source: string): boolean {
+  return IMPORTABLE_SOURCES.has(source);
+}
+
 export function detectPortfolioImportAdapter(input: ImportInput): PortfolioImportAdapter | null {
   return portfolioImportAdapters.find((adapter) => adapter.detect(input).supported) ?? null;
 }

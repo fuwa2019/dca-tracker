@@ -10,6 +10,7 @@ import { useQuotes } from '@/hooks/useQuotes';
 import { aggregatePositions } from '@/lib/calc/position';
 import { SchwabTransactionTools } from '@/components/SchwabTransactionTools';
 import { PortfolioImportTools } from '@/components/PortfolioImportTools';
+import { LedgerExportTools } from '@/components/LedgerExportTools';
 import { LEDGER_IMPORT_V2 } from '@/lib/localMode';
 
 export function TransactionsPage() {
@@ -62,7 +63,7 @@ export function TransactionsPage() {
             <div>
               <h2 id="import-title" className="text-sm font-semibold">统一导入预览</h2>
               <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                支持 Schwab、IBKR 和 TradingView；个股、ETF、非美市场证券、现金事件和多币种行都会保留。文件只在本机解析，确认前不写入数据库；每一行都会得到导入、重复、忽略或阻止状态。
+                导入 Schwab、IBKR 券商文件；个股、ETF、非美市场证券、现金事件和多币种行都会保留，IBKR 换汇腿按日合并为一条换汇损益。文件只在本机解析，确认前不写入数据库；每一行都会得到导入、重复、忽略或阻止状态。TradingView 组合只作为导出目标。
               </p>
             </div>
           </div>
@@ -71,9 +72,21 @@ export function TransactionsPage() {
             : <SchwabTransactionTools transactions={txns} />}
         </div>
         <div className="mt-5 grid gap-2 border-t border-border pt-4 text-xs sm:grid-cols-3">
-          <ImportRule label="支持来源" value={LEDGER_IMPORT_V2 ? 'Schwab · IBKR · TradingView · 多币种' : 'Schwab 兼容导入'} />
+          <ImportRule label="写入来源" value={LEDGER_IMPORT_V2 ? 'Schwab · IBKR · 多币种' : 'Schwab 兼容导入'} />
           <ImportRule label="写入边界" value="事务提交，失败不留半条记录" />
           <ImportRule label="现有账本" value={`${txns.length} 笔交易 · ${positions.length} 个持仓`} />
+        </div>
+      </section>
+
+      <section className="workbench-panel mt-4" aria-labelledby="export-title">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 id="export-title" className="text-sm font-semibold">导出账本</h2>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+              完整账本保留全部字段（账户、原币价、汇率、USD 结算、导入来源），用于备份与审计；TradingView 格式可直接导入 TradingView 组合，不必再手工录入。
+            </p>
+          </div>
+          <LedgerExportTools />
         </div>
       </section>
 

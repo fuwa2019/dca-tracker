@@ -11,7 +11,7 @@
     "build:dataset": "node scripts/build-local-dataset.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit && tsc --noEmit -p workers/quote && tsc --noEmit -p workers/email-cron",
-    "test:finance": "node --experimental-strip-types scripts/verify-performance-fixtures.mjs && node --experimental-strip-types scripts/verify-target-projection.mjs && node --experimental-strip-types scripts/verify-goal-probability.mjs && node --experimental-strip-types scripts/verify-portfolio-ledger.mjs && node --experimental-strip-types scripts/verify-portfolio-performance-reconciliation.mjs",
+    "test:finance": "node --experimental-strip-types scripts/verify-performance-fixtures.mjs && node --experimental-strip-types scripts/verify-target-projection.mjs && node --experimental-strip-types scripts/verify-goal-probability.mjs && node --experimental-strip-types scripts/verify-portfolio-ledger.mjs && node --experimental-strip-types scripts/verify-portfolio-performance-reconciliation.mjs && node --experimental-strip-types scripts/verify-ledger-export.mjs",
     "test:goal-probability": "node --experimental-strip-types scripts/verify-goal-probability.mjs",
     "test:csv-import": "node --experimental-strip-types scripts/verify-schwab-transactions.ts",
     "test:email-reminder": "node --experimental-strip-types scripts/verify-email-reminder-dates.mjs",

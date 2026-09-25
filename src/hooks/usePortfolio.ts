@@ -15,6 +15,27 @@ import {
 type TxnRow = Database['public']['Tables']['transactions']['Row'];
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
 type SettingsRow = Database['public']['Tables']['settings']['Row'];
+type AccountRow = Database['public']['Tables']['accounts']['Row'];
+
+/**
+ * Broker accounts (migration 0058). Before that migration is applied the
+ * table does not exist; the ledger then simply has no account dimension.
+ */
+export function useAccounts() {
+  return useQuery<AccountRow[]>({
+    queryKey: ['accounts'],
+    queryFn: async () => {
+      if (LOCAL_MODE) return [];
+      const { data, error } = await supabase.from('accounts').select('*').order('created_at');
+      if (error) {
+        if (error.code === '42P01' || error.code === 'PGRST205' || /accounts/.test(error.message ?? '')) return [];
+        throw error;
+      }
+      return data ?? [];
+    },
+    staleTime: 5 * 60_000,
+  });
+}
 
 export function useTransactions() {
   return useQuery<TxnRow[]>({

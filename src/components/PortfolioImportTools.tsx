@@ -27,6 +27,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { refreshLedgerShareCache } from '@/lib/etfHoldings';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { useCashflows } from '@/hooks/usePortfolio';
 import { normalizeSymbol } from '@/lib/symbols';
@@ -36,6 +37,7 @@ import { ledgerEventChip } from '@/lib/ledgerEvents';
 import {
   countLedgerEventKinds,
   detectPortfolioImportAdapter,
+  isImportableSource,
   isRowFixable,
   newLedgerItemsForAppend,
   rebuildPreviewAfterRowFix,
@@ -89,6 +91,22 @@ function importErrorField(error: unknown, key: 'message' | 'details' | 'hint' | 
   if (!error || typeof error !== 'object' || !(key in error)) return '';
   const value = (error as Record<string, unknown>)[key];
   return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * An IBKR statement carries its ending cash. Keep it on the broker account so
+ * the health page can reconcile ledger cash against the broker to the cent.
+ * Best effort: before migration 0058 there is no accounts table.
+ */
+async function recordStatementCash(source: string, context: Record<string, string> | undefined) {
+  const cash = context?.statement_ending_cash;
+  const asOf = context?.statement_as_of;
+  if (!cash || !asOf || (source !== 'ibkr' && source !== 'schwab')) return;
+  const { error } = await supabase
+    .from('accounts')
+    .update({ statement_cash_usd: Number(cash), statement_as_of: asOf })
+    .eq('broker', source);
+  if (error && import.meta.env.DEV) console.warn('[import] statement cash not recorded:', error.message);
 }
 
 function importErrorMessage(error: unknown): string {
@@ -241,6 +259,10 @@ export function PortfolioImportTools({ transactions }: Props) {
         setError('未识别到支持的组合交易文件格式。');
         return;
       }
+      if (!isImportableSource(adapter.source)) {
+        setError('这是 TradingView 组合文件：它由手工录入，只作为导出目标，不写入账本。请导入 Schwab / IBKR 券商文件，再用「导出 TradingView」生成可导入 TradingView 的文件。');
+        return;
+      }
       setRawText(text);
       setSource(adapter.source);
       const nextPreview = adapter.audit(
@@ -300,6 +322,7 @@ export function PortfolioImportTools({ transactions }: Props) {
       if (!nextResult) throw new Error('数据库未返回导入回执。');
       setResult(nextResult);
       setConfirmScope(false);
+      await recordStatementCash(source, preview.detection.context);
       setNotice(mode === 'append'
         ? '新增行已提交，重复行未写入。'
         : '导入已提交，所有源行均在同一事务中处理。');
@@ -313,7 +336,10 @@ export function PortfolioImportTools({ transactions }: Props) {
         qc.invalidateQueries({ queryKey: ['price_coverage'] }),
         qc.invalidateQueries({ queryKey: ['daily_prices'] }),
         qc.invalidateQueries({ queryKey: ['quotes'] }),
+        qc.invalidateQueries({ queryKey: ['accounts'] }),
       ]);
+      // The share page reads the ledger cache; refresh it for the new rows.
+      void refreshLedgerShareCache().catch(() => null);
     } catch (importError) {
       setError(importErrorMessage(importError));
     } finally {

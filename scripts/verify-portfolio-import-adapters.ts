@@ -4,6 +4,7 @@ import { SCHWAB_HEADERS } from '../src/lib/schwabTransactions.ts';
 import {
   applyRowFix,
   detectPortfolioImportAdapter,
+  isImportableSource,
   ibkrImportAdapter,
   isRowFixable,
   newLedgerItemsForAppend,
@@ -108,7 +109,7 @@ assert.equal(ibkrShortChinesePreview.status_counts.block, 0, 'localized short ac
 assert.equal(ibkrShortChinesePreview.trades.filter((row) => row.side === 'buy').length, 1);
 assert.equal(ibkrShortChinesePreview.trades.filter((row) => row.side === 'sell').length, 1);
 assert.ok(ibkrShortChinesePreview.cash_events.some((row) => row.event_type === 'broker_deposit'));
-assert.ok(ibkrShortChinesePreview.cash_events.some((row) => row.event_type === 'fx_transfer'));
+assert.ok(ibkrShortChinesePreview.cash_events.some((row) => row.event_type === 'fx_conversion'));
 
 const ibkrHeaderDataPreview = ibkrImportAdapter.audit({ text: ibkrHeaderDataText, fileName: 'U00000000.TRANSACTIONS.YTD.csv' });
 assert.equal(ibkrHeaderDataPreview.detection.supported, true);
@@ -122,7 +123,7 @@ assert.equal(ibkrHeaderDataPreview.trades.find((row) => row.ticker === 'BHP.AX')
 assert.equal(ibkrHeaderDataPreview.trades.find((row) => row.ticker === 'BHP.AX')?.usd_amount, '-228.1500000000');
 assert.equal(ibkrHeaderDataPreview.trades.find((row) => row.ticker === '700.HK')?.usd_amount, '25.5360000000');
 assert.ok(ibkrHeaderDataPreview.cash_events.some((row) => row.source_currency === 'EUR' && row.usd_amount === '108.0000000000'));
-assert.ok(ibkrHeaderDataPreview.cash_events.some((row) => row.event_type === 'fx_transfer' && row.usd_amount === '-108.0000000000'));
+assert.ok(ibkrHeaderDataPreview.cash_events.some((row) => row.event_type === 'fx_conversion' && row.usd_amount === '-108.0000000000'));
 
 const ibkrBaseCurrencyText = [
   'Transaction History,Header,日期,账户,说明,交易类型,代码,数量,价格,Price Currency,总额,佣金,净额,子类型,汇率,交易费用,乘数',
@@ -138,8 +139,8 @@ const ibkrBaseCurrencyPreview = ibkrImportAdapter.audit({ text: ibkrBaseCurrency
 assert.equal(ibkrBaseCurrencyPreview.detection.supported, true);
 assert.equal(ibkrBaseCurrencyPreview.format, 'ibkr-transaction-history-header-data');
 assert.ok(ibkrBaseCurrencyPreview.detection.warnings.some((warning) => warning.includes('Base Currency')));
-assert.equal(ibkrBaseCurrencyPreview.status_counts.import, 5);
-assert.equal(ibkrBaseCurrencyPreview.status_counts.ignore, 1, 'FX translation P&L is a non-cash valuation adjustment');
+assert.equal(ibkrBaseCurrencyPreview.status_counts.import, 6);
+assert.equal(ibkrBaseCurrencyPreview.status_counts.ignore, 0, 'FX translation P&L joins the daily FX conversion P&L');
 assert.equal(ibkrBaseCurrencyPreview.status_counts.block, 1);
 const baseTickers = new Set(ibkrBaseCurrencyPreview.trades.map((row) => row.ticker));
 assert.deepEqual(baseTickers, new Set(['SMH', 'QQQM', 'SIVE']));
@@ -152,10 +153,32 @@ assert.equal(baseSiveTrade?.fees_usd, '1.8520732404');
 const baseQqqmTrade = ibkrBaseCurrencyPreview.trades.find((row) => row.ticker === 'QQQM');
 assert.equal(baseQqqmTrade?.fees_usd, '0.0000490040');
 assert.equal(baseQqqmTrade?.usd_amount, '-200.0000490040');
-assert.ok(ibkrBaseCurrencyPreview.cash_events.some((row) => row.event_type === 'fx_transfer' && row.source_currency === 'CNH'));
+assert.ok(ibkrBaseCurrencyPreview.cash_events.some((row) => row.event_type === 'fx_conversion' && row.effective_date === '2026-01-05' && row.usd_amount === '-0.0001801417'));
 assert.ok(ibkrBaseCurrencyPreview.cash_events.some((row) => row.event_type === 'broker_deposit' && row.usd_amount === '100.0000000000'));
-assert.equal(ibkrBaseCurrencyPreview.rows.find((row) => row.status === 'ignore')?.reason, 'IBKR FX Translations P&L 为非现金汇兑估值调整，不写入现金账本。');
-assert.equal(ibkrBaseCurrencyPreview.cash_events.some((row) => row.source_description === 'FX Translations P&L'), false, 'ignored FX translation must not enter the cash ledger');
+assert.ok(
+  ibkrBaseCurrencyPreview.cash_events.some((row) => row.event_type === 'fx_conversion' && row.effective_date === '2026-01-07' && row.usd_amount === '0.4112441619'),
+  'FX translation P&L enters the cash ledger so statement cash reconciles',
+);
+
+// Same-day FX legs merge into one internal row; statement cash is captured.
+const ibkrMergeText = [
+  'Statement,Header,域名称,域值',
+  'Statement,Data,Period,"九月 24, 2025 - 九月 24, 2026"',
+  '总结,Header,域名称,域值',
+  '总结,Data,期末现金,96.28437967099538',
+  'Transaction History,Header,日期,账户,说明,交易类型,代码,数量,价格,Price Currency,总额,佣金,净额,子类型,汇率,交易费用,乘数',
+  'Transaction History,Data,2026-08-31,U***1,外汇交易基础货币净额: 0.33 USD.CNH,外汇交易组成部分,USD.CNH,0.33,6.72184,CNH,-1.8014172E-4,-,-1.8014172E-4,-,0.14885,-,1.0',
+  'Transaction History,Data,2026-08-31,U***1,外汇交易基础货币净额: 456.39 USD.CNH,外汇交易组成部分,USD.CNH,456.39,6.7214,CNH,-0.2192451921,-,-0.2192451921,-,0.14885,-,1.0',
+  'Transaction History,Data,2026-08-25,U***1,电子资金转账,存款,-,-,-,-,297.74,-,297.74,-,0.14887,-,1.0',
+].join('\n');
+const ibkrMergePreview = ibkrImportAdapter.audit({ text: ibkrMergeText, fileName: 'merge.csv' });
+const mergedFx = ibkrMergePreview.cash_events.filter((row) => row.event_type === 'fx_conversion');
+assert.equal(mergedFx.length, 1, 'one FX conversion row per day');
+assert.equal(mergedFx[0].usd_amount, '-0.2194253338');
+assert.equal(ibkrMergePreview.status_counts.ignore, 1, 'the merged leg stays visible as merged');
+assert.match(ibkrMergePreview.rows.find((row) => row.status === 'ignore')?.reason ?? '', /已并入 2026-08-31 换汇损益/);
+assert.equal(ibkrMergePreview.detection.context?.statement_ending_cash, '96.2843796710');
+assert.equal(ibkrMergePreview.detection.context?.statement_as_of, '2026-09-24');
 assert.equal(ibkrBaseCurrencyPreview.rows.find((row) => row.source_index === 8)?.reason, '操作类型无法映射', 'other Adjustment rows must remain blocked');
 const officialIbkrShape = read('ibkr-activity-statement-official-en.csv');
 const officialIbkrPreview = ibkrImportAdapter.audit({ text: officialIbkrShape, fileName: 'activity-statement-trades.csv' });
@@ -211,6 +234,8 @@ assert.equal(
   'tradingview',
   'six-column TradingView must win before the legacy Schwab-compatible parser',
 );
+assert.equal(isImportableSource('tradingview'), false, 'TradingView files are export-only');
+assert.equal(isImportableSource('ibkr') && isImportableSource('schwab'), true, 'broker files write the ledger');
 assert.equal(detectPortfolioImportAdapter({ text: ibkrEnglishText })?.source, 'ibkr');
 assert.equal(detectPortfolioImportAdapter({ text: schwabText })?.source, 'schwab');
 

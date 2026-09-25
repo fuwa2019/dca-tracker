@@ -1,5 +1,29 @@
 # Import and Portfolio Ledger Contract
 
+## 2026-09-25 changes
+
+- **Write sources are broker files only** (`IMPORTABLE_SOURCES`: Schwab, IBKR).
+  A TradingView portfolio is hand-typed and duplicates both brokers; it is
+  still detected (so the Schwab six-column fallback cannot claim it) but the
+  importer refuses it. TradingView is an export target instead.
+- **IBKR FX legs** ("外汇交易组成部分", "Forex trade component") and the
+  "FX Translations P&L" adjustment become one internal `fx_conversion` event
+  per day (migration 0058). The other legs stay visible in the preview as
+  merged. Including the translation row is what makes ledger cash equal the
+  statement's ending cash (verified to the cent on a real export).
+- **Statement cash**: the IBKR summary's 期末现金 / Ending Cash and the period
+  end are carried in `detection.context`; after a successful import they are
+  stored on the IBKR account (`accounts.statement_cash_usd/_as_of`) and the
+  health page reconciles that account's ledger cash against it.
+- **Accounts** (migration 0058): imported rows are assigned to their broker
+  account by a trigger; manual rows stay unassigned until chosen.
+- **Schwab "X as of Y"** dates use the as-of date.
+- **Exports** (`src/lib/export/`): the full ledger CSV (every stored field,
+  including CNY transfers) and the TradingView six-column CSV (exchange
+  prefixes, native price and commission for foreign listings, `$CASH` rows,
+  deposits before trades within a day). Covered by
+  `scripts/verify-ledger-export.mjs`.
+
 Status: parser and preview contracts implemented locally; database write release pending.
 Updated: 2026-09-04
 

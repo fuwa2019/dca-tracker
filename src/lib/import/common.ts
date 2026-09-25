@@ -70,6 +70,13 @@ export function normalizeTradingViewSymbol(value: string): {
 
 export function parseDate(value: string): string | null {
   const text = value.trim();
+  // Schwab: "06/23/2026 as of 06/22/2026" — the as-of date is when the event
+  // took effect; the first date is only when it posted.
+  const asOf = text.match(/\bas of\s+(.+)$/i);
+  if (asOf) {
+    const effective = parseDate(asOf[1]);
+    if (effective) return effective;
+  }
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return validDate(iso[1], iso[2], iso[3]);
   const compact = text.match(/^(\d{4})(\d{2})(\d{2})/);
