@@ -71,6 +71,11 @@ Progress — steps 1-6 completed 2026-09-26 (owner authorized):
 - The position check caught a phantom 0.2582 IBIT (Schwab same-day Sell stored
   before Buy); fixed in `f684cf0`.
 - Step 7 (share links) untouched — owner's decision.
+- Follow-up 2026-09-26: the monthly P&L calendar drops Saturday/Sunday
+  (`f5247d9`, front end only). Pages direct upload `5b056902` from `f5247d9`,
+  entry `index-CXM3dabW.js`; built with the public `VITE_*` values taken from
+  the live bundle (this machine cannot reach the GitHub remote, so `master` is
+  still unpushed).
 
 1. Check whether `0057_fix_portfolio_import_validator_privilege` is applied
    (the owner does not remember); apply it if not.
