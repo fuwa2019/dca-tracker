@@ -77,6 +77,9 @@ Progress — steps 1-6 completed 2026-09-26 (owner authorized):
   the live bundle. `master` was then pushed through `ssh.github.com:443`
   (port 22 is intercepted by the local proxy); the Git build `db63bd03` of
   `6d626dd` produced the identical entry and is the current production.
+- Follow-up 2026-09-26: the overview value curve no longer clips its lowest
+  stroke (`d462d36`, bottom margin 0 → 4, front end only). Git build
+  `6f65a04e` of `d462d36` on `dca-tracker-git`, entry `index-D0SLv9uS.js`.
 
 1. Check whether `0057_fix_portfolio_import_validator_privilege` is applied
    (the owner does not remember); apply it if not.
