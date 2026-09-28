@@ -94,7 +94,7 @@ export function PerformancePanel({
     // Re-base cumulative returns to the first visible point so a sub-period
     // (e.g. YTD) starts the curve at 0% instead of carrying the all-time
     // cumulative return forward. The period (daily) returns are untouched, and
-    // the summary table above still uses the full-history rows.
+    // the period metrics use the same rebased rows as the curve.
     const base = visibleRows[0];
     return visibleRows.map((row) => {
       const portfolioCum = (1 + row.portfolioCumulativeReturn) / (1 + base.portfolioCumulativeReturn) - 1;
@@ -112,7 +112,7 @@ export function PerformancePanel({
     });
   }, [visibleRows]);
   const chartRows = useMemo(() => downsampleChartRows(fullChartRows, MAX_CHART_POINTS), [fullChartRows]);
-  const summary = useMemo(() => buildSummary(performanceRows), [performanceRows]);
+  const periodEnd = fullChartRows.at(-1);
   const dateLabel = visibleRows.length > 0
     ? `${visibleRows[0].date} 至 ${visibleRows[visibleRows.length - 1].date}`
     : '暂无日期范围';
@@ -125,9 +125,7 @@ export function PerformancePanel({
         <div className="flex flex-col gap-3 border-b border-border bg-surface-elevated/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           {/* Mobile: label + controls row */}
           <div className="flex items-center justify-between gap-2 sm:hidden">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              时间段
-            </span>
+            <h2 className="text-sm font-semibold">业绩曲线</h2>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -153,9 +151,7 @@ export function PerformancePanel({
 
           {/* Desktop: label + segmented control */}
           <div className="hidden items-center gap-3 sm:flex">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground shrink-0">
-              时间段
-            </span>
+            <h2 className="shrink-0 text-sm font-semibold">业绩曲线</h2>
             {filteredRanges.length > 0 ? (
               <SegmentedControl
                 value={safeRange}
@@ -218,19 +214,10 @@ export function PerformancePanel({
         )}
 
         {history.length === 0 && loading ? (
-          // The loaded panel is roughly 780 px tall; a short spinner here would
-          // let the history arriving push everything below the card down. This
-          // renders the same frame at the same height, with the numbers held
-          // back, so the only thing that changes on arrival is the content.
+          // Keep the same summary and chart frame while loading so incoming
+          // history does not push the supporting sections down.
           <div aria-busy="true">
-            <ChartHeader benchmarkLabel={benchmarkLabel} />
-            <SummaryTable
-              dateLabel="正在拉取历史数据"
-              summary={summary}
-              showBenchmark={showBenchmark}
-              benchmarkLabel={benchmarkLabel}
-              pending
-            />
+            <PeriodSummary dateLabel="正在拉取历史数据" showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
             <div className="h-[340px] px-2 pb-1 pt-4 sm:h-[400px]" />
             <div className="border-t border-border px-4 py-2.5 text-sm text-muted-foreground">
               每日明细
@@ -246,8 +233,7 @@ export function PerformancePanel({
           </div>
         ) : (
           <>
-            <ChartHeader benchmarkLabel={benchmarkLabel} />
-            <SummaryTable dateLabel={dateLabel} summary={summary} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
+            <PeriodSummary dateLabel={dateLabel} end={periodEnd} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
             <PerformanceChart rows={chartRows} showBenchmark={showBenchmark} benchmarkLabel={benchmarkLabel} />
             <div className="border-t border-border">
               <button
@@ -276,9 +262,10 @@ export function PerformancePanel({
         )}
       </Card>
 
-      <p className="text-[11px] leading-5 text-muted-foreground">
+      <details className="text-[11px] leading-5 text-muted-foreground">
+        <summary className="cursor-pointer">业绩数据说明</summary>
         业绩基于账本中的交易、现金事件与日线收盘价；曲线为按入金 / 出金切分的时间加权回报 (TWR)，以 {benchmarkLabel} 实际价格日作为交易日历。历史数据仅供分析参考，不构成投资建议。
-      </p>
+      </details>
     </div>
   );
 }
@@ -320,133 +307,33 @@ function BenchmarkToggle({
   );
 }
 
-/** Shared by the loaded panel and the loading frame so the two stay the same height. */
-function ChartHeader({ benchmarkLabel }: { benchmarkLabel: string }) {
-  return (
-    <div className="border-b border-border px-4 py-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold tracking-tight">业绩曲线</div>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            只统计 {benchmarkLabel} 有实际日线价格的美股交易日；周末、节假日和休市日不会生成平点。
-          </p>
-        </div>
-        <div className="rounded-md border border-border bg-surface-elevated px-2 py-1 text-[11px] text-muted-foreground">
-          Benchmark calendar · {benchmarkLabel}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SummaryTable({
-  dateLabel,
-  summary,
-  showBenchmark,
-  benchmarkLabel,
-  pending = false,
-}: {
+function PeriodSummary({ dateLabel, end, showBenchmark, benchmarkLabel }: {
   dateLabel: string;
-  summary: ReturnType<typeof buildSummary>;
+  end?: ChartRow;
   showBenchmark: boolean;
   benchmarkLabel: string;
-  /** Render the same rows with the numbers withheld, for the loading frame. */
-  pending?: boolean;
 }) {
-  const headers = ['本月', '本季', '本年'];
+  const metrics = [
+    { label: '组合 · 区间收益', value: end?.portfolioCumulativeReturn },
+    ...(showBenchmark ? [
+      { label: `${benchmarkLabel} · 同期基准`, value: end?.spyCumulativeReturn },
+      { label: `相对 ${benchmarkLabel} · 超额收益`, value: end?.excessCumulativeReturn },
+    ] : []),
+  ];
   return (
-    <div className="border-b border-border">
-      <div className="flex items-baseline justify-between px-4 pt-4">
-        <div className="text-sm font-semibold tracking-tight">历史业绩</div>
-        <div className="text-[11px] text-muted-foreground tnum">{dateLabel}</div>
+    <div className="px-3 py-4 sm:px-4" aria-live="polite">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        {metrics.map(({ label, value }) => (
+          <div key={label}>
+            <div className="text-[10px] text-muted-foreground sm:text-xs">{label}</div>
+            <div className={cn('mt-1 font-num text-xl font-semibold tnum sm:text-3xl', value == null ? 'text-muted-foreground' : changeColor(value))}>
+              {value == null ? '—' : formatSignedPct(value)}
+            </div>
+          </div>
+        ))}
       </div>
-      <div className="px-4 pb-3 pt-3">
-        <div className="relative overflow-x-auto" tabIndex={0} role="region" aria-label="历史业绩表格">
-          <table className="w-full min-w-[360px] border-separate border-spacing-0 text-[13px]">
-            <caption className="sr-only">历史业绩：各区间的组合与基准回报</caption>
-            <thead>
-              <tr className="text-muted-foreground">
-                <th className="w-40 px-2 py-2 text-left text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">
-                  <span className="sr-only">指标</span>
-                </th>
-                {headers.map((h) => (
-                  <th key={h} className="px-2 py-2 text-right text-[11px] font-medium uppercase tracking-wider whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {showBenchmark && (
-                <SummaryRow name={`${benchmarkLabel} 基准`} swatch={BENCHMARK_STROKE} values={summary.spy.slice(0, 3)} muted pending={pending} />
-              )}
-              <SummaryRow name="组合 NAV" swatch={PORTFOLIO_STROKE} values={summary.portfolio.slice(0, 3)} bold pending={pending} />
-              {showBenchmark && (
-                <SummaryRow name={`超额 vs ${benchmarkLabel}`} values={summary.excess.slice(0, 3)} dashed judge pending={pending} />
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <div className="mt-3 text-[11px] text-muted-foreground tnum">{dateLabel} · 区间起点归零</div>
     </div>
-  );
-}
-
-function SummaryRow({
-  name,
-  values,
-  swatch,
-  bold = false,
-  muted = false,
-  dashed = false,
-  judge = false,
-  pending = false,
-}: {
-  name: string;
-  values: number[];
-  swatch?: string;
-  bold?: boolean;
-  muted?: boolean;
-  dashed?: boolean;
-  /** 仅"超额"这种判断性指标用涨跌色;序列本身靠左侧色块识别,数字保持中性。 */
-  judge?: boolean;
-  pending?: boolean;
-}) {
-  return (
-    <tr>
-      <td className="px-2 py-2">
-        <span className="inline-flex items-center gap-2">
-          {swatch ? (
-            <span
-              aria-hidden
-              className="inline-block h-2.5 w-2.5 rounded-sm"
-              style={{ background: swatch }}
-            />
-          ) : (
-            <span
-              aria-hidden
-              className={cn(
-                'inline-block h-0.5 w-3 rounded-sm bg-muted-foreground/40',
-                dashed && 'border-t border-dashed border-muted-foreground/60 bg-transparent',
-              )}
-            />
-          )}
-          <span className={cn('text-foreground', muted && 'text-muted-foreground')}>{name}</span>
-        </span>
-      </td>
-      {values.map((value, i) => (
-        <td
-          key={i}
-          className={cn(
-            'px-2 py-2 text-right tnum',
-            bold && 'font-semibold',
-            pending ? 'text-muted-foreground' : judge ? changeColor(value) : muted ? 'text-muted-foreground' : 'text-foreground',
-          )}
-        >
-          {pending ? '—' : formatSignedPct(value)}
-        </td>
-      ))}
-    </tr>
   );
 }
 
@@ -488,7 +375,7 @@ function PerformanceChart({ rows, showBenchmark, benchmarkLabel }: { rows: Chart
           />
           {showBenchmark && (
             <Line
-              type="linear"
+              type="monotone"
               dataKey="spyCumulativePct"
               stroke={BENCHMARK_STROKE}
               strokeWidth={2}
@@ -498,7 +385,7 @@ function PerformanceChart({ rows, showBenchmark, benchmarkLabel }: { rows: Chart
             />
           )}
           <Line
-            type="linear"
+            type="monotone"
             dataKey="portfolioCumulativePct"
             stroke={PORTFOLIO_STROKE}
             strokeWidth={2.2}
@@ -779,49 +666,6 @@ function periodReturn(prevCumulative: number, currentCumulative: number): number
   if (!Number.isFinite(base) || Math.abs(base) < 1e-9) return 0;
   const value = (1 + currentCumulative) / base - 1;
   return Number.isFinite(value) ? value : 0;
-}
-
-function buildSummary(rows: PerfRow[]) {
-  const end = rows[rows.length - 1];
-  const empty = [0, 0, 0, 0];
-  if (!end) return { spy: empty, portfolio: empty, excess: empty };
-  const portfolio = [
-    returnSince(rows, startOfMonth(end.date), 'portfolioCumulativeReturn'),
-    returnSince(rows, startOfQuarter(end.date), 'portfolioCumulativeReturn'),
-    returnSince(rows, `${end.date.slice(0, 4)}-01-01`, 'portfolioCumulativeReturn'),
-    end.portfolioCumulativeReturn,
-  ];
-  const spy = [
-    returnSince(rows, startOfMonth(end.date), 'spyCumulativeReturn'),
-    returnSince(rows, startOfQuarter(end.date), 'spyCumulativeReturn'),
-    returnSince(rows, `${end.date.slice(0, 4)}-01-01`, 'spyCumulativeReturn'),
-    end.spyCumulativeReturn,
-  ];
-  const excess = portfolio.map((p, i) => excessReturn(p, spy[i]));
-  return { spy, portfolio, excess };
-}
-
-function returnSince(rows: PerfRow[], startDate: string, key: 'spyCumulativeReturn' | 'portfolioCumulativeReturn') {
-  const end = rows[rows.length - 1]?.[key] ?? 0;
-  let previous = 0;
-  for (let i = rows.length - 1; i >= 0; i--) {
-    if (rows[i].date < startDate) {
-      previous = rows[i][key];
-      break;
-    }
-  }
-  return periodReturn(previous, end);
-}
-
-function startOfMonth(iso: string) {
-  return `${iso.slice(0, 7)}-01`;
-}
-
-function startOfQuarter(iso: string) {
-  const year = iso.slice(0, 4);
-  const month = Number(iso.slice(5, 7));
-  const quarterStart = Math.floor((month - 1) / 3) * 3 + 1;
-  return `${year}-${String(quarterStart).padStart(2, '0')}-01`;
 }
 
 function chartDomain(values: number[]): [number, number] {

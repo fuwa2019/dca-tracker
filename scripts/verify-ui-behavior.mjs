@@ -44,8 +44,8 @@ assert.doesNotMatch(performance, /相对 SPY。/, 'performance summary must not 
 assert.match(performance, /MonthlyPerformanceCalendar/, 'performance page includes the monthly calendar');
 
 const calendar = readFileSync(new URL('../src/components/MonthlyPerformanceCalendar.tsx', import.meta.url), 'utf8');
-assert.match(calendar, /金额/, 'calendar has amount mode');
-assert.match(calendar, /百分比/, 'calendar has percentage mode');
+assert.match(calendar, /金额/, 'calendar shows amounts');
+assert.match(calendar, /收益率/, 'calendar shows returns alongside amounts');
 assert.match(calendar, /本月暂无业绩数据/, 'calendar has an empty-month state');
 
 const dailyPnlMigration = readFileSync(new URL('../supabase/migrations/0042_private_performance_daily_pnl.sql', import.meta.url), 'utf8');

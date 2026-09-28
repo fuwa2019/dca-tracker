@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw } from '@/components/icons';
 import { Card } from '@/components/ui/card';
-import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { usePerformanceDailyPnl } from '@/hooks/usePerformanceDailyPnl';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { LOCAL_BENCHMARK, localPriceMap } from '@/lib/localData';
@@ -18,13 +17,6 @@ import {
 } from '@/lib/calc/performanceCalendar';
 import { changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
-
-type CalendarMode = 'amount' | 'percent';
-
-const MODE_OPTIONS: ReadonlyArray<{ value: CalendarMode; label: string }> = [
-  { value: 'amount', label: '金额' },
-  { value: 'percent', label: '百分比' },
-];
 
 const WEEKDAYS = ['周一', '周二', '周三', '周四', '周五'];
 
@@ -52,7 +44,7 @@ export function MonthlyPerformanceCalendar({
   const firstMonth = calendarHistory[0] ? monthKey(calendarHistory[0].date) : null;
   const latestMonth = calendarHistory.at(-1) ? monthKey(calendarHistory.at(-1)!.date) : null;
   const [month, setMonth] = useState(latestMonth ?? currentMonthKey());
-  const [mode, setMode] = useState<CalendarMode>('amount');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (latestMonth) setMonth(latestMonth);
@@ -81,7 +73,7 @@ export function MonthlyPerformanceCalendar({
     benchmark: normalizedBenchmark,
     startDate: monthBounds.start,
     endDate: monthBounds.end,
-    enabled: mode === 'amount' && !localAmounts,
+    enabled: !localAmounts,
   });
   const remotePnlByDate = useMemo(
     () => new Map((dailyPnlQuery.data?.series ?? []).map((row) => [row.date, row.daily_pnl_user])),
@@ -92,96 +84,64 @@ export function MonthlyPerformanceCalendar({
   const previousDisabled = !canNavigate || month <= firstMonth!;
   const nextDisabled = !canNavigate || month >= latestMonth!;
   const amountReady = localAmounts || !!dailyPnlQuery.data || dailyPnlQuery.isError;
-  const amountError = mode === 'amount' && !localAmounts && dailyPnlQuery.isError;
+  const amountError = !localAmounts && dailyPnlQuery.isError;
   const noPerformance = calendarHistory.length === 0;
+
+  const pnlByDate = localAmounts ? localPnlByDate : remotePnlByDate;
+  const selected = selectedDate?.startsWith(month) && pointByDate.has(selectedDate)
+    ? selectedDate : monthPoints.at(-1)?.date;
+  const monthAmounts = monthPoints.map((point) => pnlByDate.get(point.date));
+  const monthReturns = monthPoints.map((point) => percentByDate.get(point.date));
+  // Partial / missing data must not look like a complete monthly total.
+  const monthPnl = monthAmounts.length && monthAmounts.every((value) => value != null && Number.isFinite(value))
+    ? monthAmounts.reduce<number>((total, value) => total + value!, 0) : null;
+  const monthReturn = monthReturns.length && monthReturns.every((value) => value != null && Number.isFinite(value))
+    ? monthReturns.reduce<number>((total, value) => total * (1 + value!), 1) - 1 : null;
 
   return (
     <Card className="overflow-hidden p-0">
-      <div className="flex flex-col gap-3 border-b border-border bg-surface-elevated/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="text-sm font-semibold tracking-tight">月度盈亏日历</div>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            只显示工作日和 {normalizedBenchmark} 实际价格日；休市日和未来日期留空。
-          </p>
-        </div>
-        <div className="grid w-full grid-cols-[2rem_minmax(5.75rem,1fr)_2rem_auto] items-center gap-2 sm:flex sm:w-auto">
-          <MonthButton
-            label="上一个业绩月份"
-            disabled={previousDisabled}
-            onClick={() => setMonth(shiftMonth(month, -1))}
-          >
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-4 sm:px-4">
+        <h2 className="text-sm font-semibold tracking-tight">盈亏日历</h2>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <MonthButton label="上一个业绩月份" disabled={previousDisabled} onClick={() => setMonth(shiftMonth(month, -1))}>
             <ChevronLeft className="h-3.5 w-3.5" />
           </MonthButton>
-          <div className="min-w-0 text-center text-sm font-semibold tnum sm:min-w-[104px]" aria-live="polite">
-            {formatMonth(month)}
-          </div>
-          <MonthButton
-            label="下一个业绩月份"
-            disabled={nextDisabled}
-            onClick={() => setMonth(shiftMonth(month, 1))}
-          >
+          <div className="min-w-[92px] text-center text-xs font-semibold tnum sm:text-sm" aria-live="polite">{formatMonth(month)}</div>
+          <MonthButton label="下一个业绩月份" disabled={nextDisabled} onClick={() => setMonth(shiftMonth(month, 1))}>
             <ChevronRight className="h-3.5 w-3.5" />
           </MonthButton>
-          <SegmentedControl
-            value={mode}
-            onChange={setMode}
-            options={MODE_OPTIONS}
-            size="sm"
-            name="performance-calendar-mode"
-            ariaLabel="选择日历显示模式"
-            className="ml-0 sm:ml-1"
-          />
         </div>
       </div>
-
-      {amountError && (
-        <div className="flex items-start gap-2 border-b border-loss/30 bg-loss/5 px-4 py-3 text-xs">
-          <RefreshCw className="mt-0.5 h-3.5 w-3.5 shrink-0 text-loss" />
-          <div>
-            <div className="font-medium text-loss">金额数据暂不可用</div>
-            <p className="mt-0.5 text-muted-foreground">可以切换到“百分比”继续查看；金额缓存不会影响业绩曲线。</p>
-          </div>
-        </div>
-      )}
-
-      <div className="px-2 py-3 min-[380px]:px-3 sm:px-4 sm:py-4">
-        <div className="grid grid-cols-5 gap-px overflow-hidden rounded-lg border border-border bg-border">
-          {WEEKDAYS.map((weekday) => (
-            <div key={weekday} className="bg-surface-elevated px-1 py-2 text-center text-[10px] font-medium text-muted-foreground sm:text-[11px]">
-              {weekday}
-            </div>
+      <div className="flex flex-wrap items-baseline gap-2 px-3 pb-4 sm:px-4" aria-live="polite">
+        <span className="text-xs text-muted-foreground">本月盈亏</span>
+        <strong className={cn('font-num text-2xl tnum', monthPnl == null ? 'text-muted-foreground' : changeColor(monthPnl))}>{formatAmount(monthPnl, false)}</strong>
+        <span className={cn('text-xs tnum', monthReturn == null ? 'text-muted-foreground' : changeColor(monthReturn))}>{formatPercent(monthReturn)}</span>
+      </div>
+      {amountError && <p className="border-y border-loss/30 bg-loss/5 px-4 py-2 text-xs text-loss">金额数据暂不可用，收益率仍可查看。</p>}
+      <div className="px-2 pb-3 sm:px-4 sm:pb-4">
+        <div className="grid grid-cols-5 gap-1 sm:gap-1.5">
+          {WEEKDAYS.map((weekday) => <div key={weekday} className="px-1 pb-1 text-[10px] text-muted-foreground sm:px-2 sm:text-[11px]">{weekday}</div>)}
+          {cells.map((date, index) => (
+            <CalendarCell key={date ?? `blank-${index}`} date={date}
+              point={date ? pointByDate.get(date) : undefined}
+              amount={date ? pnlByDate.get(date) : undefined}
+              percent={date ? percentByDate.get(date) : undefined}
+              loading={!amountReady} selected={selected === date}
+              onSelect={() => setSelectedDate(date)} />
           ))}
-          {cells.map((date, index) => {
-            const point = date ? pointByDate.get(date) : undefined;
-            const percentValue = date ? percentByDate.get(date) : undefined;
-            const amountValue = date
-              ? (localAmounts ? localPnlByDate.get(date) : remotePnlByDate.get(date))
-              : undefined;
-            return (
-              <CalendarCell
-                key={date ?? `blank-${index}`}
-                date={date}
-                point={point}
-                value={mode === 'amount' ? amountValue : percentValue}
-                displayMode={mode}
-                loading={mode === 'amount' && !amountReady && !!point}
-              />
-            );
-          })}
         </div>
-
-        {noPerformance ? (
-          <p className="mt-3 text-center text-xs text-muted-foreground">暂无业绩数据，录入交易并生成业绩缓存后会显示在这里。</p>
-        ) : monthPoints.length === 0 ? (
-          <p className="mt-3 text-center text-xs text-muted-foreground">本月暂无业绩数据</p>
-        ) : (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
-            <span>{mode === 'amount' ? '金额币种：USD' : '百分比按相邻累计 TWR 点计算'}</span>
-            {mode === 'amount' && !localAmounts && dailyPnlQuery.isFetching && (
-              <span className="inline-flex items-center gap-1 text-brand"><RefreshCw className="h-3 w-3 animate-spin" />读取金额缓存</span>
-            )}
-          </div>
-        )}
+        <div className="mt-3 flex flex-wrap justify-between gap-1 text-[10px] text-muted-foreground sm:text-[11px]">
+          <span>金额 USD · 收益率 TWR</span><span>淡绿盈利 / 淡红亏损 · 点选日期查看详情</span>
+          {!localAmounts && dailyPnlQuery.isFetching && <span className="inline-flex items-center gap-1"><RefreshCw className="h-3 w-3 animate-spin" />读取金额缓存</span>}
+        </div>
+        <div className="mt-3 min-h-9 border-t border-border pt-3 text-xs" aria-live="polite">
+          {selected ? <div className="flex flex-wrap gap-x-3 gap-y-1 tnum">
+            <span className="text-muted-foreground">{selected}</span>
+            <strong className={changeColor(pnlByDate.get(selected) ?? 0)}>{formatAmount(pnlByDate.get(selected), false)}</strong>
+            <span className={changeColor(percentByDate.get(selected) ?? 0)}>{formatPercent(percentByDate.get(selected))}</span>
+            <span className="text-muted-foreground">当日投资盈亏</span>
+          </div> : <span className="text-muted-foreground">{noPerformance ? '暂无业绩数据' : '本月暂无业绩数据'}</span>}
+        </div>
       </div>
     </Card>
   );
@@ -201,50 +161,31 @@ function MonthButton({ label, disabled, onClick, children }: { label: string; di
   );
 }
 
-function CalendarCell({
-  date,
-  point,
-  value,
-  displayMode,
-  loading,
-}: {
+function CalendarCell({ date, point, amount, percent, loading, selected, onSelect }: {
   date: string | null;
   point?: HistoryPoint;
-  value?: number | null;
-  displayMode: CalendarMode;
+  amount?: number | null;
+  percent?: number | null;
   loading: boolean;
+  selected: boolean;
+  onSelect: () => void;
 }) {
-  if (!date) return <div className="min-h-[58px] bg-surface/35 sm:min-h-[76px]" aria-hidden="true" />;
-
-  const hasValue = value !== undefined;
-  const tone = hasValue && value != null ? changeColor(value) : 'text-muted-foreground';
-  const fullLabel = displayMode === 'amount'
-    ? formatAmount(value, false)
-    : formatPercent(value);
-  const title = point ? `${date} · ${fullLabel}` : date;
-
+  const base = 'min-h-[82px] min-w-0 rounded-md px-1 py-2 text-left sm:min-h-[88px] sm:px-2';
+  if (!date) return <div className={base} aria-hidden="true" />;
+  if (!point) return <div className={cn(base, 'bg-surface-elevated/40 text-[10px] text-muted-foreground')}><span>{Number(date.slice(-2))}</span></div>;
+  const value = amount != null && Number.isFinite(amount) ? amount : percent;
   return (
-    <div className="min-h-[58px] overflow-hidden bg-surface px-1 py-1.5 min-[380px]:px-1.5 sm:min-h-[76px] sm:px-2 sm:py-2" title={title}>
-      <div className="flex items-center justify-between gap-1 text-[10px] text-muted-foreground sm:text-[11px]">
-        <span className="tnum">{Number(date.slice(-2))}</span>
-        {point && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand/60" role="img" aria-label="交易日" />}
-      </div>
-      {point && (
-        <div className={cn('mt-2 truncate font-mono text-[9px] font-semibold leading-tight tracking-tight tnum min-[380px]:text-[10px] sm:text-xs sm:tracking-normal', tone)}>
-          {loading ? '…' : displayMode === 'amount' ? (
-            <>
-              <span className="hidden sm:inline">{formatAmount(value, false)}</span>
-              <span className="sm:hidden">{formatCompactAmount(value)}</span>
-            </>
-          ) : (
-            <>
-              <span className="hidden sm:inline">{formatPercent(value)}</span>
-              <span className="sm:hidden">{formatCompactPercent(value)}</span>
-            </>
-          )}
-        </div>
-      )}
-    </div>
+    <button type="button" onClick={onSelect} aria-pressed={selected}
+      aria-label={`${date}，盈亏 ${loading ? '读取中' : formatAmount(amount, false)}，收益率 ${formatPercent(percent)}`}
+      className={cn(base, 'border border-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        value != null && value > 0 ? 'bg-gain/10' : value != null && value < 0 ? 'bg-loss/10' : 'bg-surface-elevated/40',
+        selected && 'border-brand ring-1 ring-brand')}>
+      <span className="mb-2 block text-[10px] text-muted-foreground tnum sm:text-[11px]">{Number(date.slice(-2))}</span>
+      <span className={cn('block font-num text-[11px] font-semibold leading-tight tnum sm:text-sm', changeColor(amount ?? 0))}>
+        {loading ? '…' : <><span className="hidden sm:inline">{formatAmount(amount, false)}</span><span className="sm:hidden">{formatCompactAmount(amount)}</span></>}
+      </span>
+      <span className={cn('mt-1 block font-num text-[10px] leading-tight tnum sm:text-xs', changeColor(percent ?? 0))}>{formatPercent(percent)}</span>
+    </button>
   );
 }
 
@@ -271,13 +212,6 @@ function formatCompactAmount(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) return '—';
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
   return `${sign}$${compactNumber(Math.abs(value))}`;
-}
-
-function formatCompactPercent(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '—';
-  const percent = value * 100;
-  const sign = percent > 0 ? '+' : percent < 0 ? '−' : '';
-  return `${sign}${Math.abs(percent).toFixed(1)}%`;
 }
 
 function compactNumber(value: number): string {

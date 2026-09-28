@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw, AlertTriangle, CalendarDays } from '@/components/icons';
+import { RefreshCw, AlertTriangle } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { StatCard } from '@/components/StatCard';
 import { StatusBadge } from '@/components/StatusBadge';
 import { PerformancePanel } from '@/components/IbkrPerformancePanel';
 import { MonthlyPerformanceCalendar } from '@/components/MonthlyPerformanceCalendar';
@@ -13,7 +12,7 @@ import { useLedger } from '@/hooks/useLedger';
 import { usePerformanceCacheStatus, useRefreshPerformanceCache } from '@/hooks/usePerformanceCache';
 import { availableRanges, sliceByRange, type RangeKey } from '@/lib/calc/history';
 import { summarizeLedgerWindow } from '@/lib/calc/portfolioLedger';
-import { signedPct, changeColor } from '@/lib/format';
+import { signedPct } from '@/lib/format';
 
 export function PerformancePage() {
   const [range, setRange] = useState<RangeKey>('ALL');
@@ -34,7 +33,6 @@ export function PerformancePage() {
 
   const last = history[history.length - 1];
   const twr = summary.twr;
-  const benchmarkReturn = summary.benchmarkReturn;
   const excess = summary.excessReturn;
 
   const cacheError = cacheStatus.data?.error;
@@ -45,55 +43,11 @@ export function PerformancePage() {
 
   return (
     <div className="workbench-page space-y-5">
-      <header className="workbench-intro">
-        <div className="max-w-3xl">
-          <p className="workbench-lede">{reportLead}</p>
-          <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
-              <CalendarDays className="h-3.5 w-3.5" />
-              {benchmark} 交易日
-            </span>
-            <span className="rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
-              TWR 按券商入金 / 出金切分
-            </span>
-            <span className="rounded-md border border-border bg-surface px-2 py-1 text-muted-foreground">
-              持仓按收盘价 · 基准按复权价
-            </span>
-            <UnreconciledBadge checks={checks} />
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {ledger.loading ? (
-            <StatusBadge tone="info" dot>读取账本</StatusBadge>
-          ) : series.complete ? (
-            <StatusBadge tone="ok" dot>账本估值完整</StatusBadge>
-          ) : (
-            <StatusBadge tone="warn" dot>部分价格缺失</StatusBadge>
-          )}
-          {shareCheck && (
-            <StatusBadge tone={shareCheck.status === 'pass' ? 'ok' : 'warn'} dot>
-              分享页{shareCheck.status === 'pass' ? '口径一致' : '缓存待更新'}
-            </StatusBadge>
-          )}
-          <Button asChild variant="outline" size="sm">
-            <Link to="/health">
-              <RefreshCw className="h-3.5 w-3.5" />
-              数据健康
-            </Link>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => refreshCache.mutate()}
-            disabled={refreshCache.isPending || history.length === 0}
-            title="重算分享页读取的百分比缓存"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshCache.isPending ? 'animate-spin' : ''}`} />
-            {refreshCache.isPending ? '刷新中' : '刷新分享缓存'}
-          </Button>
-        </div>
-      </header>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>每天的盈亏，长期的表现。</span>
+        <UnreconciledBadge checks={checks} />
+        {!ledger.loading && !series.complete && <StatusBadge tone="warn" dot>部分价格缺失</StatusBadge>}
+      </div>
 
       {(cacheError || refreshCache.isError) && (
         <Card className="flex items-start gap-3 border-loss/30 bg-loss/5 p-4 text-sm">
@@ -108,39 +62,6 @@ export function PerformancePage() {
         </Card>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="时间加权收益 TWR · 成立以来"
-          value={fmtPct(twr)}
-          tone={(twr ?? 0) >= 0 ? 'gain' : 'loss'}
-          sub={history.length > 0 ? `${history[0].date} 至 ${last?.date}` : '暂无数据'}
-        />
-        <StatCard
-          label="年化 XIRR · 成立以来"
-          value={fmtPct(summary.xirr)}
-          tone={(summary.xirr ?? 0) >= 0 ? 'gain' : 'loss'}
-          sub="按入金 / 出金金额与时间加权"
-        />
-        {showBenchmark && (
-          <StatCard
-            label={`${benchmark} 基准 · 同期`}
-            value={fmtPct(benchmarkReturn)}
-            tone={(benchmarkReturn ?? 0) >= 0 ? 'gain' : 'loss'}
-            sub="复权价总回报"
-          />
-        )}
-        {showBenchmark && (
-          <StatCard
-            label={`超额 vs ${benchmark}`}
-            value={fmtPct(excess)}
-            className={changeColor(excess ?? 0)}
-            sub={`(1 + TWR) / (1 + ${benchmark}) − 1`}
-          />
-        )}
-      </div>
-
-      <NavBridgeCard bridge={ledger.loading ? null : bridge} />
-
       <MonthlyPerformanceCalendar history={history} benchmark={benchmark} amountsFromHistory />
 
       <PerformancePanel
@@ -153,6 +74,53 @@ export function PerformancePage() {
         benchmarkLabel={benchmark}
         loading={ledger.loading}
       />
+      <details className="border-t border-border pt-3">
+        <summary className="cursor-pointer text-sm font-medium focus-visible:outline-ring">计算拆解与口径说明</summary>
+        <div className="mt-4 space-y-4">
+          <NavBridgeCard bridge={ledger.loading ? null : bridge} />
+          <div className="workbench-intro">
+            <div className="max-w-3xl">
+              <p className="workbench-lede">{reportLead}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                <UnreconciledBadge checks={checks} />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {ledger.loading ? (
+                <StatusBadge tone="info" dot>读取账本</StatusBadge>
+              ) : series.complete ? (
+                <StatusBadge tone="ok" dot>账本估值完整</StatusBadge>
+              ) : (
+                <StatusBadge tone="warn" dot>部分价格缺失</StatusBadge>
+              )}
+              {shareCheck && (
+                <StatusBadge tone={shareCheck.status === 'pass' ? 'ok' : 'warn'} dot>
+                  分享页{shareCheck.status === 'pass' ? '口径一致' : '缓存待更新'}
+                </StatusBadge>
+              )}
+              <Button asChild variant="outline" size="sm">
+                <Link to="/health">
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  数据健康
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => refreshCache.mutate()}
+                disabled={refreshCache.isPending || history.length === 0}
+                title="重算分享页读取的百分比缓存"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshCache.isPending ? 'animate-spin' : ''}`} />
+                {refreshCache.isPending ? '刷新中' : '刷新分享缓存'}
+              </Button>
+            </div>
+          </div>
+
+        </div>
+      </details>
+
     </div>
   );
 }

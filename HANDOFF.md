@@ -592,4 +592,61 @@ layout and 390px one-position layout inspected; no horizontal page overflow.
 Blink compatibility (18 runs) and accessibility-tree audit passed. Safari and
 Firefox were not covered. Release details: `docs/release/2026-09-28-overview.md`.
 
-Lighthouse overview passed; full gate has existing performance/settings desktop CLS failures, reproduced on bc274b3. Pending: Git push, Pages production build and served-bundle verification.
+Lighthouse overview passed; full gate has existing performance/settings desktop CLS failures, reproduced on bc274b3. Verified production: `a4752f0` (UI commit `9286d22`), Pages deployment
+`db3950c5-f83d-4461-8891-c1bedd710da2`; entry `index-DkGZ9zPm.js`, stylesheet
+`index-YLJTJvRC.css`, overview chunk `dashboard-Flsp_m4t.js`. Cache-busted
+production assets contain compact holdings layout, equal-height panels and
+compact footer. Root/login/performance/transactions/health return successfully.
+Login rendered without missing-config warning or console errors. Private data
+was not inspected. GitHub CI failed only at production build due to absent
+public VITE configuration; Pages production build succeeded independently.
+Follow-up: repair CI build environment and existing performance/settings CLS.
+This receipt is included with the subsequent performance layout release.
+
+## 2026-09-28 — performance layout discussion demo
+
+Standalone local prototype: `outputs/performance-demo.html` and
+`outputs/performance-demo.js`, served by the existing Vite dev server at
+`/outputs/performance-demo.html`. Synthetic data only. Calendar shows amount
+and TWR together with pale gain/loss backgrounds; curve and three period
+metrics update together. Supporting explanations and daily rows collapse.
+Verified month navigation, date selection, 1M/3M metric changes and 390px
+page width without horizontal overflow. Production React code, database and
+Workers unchanged; not committed or deployed. Next: collect owner feedback
+before integrating the selected layout into the real performance page.
+
+
+## 2026-09-28 — performance layout implemented locally
+
+Owner selected the calendar/curve demo and requested local integration.
+Changed `src/app/performance.tsx`, `src/components/MonthlyPerformanceCalendar.tsx`,
+`src/components/IbkrPerformancePanel.tsx`, and the obsolete calendar mode
+assertions in `scripts/verify-ui-behavior.mjs`. Calendar is first, showing both
+USD P&L and daily TWR with pale gain/loss backgrounds and selectable full-value
+details. Monthly totals with missing inputs display a dash. Curve metrics use
+the last rebased chart point, so period selection updates all three metrics.
+Ledger explanation/status tools are in a collapsed section; reconciliation,
+price and refresh-error warnings remain visible. Existing ledger calculations
+and public share are unchanged.
+
+Verified: typecheck, UI/calendar checks, finance fixtures, offline build,
+release budget and diff whitespace checks. Browser: All to 1Y changed portfolio
+return from +1557.73% to +21.77% on bundled demo data; May/June navigation and
+May 6 selection showed matching full daily amounts. At 390px, calendar and
+curve fit without horizontal page overflow. No production data accessed.
+No database/Worker/deployment changes; not committed or pushed. Next: owner
+reviews `http://127.0.0.1:4173/performance`, then requests any refinements or a
+separately authorized release. Prior CI configuration/CLS issues remain tracked
+in the overview release record; no new Lighthouse claim is made here.
+
+Follow-up: owner requested smooth performance curves. Both portfolio and
+benchmark lines now use monotone interpolation; data and period calculations
+are unchanged. Local only.
+
+Performance release authorized by owner. Full default tests, offline build and
+resource budget passed; Pages Git integration will build production with its
+configured public environment. See docs/release/2026-09-28-performance.md.
+
+Pre-push release gates: performance Lighthouse mobile 84 / desktop 100,
+accessibility 100, CLS rounds to zero. Full gate still fails on unchanged
+settings desktop CLS 0.358 (previously baselined); Blink and AX audits pass.
