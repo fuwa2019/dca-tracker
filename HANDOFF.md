@@ -577,3 +577,19 @@ checklist.
 - `workers/quote/src/ledgerPerformance.ts`, `src/lib/calc/ledgerTwr.ts`
 - `src/components/icons.tsx`, `src/lib/import/`
 - `docs/archive/ai/2026-08-handoff-sessions.md` — the 2026-08 session narrative
+
+## 2026-09-28 — overview compact layout release
+
+Owner authorized commit and Pages release. Small portfolios (0-2 holdings)
+use a full-width holdings section followed by three equal-height panels on
+desktop; the next-check section is a compact action row. No database or Worker
+changes. DEV-only `demoHoldings=1|2` fixtures rebuild synthetic funding and
+trades together; production ignores the query parameter.
+
+Verified locally: finance, email-reminder, quote-status, share-privacy,
+typecheck, UI checks, offline build and release budget. Desktop two-position
+layout and 390px one-position layout inspected; no horizontal page overflow.
+Blink compatibility (18 runs) and accessibility-tree audit passed. Safari and
+Firefox were not covered. Release details: `docs/release/2026-09-28-overview.md`.
+
+Pending: Git push, Pages production build and served-bundle verification.

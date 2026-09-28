@@ -37,6 +37,11 @@ const dataset = datasetJson as unknown as Dataset;
 export const LOCAL_TICKER = dataset.ticker;
 export const LOCAL_BENCHMARK = dataset.benchmark;
 
+// Local development layout fixtures; each reload rebuilds the whole ledger so
+// holdings, funding and performance remain consistent with the chosen count.
+const previewCount = import.meta.env.DEV && typeof window !== 'undefined'
+  ? new URLSearchParams(window.location.search).get('demoHoldings')
+  : null;
 const DEMO_ALLOCATIONS = [
   { ticker: 'QQQ', monthlyUsd: 65 },
   { ticker: 'NVDA', monthlyUsd: 45 },
@@ -44,7 +49,7 @@ const DEMO_ALLOCATIONS = [
   { ticker: 'MSFT', monthlyUsd: 25 },
   { ticker: 'SMH', monthlyUsd: 25 },
   { ticker: 'SGOV', monthlyUsd: 10 },
-] as const;
+].slice(0, previewCount === '1' ? 1 : previewCount === '2' ? 2 : undefined);
 
 const DEMO_MONTHLY_USD = DEMO_ALLOCATIONS.reduce((sum, row) => sum + row.monthlyUsd, 0);
 

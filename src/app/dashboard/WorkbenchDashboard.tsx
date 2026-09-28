@@ -163,41 +163,44 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
 
   return (
     <div className="workbench-page">
-      {/* Reference overview: one hero number, a full-bleed curve, then sections. */}
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <HeroValue value={aggregates.nav} />
-          <UnreconciledBadge checks={ledgerChecks} className="mt-2" />
-          {rangeChange && (
-            <div className="mt-1 space-y-0.5 text-[13px]">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="text-muted-foreground">{RANGE_LABELS[range]}净值变化</span>
-                <span className={cn('font-num', changeColor(rangeChange.navChange))}>{signedUsd(rangeChange.navChange)}</span>
-                <span className="text-muted-foreground">=</span>
-                <span className="text-muted-foreground">净投入 <span className="font-num text-foreground">{signedUsd(rangeChange.flow)}</span></span>
-                <span className="text-muted-foreground">+</span>
-                <span className="text-muted-foreground">投资收益 <span className={cn('font-num', changeColor(rangeChange.gain))}>{signedUsd(rangeChange.gain)}</span></span>
+      {/* A direction: one hero number beside a full-bleed curve, then sections. */}
+      <section className="overview-hero" aria-label="总览核心数据">
+        <header className="overview-hero-copy">
+          <div className="min-w-0">
+            <div className="workbench-eyebrow">当前账户净值</div>
+            <HeroValue value={aggregates.nav} />
+            <UnreconciledBadge checks={ledgerChecks} className="mt-2" />
+            {rangeChange && (
+              <div className="mt-2 space-y-1 text-[13px]">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className={cn('font-num font-semibold', changeColor(rangeChange.navChange))}>{signedUsd(rangeChange.navChange)}</span>
+                  <span className="text-muted-foreground">{RANGE_LABELS[range]}</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  净投入 <span className="font-num text-foreground">{signedUsd(rangeChange.flow)}</span>
+                  <span className="mx-1">·</span>
+                  投资收益 <span className={cn('font-num', changeColor(rangeChange.gain))}>{signedUsd(rangeChange.gain)}</span>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  区间时间加权收益 (TWR){' '}
+                  <span className={cn('font-num', changeColor(rangeChange.twr ?? 0))}>
+                    {rangeChange.twr === null ? '—' : signedPct(rangeChange.twr)}
+                  </span>
+                </div>
               </div>
-              <div className="text-xs text-muted-foreground">
-                区间时间加权收益 (TWR){' '}
-                <span className={cn('font-num', changeColor(rangeChange.twr ?? 0))}>
-                  {rangeChange.twr === null ? '—' : signedPct(rangeChange.twr)}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/health"><RefreshCw className="h-4 w-4" />数据健康</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link to="/transactions"><FileUp className="h-4 w-4" />导入或录入</Link>
-          </Button>
-        </div>
-      </header>
+            )}
+          </div>
+          <div className="overview-hero-actions flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link to="/health"><RefreshCw className="h-4 w-4" />数据健康</Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link to="/transactions"><FileUp className="h-4 w-4" />导入或录入</Link>
+            </Button>
+          </div>
+        </header>
 
-      <section className="mt-3 min-w-0" aria-labelledby="value-chart-title">
+      <section className="overview-chart mt-3 min-w-0" aria-labelledby="value-chart-title">
         <h2 id="value-chart-title" className="sr-only">账户价值曲线</h2>
         {chartRows.length > 1 ? (
           <div className="h-56 min-w-0 sm:h-72" role="img" aria-label={`账户价值曲线，${dateRange}`}>
@@ -264,8 +267,9 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
           <Link className="workbench-link" to="/performance">查看完整绩效 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
         </div>
       </section>
+      </section>
 
-      <div className="workbench-grid">
+      <div className={cn('workbench-grid overview-grid', positions.length <= 2 && 'overview-grid-compact')}>
         <section className="min-w-0" aria-labelledby="holdings-title">
         <PanelHeader title="当前持仓" id="holdings-title" detail={`${positions.length} 个标的 · 成本口径 ${costBasisMode === 'fifo' ? 'FIFO' : 'AVG'}`} action={<Link className="workbench-link" to="/exposure">查看穿透敞口 <ArrowUpRight className="h-3.5 w-3.5" /></Link>} />
           <div className="mt-3">
@@ -317,11 +321,10 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
         </aside>
       </div>
 
-      <section className="workbench-next" aria-labelledby="next-title">
-        <div>
-          <div className="workbench-eyebrow">Next check</div>
-          <h2 id="next-title" className="mt-1 text-base font-semibold">保持账本可解释</h2>
-          <p className="mt-1 text-sm text-muted-foreground">导入新文件后先看逐行状态和对账结果，再刷新绩效缓存。</p>
+      <section className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border pt-3" aria-labelledby="next-title">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 id="next-title" className="text-xs font-medium">保持账本可解释</h2>
+          <p className="text-xs text-muted-foreground">导入后先核对，再刷新绩效。</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm"><Link to="/transactions"><FileUp className="h-4 w-4" />统一导入</Link></Button>
@@ -339,7 +342,7 @@ function HeroValue({ value }: { value: number }) {
   const text = usd.format(value);
   const [whole, cents] = text.split('.');
   return (
-    <div className="font-num text-[34px] font-semibold leading-none tracking-tight sm:text-[40px]">
+    <div className="overview-hero-value font-num text-[34px] font-semibold leading-none tracking-tight sm:text-[40px]">
       {whole}
       {cents !== undefined && <span className="text-muted-foreground">.{cents}</span>}
     </div>

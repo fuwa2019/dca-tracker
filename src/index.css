@@ -293,6 +293,33 @@
     padding: 1rem 1rem 2.5rem;
   }
 
+  .overview-hero {
+    border-bottom: 1px solid hsl(var(--border));
+    padding-bottom: 1rem;
+  }
+
+  .overview-hero-copy {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .overview-hero-value {
+    margin-top: 0.5rem;
+    font-size: clamp(2.75rem, 6vw, 4.5rem);
+    line-height: 0.95;
+    letter-spacing: -0.06em;
+  }
+
+  .overview-chart {
+    margin-top: 0.75rem;
+  }
+
+  .overview-chart .h-56 {
+    height: clamp(13rem, 27vw, 19rem);
+  }
+
   .workbench-intro {
     display: flex;
     align-items: flex-start;
@@ -339,6 +366,10 @@
     display: grid;
     gap: 1rem;
     margin-top: 1rem;
+  }
+
+  .overview-grid {
+    margin-top: 1.5rem;
   }
 
   .workbench-panel {
@@ -424,9 +455,38 @@
   .workbench-grid {
     grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 0.75fr);
   }
+
+  /* With only one or two positions, a tall sidebar makes the holdings column
+     look empty. Stack the short holdings list above a compact status row. */
+  .overview-grid-compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-grid-compact > aside {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .overview-grid-compact > aside > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0;
+  }
 }
 
 @media (max-width: 639px) {
+  .overview-hero-copy {
+    flex-direction: column;
+  }
+
+  .overview-hero-actions {
+    width: 100%;
+  }
+
+  .overview-hero-actions > * {
+    flex: 1 1 auto;
+  }
+
   .workbench-intro,
   .workbench-empty,
   .workbench-next {
@@ -457,6 +517,12 @@
   summary,
   [tabindex]:not([tabindex='-1']) {
     scroll-margin-bottom: calc(70px + 0.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 767px) {
+  .overview-grid-compact > aside {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
