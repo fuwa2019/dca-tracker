@@ -592,4 +592,4 @@ layout and 390px one-position layout inspected; no horizontal page overflow.
 Blink compatibility (18 runs) and accessibility-tree audit passed. Safari and
 Firefox were not covered. Release details: `docs/release/2026-09-28-overview.md`.
 
-Pending: Git push, Pages production build and served-bundle verification.
+Lighthouse overview passed; full gate has existing performance/settings desktop CLS failures, reproduced on bc274b3. Pending: Git push, Pages production build and served-bundle verification.
