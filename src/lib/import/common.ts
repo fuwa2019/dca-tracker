@@ -12,6 +12,13 @@ import type {
   ImportDelimiter,
 } from './types.ts';
 
+/** Broker statement summary carried on `ImportDetection.context`. */
+export const STATEMENT_CASH_CONTEXT_KEY = 'statement_ending_cash';
+export const STATEMENT_AS_OF_CONTEXT_KEY = 'statement_as_of';
+export const STATEMENT_OPENING_CASH_CONTEXT_KEY = 'statement_opening_cash';
+export const STATEMENT_PERIOD_START_CONTEXT_KEY = 'statement_period_start';
+export const STATEMENT_OPENING_ROW_CONTEXT_KEY = 'statement_opening_row';
+
 export interface CsvTable {
   rows: string[][];
   errors: Papa.ParseError[];
@@ -264,8 +271,11 @@ export function buildImportPreview(
     .filter((row) => row.item && row.item.duplicate_ordinal > 1)
     .map((row) => `第 ${row.source_index} 行与文件内前一行身份相同，保留第 ${row.item!.duplicate_ordinal} 次 source ordinal 以避免丢失重复执行。`);
   const reconciliation = buildReconciliation(normalized);
-  const reconciliationWarnings = Number(reconciliation.ending_cash_usd) < -0.00000001
-    ? [`按当前保留行计算的期末现金为 ${reconciliation.ending_cash_usd} USD，请检查遗漏的入金、提款或被忽略的现金事件。`]
+  // A partial-period statement starts from its opening cash, not zero.
+  const openingCash = Number(parsed.detection.context?.[STATEMENT_OPENING_CASH_CONTEXT_KEY] ?? 0) || 0;
+  const endingCash = decimalAdd(openingCash.toFixed(10), reconciliation.ending_cash_usd, 10);
+  const reconciliationWarnings = Number(endingCash) < -0.00000001
+    ? [`按当前保留行计算的期末现金为 ${endingCash} USD，请检查遗漏的入金、提款或被忽略的现金事件。`]
     : [];
   return {
     source: parsed.detection.source,

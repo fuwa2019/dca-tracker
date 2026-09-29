@@ -11,6 +11,7 @@ import {
   rebuildPreviewAfterRowFix,
   rowFieldEdits,
   schwabImportAdapter,
+  STATEMENT_ANCHOR_ACTION,
   tradingViewImportAdapter,
 } from '../src/lib/import/index.ts';
 
@@ -321,5 +322,98 @@ assert.equal(schwabFixed!.status_counts.import, schwabPreview.status_counts.impo
 const schwabFixedRow = schwabFixed!.rows.find((row) => row.source_index === schwabBlockedRow!.source_index);
 assert.equal(schwabFixedRow?.source_fields?.date, 'bad-date', 'the original malformed date stays visible after the fix');
 assert.equal((schwabFixedRow?.item as { effective_date?: string } | undefined)?.effective_date, '2026-01-16');
+
+// IBKR books "FX Translations P&L" as one lump on the period end, covering
+// the whole export period. Appending an export that overlaps an earlier one
+// would count the overlap twice; the statement's opening cash anchors the
+// append instead: one calibration row before the period, one reversal per
+// superseded FX row inside it, and the ledger lands on the ending cash.
+const ibkrStatement = (period: string, opening: string, ending: string, rows: string[]) => [
+  'Statement,Header,域名称,域值',
+  'Statement,Data,Title,Transaction History',
+  `Statement,Data,Period,"${period}"`,
+  '总结,Header,域名称,域值',
+  '总结,Data,基础货币,USD',
+  `总结,Data,期初现金,${opening}`,
+  `总结,Data,期末现金,${ending}`,
+  'Transaction History,Header,日期,账户,说明,交易类型,代码,数量,价格,Price Currency,总额,佣金,净额,子类型,汇率,交易费用,乘数',
+  ...rows.map((row) => `Transaction History,Data,${row}`),
+].join('\n');
+const yearText = ibkrStatement('九月 1, 2026 - 九月 10, 2026', '0.0', '99.7', [
+  '2026-09-10,U***00000,FX Translations P&L,调整,-,-,-,-,-0.3,-,-0.3,-,1.0,-,1.0',
+  '2026-09-02,U***00000,电子资金转账,存款,-,-,-,-,100,-,100,-,0.14,-,1.0',
+]);
+const weekRows = [
+  '2026-09-15,U***00000,FX Translations P&L,调整,-,-,-,-,-0.25,-,-0.25,-,1.0,-,1.0',
+  '2026-09-12,U***00000,INVESCO NASDAQ 100 ETF,买,QQQM,0.2,250,USD,-50,-0.1,-50.1,-,1.0,-,1.0',
+];
+// Opening 99.90: -0.10 of the earlier lump belonged before Sep 8, -0.20 to
+// Sep 8-10, which the week's own lump counts again.
+const weekText = ibkrStatement('九月 8, 2026 - 九月 15, 2026', '99.9', '49.55', weekRows);
+type StoredEntry = { date: string; usd_amount: number; kind: string; import_key: string | null };
+const storedFrom = (ledger: { trades: Array<{ effective_date: string; usd_amount: string; import_key: string }>; cash_events: Array<{ effective_date: string; usd_amount: string; event_type: string; import_key: string }> }): StoredEntry[] => [
+  ...ledger.trades.map((trade) => ({ date: trade.effective_date, usd_amount: Number(trade.usd_amount), kind: 'trade', import_key: trade.import_key })),
+  ...ledger.cash_events.map((event) => ({ date: event.effective_date, usd_amount: Number(event.usd_amount), kind: event.event_type, import_key: event.import_key })),
+];
+const cashOf = (entries: StoredEntry[]) => Math.round(entries.reduce((sum, entry) => sum + entry.usd_amount, 0) * 1e8) / 1e8;
+
+const yearPreview = ibkrImportAdapter.audit({ text: yearText }, { mode: 'append', existing_import_keys: new Set(), account_ledger: [] });
+assert.equal(yearPreview.errors.length, 0, 'a full-history export (opening cash 0) needs no anchor');
+assert.equal(yearPreview.rows.filter((row) => row.action === STATEMENT_ANCHOR_ACTION).length, 0);
+const stored = storedFrom(newLedgerItemsForAppend(yearPreview));
+assert.equal(cashOf(stored), 99.7);
+
+const weekPreview = ibkrImportAdapter.audit({ text: weekText }, {
+  mode: 'append',
+  existing_import_keys: new Set(stored.map((entry) => entry.import_key!)),
+  account_ledger: stored,
+});
+assert.equal(weekPreview.errors.length, 0);
+const anchorRows = weekPreview.rows.filter((row) => row.action === STATEMENT_ANCHOR_ACTION);
+assert.deepEqual(
+  anchorRows.map((row) => [row.status, (row.item as { effective_date: string }).effective_date, (row.item as { usd_amount: string }).usd_amount]),
+  [['import', '2026-09-07', '-0.1000000000'], ['import', '2026-09-10', '0.3000000000']],
+  'opening calibration the day before the period, reversal of the superseded lump on its own date',
+);
+for (const row of anchorRows) {
+  assert.ok(row.source_index > 0, 'anchor rows point at the statement summary row');
+  assert.equal((row.item as { event_type: string }).event_type, 'fx_conversion');
+}
+const afterWeek = [...stored, ...storedFrom(newLedgerItemsForAppend(weekPreview))];
+assert.equal(cashOf(afterWeek), 49.55, 'ledger cash equals the statement ending cash after an overlapping append');
+
+const weekAgain = ibkrImportAdapter.audit({ text: weekText }, {
+  mode: 'append',
+  existing_import_keys: new Set(afterWeek.map((entry) => entry.import_key!)),
+  account_ledger: afterWeek,
+});
+assert.equal(weekAgain.errors.length, 0);
+assert.equal(weekAgain.rows.filter((row) => row.action === STATEMENT_ANCHOR_ACTION).length, 0, 're-importing the same export is a no-op');
+assert.equal(weekAgain.status_counts.import, 0);
+
+const gapPreview = ibkrImportAdapter.audit({ text: weekText }, { mode: 'append', existing_import_keys: new Set(), account_ledger: [] });
+assert.equal(gapPreview.can_commit, false, 'an opening cash the ledger cannot explain blocks the append');
+assert.ok(gapPreview.errors.some((message) => message.includes('期初现金')));
+
+const replacePreview = ibkrImportAdapter.audit({ text: weekText }, { mode: 'replace_source', existing_import_keys: new Set(), account_ledger: stored });
+assert.equal(replacePreview.rows.filter((row) => row.action === STATEMENT_ANCHOR_ACTION).length, 0, 'replacement never calibrates');
+assert.ok(replacePreview.warnings.some((message) => message.includes('期初现金')), 'replacing with a partial-period export is flagged');
+
+const noLedgerPreview = ibkrImportAdapter.audit({ text: weekText }, { mode: 'append', existing_import_keys: new Set() });
+assert.equal(noLedgerPreview.rows.filter((row) => row.action === STATEMENT_ANCHOR_ACTION).length, 0, 'without the account ledger the anchor is skipped');
+
+// A row fix rebuilds the preview from its rows; the anchor rows are derived,
+// so they are recomputed rather than carried over twice.
+const weekWithBadRow = ibkrStatement('九月 8, 2026 - 九月 15, 2026', '99.9', '49.55', [
+  ...weekRows,
+  'bad-date,U***00000,QQQM 现金红利,股息,QQQM,-,-,-,0.5,-,0.5,-,1.0,-,1.0',
+]);
+const anchorOptions = { mode: 'append' as const, existing_import_keys: new Set(stored.map((entry) => entry.import_key!)), account_ledger: stored };
+const badRowPreview = ibkrImportAdapter.audit({ text: weekWithBadRow }, anchorOptions);
+const badRow = badRowPreview.rows.find((row) => row.status === 'block');
+assert.ok(badRow);
+const rebuilt = rebuildPreviewAfterRowFix(ibkrImportAdapter, badRowPreview, badRow!.source_index, { date: '2026-09-13' }, anchorOptions);
+assert.ok(rebuilt);
+assert.equal(rebuilt!.rows.filter((row) => row.action === STATEMENT_ANCHOR_ACTION).length, 2);
 
 console.log('portfolio import adapter checks passed');

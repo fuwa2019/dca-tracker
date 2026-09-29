@@ -7,6 +7,28 @@ The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
 
+## 2026-09-29 — IBKR statement-anchored append (local, not released)
+
+- Problem: the owner appended a 7-day IBKR export (2026-09-22..28) and the
+  health page blocked on statement cash (ledger $5.72 vs statement $5.88).
+  IBKR books "FX Translations P&L" as one lump on the period end covering the
+  whole export period; the stored 1-year export's lump (2026-09-24) and the
+  7-day lump both counted Sep 22-24. Diff reproduced to the cent.
+- Fix (front end only, no migration): `src/lib/import/statementAnchor.ts`.
+  An IBKR append with a statement opening cash adds a calibration
+  `fx_conversion` row the day before the period (opening cash − account ledger
+  cash) and reverses superseded FX rows dated inside the period. Calibration
+  above $1 blocks the append (missing rows). Replace modes warn when the file
+  does not start from zero cash. Contract in
+  `docs/architecture/import-and-ledger.md`.
+- Verified on the owner's two real exports in a scratch script (not in the
+  repo): re-appending the 7-day file adds −0.0429 @ 09-21 and +0.2047 @ 09-24,
+  ledger 5.877766 = statement; a second re-import adds nothing. Synthetic cases
+  in `test:portfolio-import`. Passed the CI set (`build` with stub public env).
+- Next: owner authorizes commit + Pages release, then re-imports
+  `U19133918.TRANSACTIONS.7D.csv` with 「新增导入」 (expect 2 calibration rows,
+  everything else duplicate) and confirms the health page passes.
+
 ## 2026-09-29 — overview/performance loading repair (released)
 
 - Core transactions, cashflows, and settings reads now have a 12-second request

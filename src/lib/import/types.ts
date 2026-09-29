@@ -170,9 +170,26 @@ export interface ImportReceipt {
   rolled_back: boolean;
 }
 
+/** One row already booked on the importing source's broker account. */
+export interface AccountLedgerEntry {
+  date: string;
+  /** Signed cash effect in USD, as the ledger counts it. */
+  usd_amount: number;
+  /** 'trade', or the cash event kind. */
+  kind: string;
+  /** Set on rows imported from this source; null on manual rows. */
+  import_key: string | null;
+}
+
 export interface AuditOptions {
   mode?: ImportMode;
   existing_import_keys?: ReadonlySet<string>;
+  /**
+   * The broker account's current rows. With a statement's opening cash, an
+   * append is anchored to it (see `statementAnchor.ts`); omitted, the anchor
+   * is skipped.
+   */
+  account_ledger?: readonly AccountLedgerEntry[];
 }
 
 export interface PortfolioImportAdapter<Parsed extends ParsedImport = ParsedImport> {

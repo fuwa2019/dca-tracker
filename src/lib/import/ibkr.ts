@@ -1,4 +1,9 @@
 import {
+  STATEMENT_AS_OF_CONTEXT_KEY,
+  STATEMENT_CASH_CONTEXT_KEY,
+  STATEMENT_OPENING_CASH_CONTEXT_KEY,
+  STATEMENT_OPENING_ROW_CONTEXT_KEY,
+  STATEMENT_PERIOD_START_CONTEXT_KEY,
   addDuplicateOrdinals,
   buildImportPreview,
   decimalAdd,
@@ -16,6 +21,7 @@ import {
   rowsForItems,
   signedTradeAmount,
 } from './common.ts';
+import { withStatementAnchor } from './statementAnchor.ts';
 import type {
   ImportDelimiter,
   ImportDetection,
@@ -773,13 +779,19 @@ function parseInput(input: ImportInput): IbkrParsedImport {
       ...detection.context,
       [STATEMENT_CASH_CONTEXT_KEY]: statement.endingCash,
       [STATEMENT_AS_OF_CONTEXT_KEY]: statement.asOf ?? lastItemDate(merged) ?? '',
+      ...(statement.openingCash !== null && statement.periodStart && statement.asOf
+        ? {
+          [STATEMENT_OPENING_CASH_CONTEXT_KEY]: statement.openingCash,
+          [STATEMENT_PERIOD_START_CONTEXT_KEY]: statement.periodStart,
+          [STATEMENT_OPENING_ROW_CONTEXT_KEY]: String(statement.openingRow),
+        }
+        : {}),
     };
   }
   return { detection, rows: rows.sort((left, right) => left.source_index - right.source_index), warnings: [], columns };
 }
 
-export const STATEMENT_CASH_CONTEXT_KEY = 'statement_ending_cash';
-export const STATEMENT_AS_OF_CONTEXT_KEY = 'statement_as_of';
+export { STATEMENT_AS_OF_CONTEXT_KEY, STATEMENT_CASH_CONTEXT_KEY } from './common.ts';
 
 /**
  * IBKR lists every FX leg (and the translation adjustment) separately; most
@@ -856,11 +868,23 @@ function parseStatementDate(text: string): string | null {
   return month ? `${match[3]}-${month}-${match[2].padStart(2, '0')}` : null;
 }
 
-/** The statement's ending cash (base currency) and the period end it is as of. */
-function statementSummary(tableRows: string[][]): { endingCash: string; asOf: string | null } | null {
+/**
+ * The statement's opening and ending cash (base currency), its period, and
+ * the source line of the opening cash (anchor rows point back at it).
+ */
+function statementSummary(tableRows: string[][]): {
+  endingCash: string;
+  asOf: string | null;
+  openingCash: string | null;
+  periodStart: string | null;
+  openingRow: number;
+} | null {
   let endingCash: string | null = null;
+  let openingCash: string | null = null;
+  let openingRow = 0;
   let asOf: string | null = null;
-  for (const row of tableRows) {
+  let periodStart: string | null = null;
+  for (const [index, row] of tableRows.entries()) {
     const field = normalizeHeader(row[2] ?? '');
     const value = String(row[3] ?? '').trim();
     if (normalizeHeader(row[1] ?? '') !== 'data') continue;
@@ -868,12 +892,21 @@ function statementSummary(tableRows: string[][]): { endingCash: string; asOf: st
       const parsed = Number(value.replace(/,/g, ''));
       if (Number.isFinite(parsed)) endingCash = parsed.toFixed(10);
     }
+    if (field === '期初现金' || field === 'starting cash' || field === 'beginning cash' || field === 'opening cash') {
+      const parsed = Number(value.replace(/,/g, ''));
+      if (Number.isFinite(parsed)) {
+        openingCash = parsed.toFixed(10);
+        openingRow = index + 1;
+      }
+    }
     if (field === 'period' || field === '期间') {
-      const end = value.split(/\s+-\s+/).at(-1);
+      const parts = value.split(/\s+-\s+/);
+      if (parts.length === 2) periodStart = parseStatementDate(parts[0]);
+      const end = parts.at(-1);
       if (end) asOf = parseStatementDate(end);
     }
   }
-  return endingCash === null ? null : { endingCash, asOf };
+  return endingCash === null ? null : { endingCash, asOf, openingCash, periodStart, openingRow };
 }
 
 function lastItemDate(items: Array<LedgerTrade | LedgerCashEvent>): string | null {
@@ -895,7 +928,7 @@ export const ibkrImportAdapter: PortfolioImportAdapter<IbkrParsedImport> = {
 
   audit(input, options) {
     const parsed = parseInput(input);
-    return buildImportPreview(parsed, ibkrImportAdapter.normalize(parsed), options);
+    return withStatementAnchor(buildImportPreview(parsed, ibkrImportAdapter.normalize(parsed), options), options);
   },
 
   reparseRow(sourceIndex, fields, detection) {

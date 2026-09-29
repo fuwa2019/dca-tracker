@@ -29,12 +29,13 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { refreshLedgerShareCache } from '@/lib/etfHoldings';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { useCashflows } from '@/hooks/usePortfolio';
+import { useAccounts, useCashflows } from '@/hooks/usePortfolio';
 import { normalizeSymbol } from '@/lib/symbols';
 import { classifySchwabSymbol, type SchwabSymbolClassification } from '@/lib/schwabTransactions';
 import etfHoldings from '@/data/etf-holdings.json';
 import { ledgerEventChip } from '@/lib/ledgerEvents';
 import {
+  accountLedgerEntries,
   countLedgerEventKinds,
   detectPortfolioImportAdapter,
   isImportableSource,
@@ -44,6 +45,7 @@ import {
   retainedRowReasons,
   rowFieldEdits,
   summarizeImportReceipt,
+  type AuditOptions,
   type ImportMode,
   type ImportPreview,
   type ImportPreviewRow,
@@ -131,9 +133,11 @@ const STEP_LABELS: Record<ImportStep, string> = {
 export function PortfolioImportTools({ transactions }: Props) {
   const qc = useQueryClient();
   const { data: cashflows = [], isLoading: cashflowsLoading, isError: cashflowsError } = useCashflows();
+  const accounts = useAccounts();
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<ImportMode>('append');
+  const [previewHasLedger, setPreviewHasLedger] = useState(false);
   const [fileInfo, setFileInfo] = useState<FileInfo | null>(null);
   const [rawText, setRawText] = useState<string | null>(null);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -179,6 +183,19 @@ export function PortfolioImportTools({ transactions }: Props) {
     );
   }
 
+  function auditOptions(nextMode: ImportMode, nextSource: ImportSource): AuditOptions {
+    // The statement anchor needs the account's full current ledger; while it
+    // is unavailable the anchor is skipped and `runImport` refuses the append.
+    const ledgerReady = !cashflowsLoading && !cashflowsError && !accounts.isLoading && !accounts.isError;
+    setPreviewHasLedger(ledgerReady);
+    const accountIds = new Set((accounts.data ?? []).filter((account) => account.broker === nextSource).map((account) => account.id));
+    return {
+      mode: nextMode,
+      existing_import_keys: keysForSource(nextSource),
+      account_ledger: ledgerReady ? accountLedgerEntries(transactions, cashflows, nextSource, accountIds) : undefined,
+    };
+  }
+
   function clearState() {
     setFileInfo(null);
     setRawText(null);
@@ -207,7 +224,7 @@ export function PortfolioImportTools({ transactions }: Props) {
     }
     const nextPreview = adapter.audit(
       { text: rawText, fileName: fileInfo?.name },
-      { mode: nextMode, existing_import_keys: keysForSource(source) },
+      auditOptions(nextMode, source),
     );
     setPreview(applyAssetPolicy(nextPreview));
     setFixingRow(null);
@@ -231,7 +248,7 @@ export function PortfolioImportTools({ transactions }: Props) {
       preview,
       sourceIndex,
       fixDraft,
-      { mode, existing_import_keys: keysForSource(source) },
+      auditOptions(mode, source),
     );
     if (!rebuilt) return;
     setPreview(applyAssetPolicy(rebuilt));
@@ -267,7 +284,7 @@ export function PortfolioImportTools({ transactions }: Props) {
       setSource(adapter.source);
       const nextPreview = adapter.audit(
         { text, fileName: file.name },
-        { mode: 'append', existing_import_keys: keysForSource(adapter.source) },
+        auditOptions('append', adapter.source),
       );
       setPreview(nextPreview);
       setStep('mode');
@@ -303,6 +320,10 @@ export function PortfolioImportTools({ transactions }: Props) {
     }
     if (cashflowsLoading || cashflowsError) {
       setError('现有现金事件状态不可用，已阻止写入。');
+      return;
+    }
+    if (mode === 'append' && preview.detection.context?.statement_opening_cash && !previewHasLedger) {
+      setError('预览生成时账户数据尚未加载，无法按对账单期初现金校准，已阻止写入。请重新选择文件。');
       return;
     }
 

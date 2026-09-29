@@ -15,6 +15,7 @@
  * recomputed by the one existing pipeline, never a second parallel one.
  */
 import { buildImportPreview, rowsForItems } from './common.ts';
+import { STATEMENT_ANCHOR_ACTION, withStatementAnchor } from './statementAnchor.ts';
 import type {
   AuditOptions,
   ImportPreview,
@@ -147,7 +148,10 @@ export function rebuildPreviewAfterRowFix(
 ): ImportPreview | null {
   const result = applyRowFix(adapter, preview, sourceIndex, edits);
   if (!result) return null;
-  const rows = preview.rows.map((row) => (row.source_index === sourceIndex ? result.row : row));
+  // Anchor rows are derived from the file and the ledger; rebuild them.
+  const rows = preview.rows
+    .filter((row) => row.action !== STATEMENT_ANCHOR_ACTION)
+    .map((row) => (row.source_index === sourceIndex ? result.row : row));
   const normalized = rowsForItems(rows);
-  return buildImportPreview({ detection: preview.detection, rows, warnings: [] }, normalized, options);
+  return withStatementAnchor(buildImportPreview({ detection: preview.detection, rows, warnings: [] }, normalized, options), options);
 }

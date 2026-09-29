@@ -23,6 +23,12 @@ export {
   type RowFixResult,
 } from './rowFix.ts';
 export { ibkrImportAdapter } from './ibkr.ts';
+export {
+  STATEMENT_ANCHOR_ACTION,
+  STATEMENT_ANCHOR_MAX_USD,
+  accountLedgerEntries,
+  withStatementAnchor,
+} from './statementAnchor.ts';
 export { schwabLedgerImportAdapter as schwabImportAdapter } from './schwabLedger.ts';
 export { tradingViewImportAdapter } from './tradingview.ts';
 

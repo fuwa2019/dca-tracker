@@ -1,5 +1,27 @@
 # Import and Portfolio Ledger Contract
 
+## 2026-09-29 changes — statement-anchored append
+
+- IBKR's "FX Translations P&L" is a period aggregate booked on the export's
+  period end, not a transaction. Two exports whose periods overlap both
+  contain the overlap's revaluation, and the lumps do not deduplicate.
+- The IBKR adapter now also reads 期初现金 / Starting Cash and the period
+  start (`detection.context`). In append mode, with the broker account's
+  current rows (`AuditOptions.account_ledger`, built by
+  `accountLedgerEntries` from the same ledger engine the health page uses),
+  `withStatementAnchor` adds `fx_conversion` rows shown as 对账单校准:
+  - calibration on the day before the period: opening cash − ledger cash
+    before the period;
+  - reversal of every stored FX row from the source dated inside the period
+    whose import key the new file does not carry, on its own date.
+  Ledger cash then equals the statement at both ends. Re-importing the same
+  file generates nothing. A calibration above `STATEMENT_ANCHOR_MAX_USD`
+  ($1) blocks the append: that is missing rows, not revaluation. Stored
+  non-FX rows in the period missing from the file only warn.
+- Replace modes never calibrate; they warn when the file's opening cash is
+  not zero (a partial history would be written as the whole source).
+- The preview's negative-cash warning starts from the statement opening cash.
+
 ## 2026-09-25 changes
 
 - **Write sources are broker files only** (`IMPORTABLE_SOURCES`: Schwab, IBKR).
