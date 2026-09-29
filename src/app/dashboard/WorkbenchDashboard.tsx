@@ -141,7 +141,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
 
   if (!priceComplete && !isEmpty) {
     return (
-      <div className="workbench-page space-y-4">
+      <div key="price-pending" className="workbench-page space-y-4">
         <LoadNotice
           title={pricesLoading ? '正在读取历史价格' : priceBackfillPending ? '正在补齐历史价格' : priceCalculating ? '正在计算账本' : '历史价格不完整'}
           detail={pricesLoading || priceBackfillPending || priceCalculating
@@ -161,7 +161,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
 
   if (isEmpty) {
     return (
-      <div className="workbench-page">
+      <div key="empty" className="workbench-page">
         <PageIntro
           eyebrow="Overview"
           title="先建立一份可核对的账本"
@@ -196,7 +196,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
     : '尚未生成历史曲线';
 
   return (
-    <div className="workbench-page">
+    <div key="ready" className="workbench-page">
       {/* A direction: one hero number beside a full-bleed curve, then sections. */}
       <section className="overview-hero" aria-label="总览核心数据">
         <header className="overview-hero-copy">

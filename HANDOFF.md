@@ -33,7 +33,18 @@ documents that own it, listed there and under Related Files below.
   builds now disable PWA generation so a preview rebuild cannot keep serving
   obsolete chunks from a Service Worker. The clean offline preview is on
   `http://127.0.0.1:4185/`; production PWA behavior is unchanged. Pages release
-  remains pending release checks and push.
+  is authorized and pending push.
+- Release checks after a fresh `npm ci` in all three packages: CI-equivalent
+  tests, `test:ui`, typecheck, offline build and transfer budget passed; a
+  synthetic-public-config build confirmed production PWA generation. Blink
+  cross-browser checks passed all 18 combinations and the AX-tree audit passed
+  26 desktop/mobile views. Lighthouse recheck: overview mobile CLS 0 and
+  performance 78; the only full-gate failure is the previously documented
+  `/settings` desktop CLS 0.358, reproduced on an unchanged earlier build in
+  `docs/release/2026-09-28-overview.md`. The follow-up fix keys the temporary
+  overview and ready overview roots separately; mobile CLS attribution fell
+  from 0.1234 to 0.0001 across two runs. WebKit, Gecko, authenticated cloud
+  routes and real-account data were not tested.
 
 ## 2026-09-25 — unified ledger rebuild (local, not deployed)
 
