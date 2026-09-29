@@ -41,6 +41,39 @@ export function PerformancePage() {
     ? `从 ${history[0].date} 到 ${last?.date}，组合时间加权收益 ${fmtPct(twr)}，相对 ${benchmark} ${fmtPct(excess)}；按金额加权的年化 XIRR ${fmtPct(summary.xirr)}。`
     : '录入入金与交易后，这里会生成一份可审计的业绩报告。';
 
+  if (ledger.coreError) {
+    return (
+      <div className="workbench-page">
+        <Card className="p-4" role="status">
+          <h2 className="text-sm font-semibold">账本读取失败</h2>
+          <p className="mt-2 text-xs text-muted-foreground">交易、现金事件或设置未能载入。</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={ledger.retryCore}><RefreshCw className="h-3.5 w-3.5" />重试</Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (ledger.coreLoading || !ledger.priceComplete) {
+    const pending = ledger.loading;
+    return (
+      <div className="workbench-page space-y-4">
+        <Card className="p-4" role="status">
+          <h2 className="text-sm font-semibold">{ledger.coreLoading ? '正在读取账本' : ledger.pricesLoading ? '正在读取历史价格' : ledger.priceBackfillPending ? '正在补齐历史价格' : ledger.priceCalculating ? '正在计算业绩' : '历史价格不完整'}</h2>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {pending ? '账本和价格准备完成后显示业绩；缺失的价格不会计入收益。' : ledger.priceError ? '价格请求失败，业绩暂不可用。' : '部分价格仍缺失，业绩暂不可用。'}
+          </p>
+          {!ledger.coreLoading && <p className="mt-1 text-xs text-muted-foreground">已载入 {ledger.ledger.trades.length} 笔交易，{ledger.ledger.cash.length} 条现金事件。</p>}
+          {!pending && <Button variant="outline" size="sm" className="mt-3" onClick={ledger.retryPrices}><RefreshCw className="h-3.5 w-3.5" />重试价格</Button>}
+          <Button asChild variant="outline" size="sm" className="mt-3 ml-2"><Link to="/health">数据健康</Link></Button>
+        </Card>
+        <PerformancePanel history={[]} range={range} onRangeChange={setRange} availableRanges={[]}
+          showBenchmark={showBenchmark} onShowBenchmarkChange={setShowBenchmark}
+          benchmarkLabel={benchmark} loading={pending} emptyMessage="业绩暂不可用"
+          emptyDescription="历史价格未齐，暂不显示收益曲线。" />
+      </div>
+    );
+  }
+
   return (
     <div className="workbench-page space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">

@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAccounts, useCashflows, usePortfolioHistory, useSettings, useTransactions } from '@/hooks/usePortfolio';
-import { useDailyPrices } from '@/hooks/useDailyPrices';
+import { useDailyPrices, type PriceBounds, type PriceMap } from '@/hooks/useDailyPrices';
 import { aggregatePositions } from '@/lib/calc/position';
 import {
   buildLedger,
@@ -19,8 +19,17 @@ import { useQuotes } from '@/hooks/useQuotes';
 
 export interface LedgerModel {
   loading: boolean;
-  /** True once transactions and cashflows are loaded; prices may still be loading. */
+  /** True once core records have loaded without error; prices may still be loading. */
   ready: boolean;
+  coreLoading: boolean;
+  coreError: boolean;
+  pricesLoading: boolean;
+  priceCalculating: boolean;
+  priceError: boolean;
+  priceBackfillPending: boolean;
+  priceComplete: boolean;
+  retryCore: () => void;
+  retryPrices: () => void;
   benchmark: string;
   ledger: Ledger;
   series: LedgerSeries;
@@ -40,6 +49,23 @@ interface Options {
   statementCash?: readonly StatementCash[];
 }
 
+const EMPTY_SERIES: LedgerSeries = {
+  points: [],
+  warnings: [],
+  complete: true,
+  minCashUsd: 0,
+  minCashDate: null,
+  tickerCurrency: new Map(),
+};
+
+interface SeriesCalculation {
+  ledger: Ledger;
+  closes: PriceMap | undefined;
+  benchmarkPrices: PriceMap | undefined;
+  benchmark: string;
+  series: LedgerSeries;
+}
+
 /**
  * The private, amount-bearing view of the portfolio. Every page that shows a
  * return reads it from here, so overview, performance and health cannot
@@ -50,6 +76,9 @@ export function useLedger(options: Options = {}): LedgerModel {
   const transactions = useTransactions();
   const cashflows = useCashflows();
   const settings = useSettings();
+  const coreLoading = transactions.isPending || cashflows.isPending || settings.isPending;
+  const coreError = transactions.isError || cashflows.isError || settings.isError;
+  const ready = !coreLoading && !coreError;
   const benchmark = getSelectedBenchmark(settings.data);
   const shareCache = usePortfolioHistory(benchmark);
 
@@ -62,14 +91,32 @@ export function useLedger(options: Options = {}): LedgerModel {
     const dates = [...ledger.trades.map((t) => t.date), ...ledger.cash.map((e) => e.date)].sort();
     return dates[0] ?? null;
   }, [ledger]);
-  const closes = useDailyPrices(tickers, startDate, 'close');
-  const benchmarkPrices = useDailyPrices([benchmark], startDate, 'adjusted');
-
   const heldTickers = useMemo(() => {
     const shares = new Map<string, number>();
     for (const trade of ledger.trades) shares.set(trade.ticker, (shares.get(trade.ticker) ?? 0) + (trade.side === 'buy' ? trade.shares : -trade.shares));
     return [...shares].filter(([, value]) => Math.abs(value) > 1e-9).map(([ticker]) => ticker);
   }, [ledger]);
+  const tickerBounds = useMemo<PriceBounds>(() => {
+    const bounds = new Map<string, { startDate: string; endDate: string }>();
+    for (const trade of ledger.trades) {
+      const current = bounds.get(trade.ticker);
+      if (!current) bounds.set(trade.ticker, { startDate: trade.date, endDate: trade.date });
+      else {
+        if (trade.date < current.startDate) current.startDate = trade.date;
+        if (trade.date > current.endDate) current.endDate = trade.date;
+      }
+    }
+    for (const ticker of heldTickers) {
+      const current = bounds.get(ticker);
+      if (current) current.endDate = isoDateInNewYork(new Date());
+    }
+    return bounds;
+  }, [ledger, heldTickers]);
+  const closes = useDailyPrices(tickers, startDate, 'close', tickerBounds);
+  const benchmarkPrices = useDailyPrices([benchmark], startDate, 'adjusted');
+  const pricesLoading = (tickers.length > 0 && closes.isPending) || (!!startDate && benchmarkPrices.isPending);
+  const priceBackfillPending = closes.backfillPending || benchmarkPrices.backfillPending;
+  const priceError = closes.isError || benchmarkPrices.isError;
   const ownQuotes = useQuotes(options.live && !options.quotes && allSettled(transactions, cashflows) ? [...heldTickers, benchmark] : []);
   const quotes = options.quotes ?? (options.live ? ownQuotes.data : undefined);
   const latestPrices = useMemo(() => {
@@ -79,17 +126,27 @@ export function useLedger(options: Options = {}): LedgerModel {
     return map;
   }, [quotes]);
 
-  const series = useMemo(
-    () => buildLedgerSeries({
+  const [calculation, setCalculation] = useState<SeriesCalculation | null>(null);
+  const seriesReady = ready && !pricesLoading && !priceBackfillPending
+    && calculation?.ledger === ledger
+    && calculation.closes === closes.data
+    && calculation.benchmarkPrices === benchmarkPrices.data
+    && calculation.benchmark === benchmark;
+  // Let a lazy route commit its loading state before calculating a long history.
+  useEffect(() => {
+    if (!ready || pricesLoading || priceBackfillPending) return;
+    const series = buildLedgerSeries({
       ledger,
       closes: closes.data ?? new Map(),
       benchmark: benchmarkPrices.data?.get(benchmark),
       latestPrices,
       latestBenchmark: latestPrices?.get(benchmark) ?? null,
       asOfDate: latestPrices ? isoDateInNewYork(new Date()) : undefined,
-    }),
-    [ledger, closes.data, benchmarkPrices.data, benchmark, latestPrices],
-  );
+    });
+    setCalculation({ ledger, closes: closes.data, benchmarkPrices: benchmarkPrices.data, benchmark, series });
+  }, [ready, pricesLoading, priceBackfillPending, ledger, closes.data, benchmarkPrices.data, benchmark, latestPrices]);
+  const series = seriesReady ? calculation.series : EMPTY_SERIES;
+  const priceCalculating = ready && !pricesLoading && !priceBackfillPending && !seriesReady;
   const summary = useMemo(() => summarizeLedger(ledger, series), [ledger, series]);
 
   const displayedShares = useMemo(() => {
@@ -137,18 +194,28 @@ export function useLedger(options: Options = {}): LedgerModel {
   );
 
   const history = useMemo(() => series.points.map(toHistoryPoint), [series]);
-  const ready = !transactions.isPending && !cashflows.isPending && !settings.isPending;
-  const pricesLoading = (tickers.length > 0 && closes.isPending) || (!!startDate && benchmarkPrices.isPending);
+  const priceComplete = seriesReady && !priceError
+    && closes.coverageComplete && benchmarkPrices.coverageComplete
+    && !series.warnings.some((warning) => warning.code === 'missing_price');
 
   return {
-    loading: !ready || pricesLoading,
+    loading: coreLoading || pricesLoading || priceBackfillPending || priceCalculating,
     ready,
+    coreLoading,
+    coreError,
+    pricesLoading,
+    priceCalculating,
+    priceError,
+    priceBackfillPending,
+    priceComplete,
+    retryCore: () => { void Promise.all([transactions.refetch(), cashflows.refetch(), settings.refetch()]); },
+    retryPrices: () => { void Promise.all([closes.retry(), benchmarkPrices.retry()]); },
     benchmark,
     ledger,
     series,
     summary,
     checks,
-    unreconciled: ready && !pricesLoading && hasBlockingFailure(checks),
+    unreconciled: ready && priceComplete && hasBlockingFailure(checks),
     history,
   };
 }

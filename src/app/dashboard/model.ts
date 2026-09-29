@@ -17,6 +17,8 @@ import type { Quote } from '@/lib/quote';
 import { toUsdQuotes, usdRatesByTicker } from '@/lib/usdQuotes';
 import { getSelectedBenchmark, getWatchlist } from '@/lib/settings';
 
+const EMPTY_QUOTES: Quote[] = [];
+
 /**
  * Shared dashboard data + derived figures. Both dashboard variants render the
  * same model so the numbers never diverge — only the presentation differs.
@@ -24,6 +26,15 @@ import { getSelectedBenchmark, getWatchlist } from '@/lib/settings';
  */
 export interface DashboardModel {
   loading: boolean;
+  coreError: boolean;
+  pricesLoading: boolean;
+  priceCalculating: boolean;
+  priceBackfillPending: boolean;
+  priceError: boolean;
+  priceComplete: boolean;
+  retryCore: () => void;
+  retryPrices: () => void;
+  retryQuotes: () => void;
   positions: Position[];
   selectedBenchmark: string;
   quotes: Quote[];
@@ -80,6 +91,7 @@ export function useDashboardModel(): DashboardModel {
   const cashflows = cashflowsQuery.data ?? [];
   const settings = settingsQuery.data;
   const coreLoading = transactionsQuery.isPending || cashflowsQuery.isPending || settingsQuery.isPending;
+  const coreError = transactionsQuery.isError || cashflowsQuery.isError || settingsQuery.isError;
   const selectedBenchmark = useMemo(() => getSelectedBenchmark(settings), [settings]);
   const cacheStatus = usePerformanceCacheStatus(selectedBenchmark);
 
@@ -92,10 +104,11 @@ export function useDashboardModel(): DashboardModel {
   const symbols = useMemo(
     () => coreLoading
       ? []
-      : [...new Set([...txns.map((t) => t.ticker), ...watchlist, selectedBenchmark])],
-    [coreLoading, txns, watchlist, selectedBenchmark],
+      : [...new Set([...positions.map((p) => p.ticker), ...watchlist, selectedBenchmark])],
+    [coreLoading, positions, watchlist, selectedBenchmark],
   );
-  const { data: quotes = [], isLoading: quotesLoading, isError: quotesError } = useQuotes(symbols);
+  const quotesQuery = useQuotes(coreError ? [] : symbols);
+  const { data: quotes = EMPTY_QUOTES, isLoading: quotesLoading, isError: quotesError } = quotesQuery;
   useEffect(() => {
     if (symbols.length === 0) return;
     void registerTrackedSymbols(symbols, 'dashboard').catch((error) => {
@@ -177,7 +190,16 @@ export function useDashboardModel(): DashboardModel {
   const isEmpty = positions.length === 0 && cashflows.length === 0 && txns.length === 0;
 
   return {
-    loading: coreLoading || (positions.length > 0 && quotesLoading) || ledgerModel.loading,
+    loading: coreLoading,
+    coreError,
+    pricesLoading: ledgerModel.pricesLoading,
+    priceCalculating: ledgerModel.priceCalculating,
+    priceBackfillPending: ledgerModel.priceBackfillPending,
+    priceError: ledgerModel.priceError,
+    priceComplete: ledgerModel.priceComplete,
+    retryCore: ledgerModel.retryCore,
+    retryPrices: ledgerModel.retryPrices,
+    retryQuotes: () => { void quotesQuery.refetch(); },
     positions,
     selectedBenchmark,
     quotes,

@@ -22,10 +22,10 @@ interface Row {
   dayChangeUsd: number | null;
   sessionLabel: string | null;
   isExtended: boolean;
-  marketValue: number;
-  weightPct: number;
-  unrealizedUsd: number;
-  unrealizedPct: number;
+  marketValue: number | null;
+  weightPct: number | null;
+  unrealizedUsd: number | null;
+  unrealizedPct: number | null;
 }
 
 function buildRows({ positions, quoteByTicker, totalMarketValue, basis }: Props): Row[] {
@@ -44,13 +44,13 @@ function buildRows({ positions, quoteByTicker, totalMarketValue, basis }: Props)
         dayChangeUsd: dayChange !== null ? p.shares * dayChange : null,
         sessionLabel: q?.sessionLabel ?? null,
         isExtended: !!q?.isExtended,
-        marketValue,
-        weightPct: totalMarketValue > 0 ? marketValue / totalMarketValue : 0,
-        unrealizedUsd,
-        unrealizedPct,
+        marketValue: price === null ? null : marketValue,
+        weightPct: price === null ? null : totalMarketValue > 0 ? marketValue / totalMarketValue : 0,
+        unrealizedUsd: price === null ? null : unrealizedUsd,
+        unrealizedPct: price === null ? null : unrealizedPct,
       };
     })
-    .sort((a, b) => b.marketValue - a.marketValue);
+    .sort((a, b) => (b.marketValue ?? 0) - (a.marketValue ?? 0));
 }
 
 export function HoldingsList(props: Props) {
@@ -110,13 +110,13 @@ function HoldingsTable({ rows }: { rows: Row[] }) {
                 {r.dayChangeUsd !== null ? signedUsd(r.dayChangeUsd) : ''}
               </div>
             </td>
-            <td className="px-4 py-3 text-right font-medium tnum">{usd.format(r.marketValue)}</td>
+            <td className="px-4 py-3 text-right font-medium tnum">{r.marketValue === null ? '—' : usd.format(r.marketValue)}</td>
             <td className={cn('px-4 py-3 text-right tnum', changeColor(r.unrealizedUsd))}>
-              {signedUsd(r.unrealizedUsd)}
-              <div className="text-[10px] tnum opacity-80">{signedPct(r.unrealizedPct)}</div>
+              {r.unrealizedUsd === null ? '—' : signedUsd(r.unrealizedUsd)}
+              <div className="text-[10px] tnum opacity-80">{r.unrealizedPct === null ? '' : signedPct(r.unrealizedPct)}</div>
             </td>
             <td className="px-4 py-3 text-right tnum">
-              <WeightBar pctValue={r.weightPct} />
+              {r.weightPct === null ? '—' : <WeightBar pctValue={r.weightPct} />}
             </td>
           </motion.tr>
         ))}
@@ -145,7 +145,7 @@ function HoldingsCards({ rows, basis: _basis }: { rows: Row[]; basis: 'avg' | 'f
               </div>
             </div>
             <div className="text-right">
-              <div className="text-base font-medium tnum">{usd.format(r.marketValue)}</div>
+              <div className="text-base font-medium tnum">{r.marketValue === null ? '—' : usd.format(r.marketValue)}</div>
               <div className={cn('text-[11px] tnum', changeColor(r.dayChangePct))}>
                 <span className="inline-flex items-center gap-1">
                   <DayArrow value={r.dayChangePct} />
@@ -156,10 +156,10 @@ function HoldingsCards({ rows, basis: _basis }: { rows: Row[]; basis: 'avg' | 'f
           </div>
           <div className="mt-2 flex items-center gap-3">
             <div className="flex-1">
-              <WeightBar pctValue={r.weightPct} compact />
+              {r.weightPct === null ? '—' : <WeightBar pctValue={r.weightPct} compact />}
             </div>
             <div className={cn('text-right text-xs tnum', changeColor(r.unrealizedUsd))}>
-              {signedUsd(r.unrealizedUsd)} ({signedPct(r.unrealizedPct)})
+              {r.unrealizedUsd === null || r.unrealizedPct === null ? '—' : `${signedUsd(r.unrealizedUsd)} (${signedPct(r.unrealizedPct)})`}
             </div>
           </div>
         </motion.div>

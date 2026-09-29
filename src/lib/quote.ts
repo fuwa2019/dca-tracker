@@ -72,6 +72,7 @@ export interface SymbolSearchResult {
 
 export const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
 const API_LIMIT_CONFIG = apiLimitConfigFromEnv(import.meta.env);
+const QUOTE_REQUEST_TIMEOUT_MS = 12_000;
 const quoteInflight = new Map<string, Promise<Quote[]>>();
 
 export type UsMarketSessionKey = 'pre_market' | 'regular' | 'after_hours' | 'overnight' | 'closed';
@@ -115,7 +116,7 @@ function quoteUrl(symbols: string[]) {
 
 async function limitedFetchJson<T>(endpoint: ApiEndpoint, url: string): Promise<T> {
   try {
-    const r = await rateLimited(endpoint, () => fetch(url), API_LIMIT_CONFIG);
+    const r = await rateLimited(endpoint, () => fetch(url, { signal: AbortSignal.timeout(QUOTE_REQUEST_TIMEOUT_MS) }), API_LIMIT_CONFIG);
     if (!r.ok) throw new Error(`${endpoint} http ${r.status}`);
     return (await r.json()) as T;
   } catch (err) {

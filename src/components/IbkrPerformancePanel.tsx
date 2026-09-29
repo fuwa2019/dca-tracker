@@ -37,6 +37,7 @@ interface Props {
   /** Hide the benchmark toggle entirely (used by Share view where the toggle adds noise). */
   hideBenchmarkToggle?: boolean;
   emptyMessage?: string;
+  emptyDescription?: string;
 }
 
 type PerfRow = {
@@ -78,6 +79,7 @@ export function PerformancePanel({
   loading = false,
   hideBenchmarkToggle = false,
   emptyMessage,
+  emptyDescription,
 }: Props) {
   const [page, setPage] = useState(0);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -228,7 +230,7 @@ export function PerformancePanel({
             <EmptyState
               icon={Info}
               title={emptyMessage ?? '暂无业绩数据'}
-              description="录入交易后会自动生成时间加权收益率曲线。"
+              description={emptyDescription ?? '录入交易后会自动生成时间加权收益率曲线。'}
             />
           </div>
         ) : (

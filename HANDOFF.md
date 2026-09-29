@@ -1,11 +1,39 @@
 # Current Handoff
 
-Updated: 2026-09-25
+Updated: 2026-09-29
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
+
+## 2026-09-29 — overview/performance loading repair (local, not deployed)
+
+- Core transactions, cashflows, and settings reads now have a 12-second request
+  deadline; overview and performance show an error and retry rather than an
+  empty ledger when a core read fails.
+- Daily prices first read stored closes, then backfill missing symbols in
+  independent batches of at most 10. Provider delay no longer holds the core
+  page load; failed or incomplete prices keep dependent figures unavailable.
+  Overview quotes cover held symbols, watchlist, and benchmark only, and do not
+  gate the page. Missing quote-derived holding values display placeholders.
+- Passed `test:finance`, `test:ui` (including synthetic loading cases),
+  `test:share-privacy`, `test:quote-status`, `typecheck`, `build:local`, and
+  `test:release-budget`. Offline browser checks passed for overview and
+  performance at 390px with no horizontal overflow or console errors.
+- No database, Worker, secret, or production deployment change so far. The
+  owner authorized commit and Pages release on 2026-09-29; finish release
+  checks and verify the deployed frontend without reading private account data.
+- Follow-up: the offline preview exposed a separate first-navigation stall from
+  `/performance` to `/`. Route chunks returned 200, but calculating the long
+  ledger series during the first render repeatedly restarted the Suspense
+  transition. `useLedger` now commits a loading state before building the
+  series in an effect; it checks input identities before showing a result.
+  Fresh browser contexts passed both first-navigation directions. Local-mode
+  builds now disable PWA generation so a preview rebuild cannot keep serving
+  obsolete chunks from a Service Worker. The clean offline preview is on
+  `http://127.0.0.1:4185/`; production PWA behavior is unchanged. Pages release
+  remains pending release checks and push.
 
 ## 2026-09-25 — unified ledger rebuild (local, not deployed)
 

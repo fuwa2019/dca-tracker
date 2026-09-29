@@ -1,13 +1,16 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { isoDateInNewYork } from '@/lib/nyse-calendar';
 import { normalizeSymbol, normalizeSymbols } from '@/lib/symbols';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { localPriceMap } from '@/lib/localData';
+import { fetchHistoryPages, symbolsNeedingBackfill, type PriceBounds, type PriceMap } from '@/lib/priceBackfill';
+
+export type { PriceBounds, PriceMap } from '@/lib/priceBackfill';
 
 const WORKER_BASE = import.meta.env.VITE_QUOTE_WORKER_URL?.replace(/\/$/, '') ?? '';
-
-export type PriceMap = Map<string, Map<string, number>>; // ticker → date → close
+const REQUEST_TIMEOUT_MS = 12_000;
 
 /**
  * `adjusted` is the total-return proxy used for benchmarks and the legacy
@@ -37,7 +40,8 @@ async function readFromSupabase(symbols: string[], earliestDate: string, basis: 
     .select('ticker,trade_date,close,adjusted_close')
     .in('ticker', symbols)
     .gte('trade_date', earliestDate)
-    .order('trade_date', { ascending: true });
+    .order('trade_date', { ascending: true })
+    .abortSignal(AbortSignal.timeout(REQUEST_TIMEOUT_MS));
   if (error) throw error;
   const map: PriceMap = new Map();
   for (const row of (data as DailyPriceRow[]) ?? []) {
@@ -49,27 +53,6 @@ async function readFromSupabase(symbols: string[], earliestDate: string, basis: 
     m.set(row.trade_date, Number(basis === 'close' ? row.close : (row.adjusted_close ?? row.close)));
   }
   return map;
-}
-
-/** Returns true when Supabase already has a usable daily series for charting.
- *  A single close near the event date is not enough for PortfolioAnalyst-style
- *  performance: we need enough closes after the start date to draw a line. */
-function coverageOk(map: PriceMap, symbols: string[], earliestDate: string): boolean {
-  const todayIso = isoDateInNewYork(new Date());
-  const needsMultiPointSeries = addDays(earliestDate, 7) < todayIso;
-  const freshEnoughDate = addDays(todayIso, -10);
-
-  for (const s of symbols) {
-    const m = map.get(s);
-    if (!m || m.size === 0) return false;
-    const dates = [...m.keys()].sort();
-    const firstDate = dates[0];
-    const lastDate = dates[dates.length - 1];
-    if (firstDate > addDays(earliestDate, 7)) return false;
-    if (needsMultiPointSeries && m.size < 2) return false;
-    if (needsMultiPointSeries && lastDate < freshEnoughDate) return false;
-  }
-  return true;
 }
 
 function mergePriceMaps(base: PriceMap, extra: PriceMap): PriceMap {
@@ -103,12 +86,6 @@ function workerHistoryToMap(data: WorkerHistoryResponse, basis: PriceBasis): Pri
   return map;
 }
 
-function addDays(iso: string, n: number): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  const ms = Date.UTC(y, m - 1, d) + n * 86_400_000;
-  return new Date(ms).toISOString().slice(0, 10);
-}
-
 /** Pick a Yahoo `range` slug that covers earliestDate → today with some margin. */
 function pickRange(earliestDate: string): string {
   const earliest = new Date(earliestDate + 'T00:00:00Z').getTime();
@@ -124,26 +101,31 @@ function pickRange(earliestDate: string): string {
 }
 
 async function backfillViaWorker(symbols: string[], earliestDate: string, basis: PriceBasis): Promise<PriceMap> {
-  if (!WORKER_BASE) return new Map();
+  if (!WORKER_BASE) throw new Error('历史价格服务未配置');
   const range = pickRange(earliestDate);
-  const url = `${WORKER_BASE}/api/history?symbols=${encodeURIComponent(symbols.join(','))}&range=${range}`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`worker /api/history ${r.status}`);
-  const workerMap = workerHistoryToMap((await r.json()) as WorkerHistoryResponse, basis);
-  // Give the waitUntil a moment to land before re-querying.
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  return workerMap;
+  const map: PriceMap = new Map();
+  const pages = await fetchHistoryPages(symbols, range, async (params) => {
+    const r = await fetch(`${WORKER_BASE}/api/history?${params}`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    if (!r.ok) throw new Error(`历史价格服务返回 ${r.status}`);
+    return (await r.json()) as WorkerHistoryResponse;
+  });
+  for (const page of pages) {
+    const workerMap = workerHistoryToMap(page, basis);
+    for (const [symbol, prices] of workerMap) map.set(symbol, prices);
+  }
+  return map;
 }
 
 /**
  * Returns daily close prices for the requested symbols starting from earliestDate.
- * Reads from Supabase first; if any symbol's coverage falls short, triggers a
- * one-shot backfill via the quote worker, then re-reads.
+ * Stored closes settle the initial read. Missing coverage is filled in a
+ * separate cached query so a slow provider cannot hold the whole page open.
  */
-export function useDailyPrices(symbols: string[], earliestDate: string | null, basis: PriceBasis = 'adjusted') {
+export function useDailyPrices(symbols: string[], earliestDate: string | null, basis: PriceBasis = 'adjusted', bounds?: PriceBounds) {
   const uniqSorted = normalizeSymbols(symbols);
   const enabled = uniqSorted.length > 0 && !!earliestDate;
-  return useQuery<PriceMap>({
+  const boundsKey = bounds ? JSON.stringify([...bounds]) : '';
+  const stored = useQuery<PriceMap>({
     queryKey: ['daily_prices', uniqSorted.join(','), earliestDate, basis],
     enabled,
     staleTime: 10 * 60 * 1000,
@@ -156,14 +138,31 @@ export function useDailyPrices(symbols: string[], earliestDate: string | null, b
         }
         return map;
       }
-      const ed = earliestDate as string;
-      let map = await readFromSupabase(uniqSorted, ed, basis);
-      if (!coverageOk(map, uniqSorted, ed)) {
-        const workerMap = await backfillViaWorker(uniqSorted, ed, basis);
-        map = await readFromSupabase(uniqSorted, ed, basis);
-        map = mergePriceMaps(map, workerMap);
-      }
-      return map;
+      return readFromSupabase(uniqSorted, earliestDate as string, basis);
     },
   });
+  const missing = stored.data && earliestDate
+    ? symbolsNeedingBackfill(stored.data, uniqSorted, earliestDate, isoDateInNewYork(new Date()), bounds)
+    : [];
+  const backfill = useQuery<PriceMap>({
+    queryKey: ['daily_prices_backfill', missing.join(','), earliestDate, basis, boundsKey],
+    enabled: !LOCAL_MODE && stored.isSuccess && missing.length > 0,
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    queryFn: () => backfillViaWorker(missing, earliestDate as string, basis),
+  });
+  const data = useMemo(
+    () => stored.data && backfill.data ? mergePriceMaps(stored.data, backfill.data) : stored.data,
+    [stored.data, backfill.data],
+  );
+  const stillMissing = data && earliestDate ? symbolsNeedingBackfill(data, uniqSorted, earliestDate, isoDateInNewYork(new Date()), bounds) : [];
+  return {
+    data,
+    isPending: enabled && stored.isPending,
+    isError: stored.isError || backfill.isError,
+    backfillPending: backfill.isFetching,
+    coverageComplete: LOCAL_MODE || stillMissing.length === 0,
+    retry: () => stored.isError ? stored.refetch() : backfill.refetch(),
+  };
 }

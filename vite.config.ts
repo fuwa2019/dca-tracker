@@ -36,6 +36,7 @@ const appConfig = {
   plugins: [
     react(),
     VitePWA({
+      disable: process.env.VITE_LOCAL_MODE === '1',
       registerType: 'autoUpdate',
       // The default injection is a plain synchronous <script src>, which
       // Lighthouse counts as render blocking. Nothing on first paint depends on

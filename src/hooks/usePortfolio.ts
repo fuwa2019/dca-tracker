@@ -16,6 +16,7 @@ type TxnRow = Database['public']['Tables']['transactions']['Row'];
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
 type SettingsRow = Database['public']['Tables']['settings']['Row'];
 type AccountRow = Database['public']['Tables']['accounts']['Row'];
+const CORE_REQUEST_TIMEOUT_MS = 12_000;
 
 /**
  * Broker accounts (migration 0058). Before that migration is applied the
@@ -48,7 +49,8 @@ export function useTransactions() {
         .from('transactions')
         .select('*')
         .order('trade_date', { ascending: false })
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .abortSignal(AbortSignal.timeout(CORE_REQUEST_TIMEOUT_MS));
       if (error) throw error;
       return data ?? [];
     },
@@ -63,7 +65,8 @@ export function useCashflows() {
       const { data, error } = await supabase
         .from('cashflows')
         .select('*')
-        .order('cny_out_date', { ascending: false });
+        .order('cny_out_date', { ascending: false })
+        .abortSignal(AbortSignal.timeout(CORE_REQUEST_TIMEOUT_MS));
       if (error) throw error;
       return data ?? [];
     },
@@ -75,7 +78,7 @@ export function useSettings() {
     queryKey: ['settings'],
     queryFn: async () => {
       if (LOCAL_MODE) return localSettings;
-      const { data, error } = await supabase.from('settings').select('*').maybeSingle();
+      const { data, error } = await supabase.from('settings').select('*').abortSignal(AbortSignal.timeout(CORE_REQUEST_TIMEOUT_MS)).maybeSingle();
       if (error) throw error;
       return data;
     },

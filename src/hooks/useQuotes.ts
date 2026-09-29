@@ -24,8 +24,8 @@ export function useQuotes(symbols: string[]) {
       return calculateRefreshInterval(uniqSorted.length, API_LIMIT_CONFIG);
     },
     refetchOnWindowFocus: true,
-    retry: 2,
-    retryDelay: (attempt) => Math.min(120_000, 15_000 * 2 ** attempt),
+    retry: 1,
+    retryDelay: 3_000,
     staleTime: 30_000,
   });
 }

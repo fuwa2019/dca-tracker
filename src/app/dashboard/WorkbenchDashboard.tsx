@@ -56,6 +56,15 @@ function sliceByRange(points: ReadonlyArray<HistoryPoint>, range: OverviewRange)
 export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
   const {
     loading,
+    coreError,
+    pricesLoading,
+    priceCalculating,
+    priceBackfillPending,
+    priceError,
+    priceComplete,
+    retryCore,
+    retryPrices,
+    retryQuotes,
     positions,
     selectedBenchmark,
     quoteByTicker,
@@ -116,14 +125,39 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
   }, [rangedSource]);
 
   const dataState = quotesError || quotesNone
-    ? { tone: 'bad' as const, label: '行情不可用', detail: '当前值可能沿用成本或缓存' }
+    ? { tone: 'bad' as const, label: '行情不可用', detail: '账户净值按最近可用收盘价估值' }
     : quotesPartial
       ? { tone: 'warn' as const, label: '行情不完整', detail: '部分持仓缺少最新价格' }
       : quotesLoading
         ? { tone: 'info' as const, label: '正在取价', detail: '等待行情源返回' }
         : { tone: 'ok' as const, label: '数据可用', detail: '持仓与现金已载入' };
+  const quotesUnsettled = quotesLoading || quotesError || quotesNone || quotesPartial;
 
   if (loading) return <DashboardLoading />;
+
+  if (coreError) {
+    return <LoadNotice title="账本读取失败" detail="交易、现金事件或设置未能载入。请重试。" onRetry={retryCore} />;
+  }
+
+  if (!priceComplete && !isEmpty) {
+    return (
+      <div className="workbench-page space-y-4">
+        <LoadNotice
+          title={pricesLoading ? '正在读取历史价格' : priceBackfillPending ? '正在补齐历史价格' : priceCalculating ? '正在计算账本' : '历史价格不完整'}
+          detail={pricesLoading || priceBackfillPending || priceCalculating
+            ? '账本已载入；需要价格的净值与收益将在价格齐备后显示。'
+            : priceError ? '价格请求失败，净值与收益暂不可用。' : '部分价格仍缺失，净值与收益暂不可用。'}
+          onRetry={pricesLoading || priceBackfillPending || priceCalculating ? undefined : retryPrices}
+        />
+        <Link className="workbench-link" to="/health">查看数据健康 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
+        <section className="workbench-panel" aria-label="已载入的持仓">
+          <h2 className="text-sm font-semibold">当前持仓</h2>
+          <p className="mt-2 text-xs text-muted-foreground">{positions.length} 个标的 · 估值待确认</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-sm">{positions.map((position) => <span key={position.ticker}>{position.ticker}</span>)}</div>
+        </section>
+      </div>
+    );
+  }
 
   if (isEmpty) {
     return (
@@ -167,7 +201,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
       <section className="overview-hero" aria-label="总览核心数据">
         <header className="overview-hero-copy">
           <div className="min-w-0">
-            <div className="workbench-eyebrow">当前账户净值</div>
+            <div className="workbench-eyebrow">{quotesUnsettled ? '账户净值 · 行情待确认' : '当前账户净值'}</div>
             <HeroValue value={aggregates.nav} />
             <UnreconciledBadge checks={ledgerChecks} className="mt-2" />
             {rangeChange && (
@@ -281,7 +315,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
           <section className="workbench-panel" aria-labelledby="summary-title">
             <PanelHeader title="组合摘要" id="summary-title" detail="当前口径" />
             <dl className="mt-4 space-y-3">
-              <SummaryRow label="今日盈亏" value={signedUsd(aggregates.dayPL)} detail={Number.isFinite(dayChangePct) ? signedPct(dayChangePct) : '—'} tone={aggregates.dayPL} />
+              <SummaryRow label="今日盈亏" value={quotesUnsettled ? '—' : signedUsd(aggregates.dayPL)} detail={quotesUnsettled ? '等待完整行情' : Number.isFinite(dayChangePct) ? signedPct(dayChangePct) : '—'} tone={quotesUnsettled ? undefined : aggregates.dayPL} />
               <SummaryRow label="总收益 · 净值 − 净投入" value={signedUsd(aggregates.totalPL)} detail={Number.isFinite(totalReturnPct) ? `${signedPct(totalReturnPct)} / 净投入` : '—'} tone={aggregates.totalPL} />
               <SummaryRow label="现金余额" value={usd.format(aggregates.cash)} detail={`${aggregates.nav > 0 ? ((aggregates.cash / aggregates.nav) * 100).toFixed(1) : '0.0'}% 净值`} />
             </dl>
@@ -291,6 +325,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
             <PanelHeader title="账本状态" id="status-title" detail="写入前可追溯" />
             <div className="mt-4 space-y-3">
               <StateRow icon={dataState.tone === 'ok' ? CheckCircle2 : Activity} label="行情与持仓" value={dataState.label} detail={dataState.detail} tone={dataState.tone} />
+              {(quotesError || quotesNone) && <Button variant="outline" size="sm" onClick={retryQuotes}><RefreshCw className="h-3.5 w-3.5" />重试行情</Button>}
               <StateRow icon={cacheDirty ? RefreshCw : CheckCircle2} label="绩效缓存" value={cacheDirty ? '待刷新' : '已同步'} detail={cacheDirty ? '交易或现金事件发生了变化' : '当前结果可继续查看'} tone={cacheDirty ? 'warn' : 'ok'} />
               <StateRow icon={Database} label="导入模型" value={LEDGER_IMPORT_V2 ? '组合账本' : '兼容模式'} detail={LEDGER_IMPORT_V2 ? 'Schwab · IBKR · 多币种 · 导出 TradingView' : '建议切换统一预览'} tone={LEDGER_IMPORT_V2 ? 'ok' : 'warn'} />
             </div>
@@ -401,9 +436,20 @@ function StateRow({ icon: Icon, label, value, detail, tone }: { icon: LucideIcon
   );
 }
 
+function LoadNotice({ title, detail, onRetry }: { title: string; detail: string; onRetry?: () => void }) {
+  return (
+    <section className="workbench-panel" role="status">
+      <h2 className="text-sm font-semibold">{title}</h2>
+      <p className="mt-2 text-xs text-muted-foreground">{detail}</p>
+      {onRetry && <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}><RefreshCw className="h-3.5 w-3.5" />重试</Button>}
+    </section>
+  );
+}
+
 function DashboardLoading() {
   return (
     <div className="workbench-page" aria-label="正在加载总览" aria-busy="true">
+      <p className="text-sm text-muted-foreground">正在读取账本…</p>
       <div className="h-8 w-32 animate-pulse rounded bg-surface-elevated" />
       <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => <div key={index} className="h-28 animate-pulse bg-surface" />)}
