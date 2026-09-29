@@ -7,7 +7,7 @@ The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
 
-## 2026-09-29 — overview/performance loading repair (local, not deployed)
+## 2026-09-29 — overview/performance loading repair (released)
 
 - Core transactions, cashflows, and settings reads now have a 12-second request
   deadline; overview and performance show an error and retry rather than an
@@ -21,9 +21,9 @@ documents that own it, listed there and under Related Files below.
   `test:share-privacy`, `test:quote-status`, `typecheck`, `build:local`, and
   `test:release-budget`. Offline browser checks passed for overview and
   performance at 390px with no horizontal overflow or console errors.
-- No database, Worker, secret, or production deployment change so far. The
-  owner authorized commit and Pages release on 2026-09-29; finish release
-  checks and verify the deployed frontend without reading private account data.
+- No database, Worker, or secret change. The owner authorized commit and Pages
+  release on 2026-09-29; the frontend release is recorded in
+  `docs/release/2026-09-29-loading.md`.
 - Follow-up: the offline preview exposed a separate first-navigation stall from
   `/performance` to `/`. Route chunks returned 200, but calculating the long
   ledger series during the first render repeatedly restarted the Suspense
@@ -32,8 +32,7 @@ documents that own it, listed there and under Related Files below.
   Fresh browser contexts passed both first-navigation directions. Local-mode
   builds now disable PWA generation so a preview rebuild cannot keep serving
   obsolete chunks from a Service Worker. The clean offline preview is on
-  `http://127.0.0.1:4185/`; production PWA behavior is unchanged. Pages release
-  is authorized and pending push.
+  `http://127.0.0.1:4185/`; production PWA behavior is unchanged.
 - Release checks after a fresh `npm ci` in all three packages: CI-equivalent
   tests, `test:ui`, typecheck, offline build and transfer budget passed; a
   synthetic-public-config build confirmed production PWA generation. Blink
@@ -249,6 +248,17 @@ Repository: `/Users/junxihuo/Workspace/dca_system`, branch `master` tracking
   account-specific rows were manually changed.
 
 ## Verified production state
+
+### Pages — 2026-09-29 loading repair
+
+Commits `fcdd9f5` and `ba54ce3` were pushed to `master`. The Pages Git build
+`a738641b-726a-4aab-8252-41f5eea9b4e7` deployed `ba54ce3`; cache-busted
+canonical and deployment URLs served the same `index-ChsNYlPv.js` and
+`index-CsfFh8Ax.css`. Seven public routes returned 200. The isolated `/login`
+browser check rendered the email form with zero console warnings/errors and no
+account access. No database, Worker, secret, or private-data operation was
+performed. Details and the known `/settings` desktop CLS 0.358 limit are in
+`docs/release/2026-09-29-loading.md`.
 
 ### Database — migration 0052 baseline
 
