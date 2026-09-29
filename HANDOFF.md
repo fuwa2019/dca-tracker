@@ -762,6 +762,6 @@ Published `406f703`; Pages deployment
 `index-9sNdg11K.js`, CSS `index-CsfFh8Ax.css`, exposure chunk
 `exposure-6D5kg4jZ.js`. Cache-busted root, exposure, login and other named
 deep links returned HTTP 200; the exposure chunk includes automatic grouping
-and numeric-list UI. Native browser login console capture was unavailable
-because the CUA browser auth token was missing. No private account, database or
-Worker was accessed or changed; details are in the release record.
+and numeric-list UI. The production login form rendered without a missing
+configuration warning or console errors/warnings. No private account, database
+or Worker was accessed or changed; details are in the release record.
