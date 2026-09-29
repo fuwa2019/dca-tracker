@@ -7,7 +7,7 @@ The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
 
-## 2026-09-29 — IBKR statement-anchored append (local, not released)
+## 2026-09-29 — IBKR statement-anchored append (released)
 
 - Problem: the owner appended a 7-day IBKR export (2026-09-22..28) and the
   health page blocked on statement cash (ledger $5.72 vs statement $5.88).
@@ -25,9 +25,11 @@ documents that own it, listed there and under Related Files below.
   repo): re-appending the 7-day file adds −0.0429 @ 09-21 and +0.2047 @ 09-24,
   ledger 5.877766 = statement; a second re-import adds nothing. Synthetic cases
   in `test:portfolio-import`. Passed the CI set (`build` with stub public env).
-- Next: owner authorizes commit + Pages release, then re-imports
-  `U19133918.TRANSACTIONS.7D.csv` with 「新增导入」 (expect 2 calibration rows,
-  everything else duplicate) and confirms the health page passes.
+- Released 2026-09-29 (owner authorized): `d11433d`, Pages deployment
+  `5d1bed1c`, recorded in `docs/release/2026-09-29-ibkr-statement-anchor.md`.
+- Next: owner re-imports `U19133918.TRANSACTIONS.7D.csv` with 「新增导入」
+  (expect 2 对账单校准 rows, everything else duplicate) and confirms the
+  health page passes.
 
 ## 2026-09-29 — overview/performance loading repair (released)
 
