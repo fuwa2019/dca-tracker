@@ -754,3 +754,14 @@ release budget, Blink (18 combinations), and AX tree (26 views) pass.
 Lighthouse `/exposure` mobile/desktop performance 88/100, accessibility 100/100
 and CLS 0/0; the full-route gate still fails on the previously known
 `/settings` desktop CLS 0.358. See `docs/release/2026-09-29-exposure.md`.
+
+## Verified production — exposure C layout, 2026-09-29
+
+Published `406f703`; Pages deployment
+`9527e87f-e983-4b52-8dfa-195c5855b637` is Active. Production entry
+`index-9sNdg11K.js`, CSS `index-CsfFh8Ax.css`, exposure chunk
+`exposure-6D5kg4jZ.js`. Cache-busted root, exposure, login and other named
+deep links returned HTTP 200; the exposure chunk includes automatic grouping
+and numeric-list UI. Native browser login console capture was unavailable
+because the CUA browser auth token was missing. No private account, database or
+Worker was accessed or changed; details are in the release record.
