@@ -4,6 +4,20 @@ import { cashEventChip, ledgerEventChip, tradeEventChip, LEDGER_EVENT_KINDS } fr
 import { countLedgerEventKinds, retainedRowReasons, summarizeImportReceipt } from '../src/lib/import/receipt.ts';
 import { enterMotionProps } from '../src/lib/motionPrefs.ts';
 import { DEFAULT_TXN_SORT, nextSort, sortTransactions } from '../src/lib/ledgerSort.ts';
+import { exposureBarCutoff } from '../src/lib/exposureDisplay.ts';
+
+const countExposureBars = (weights, width, limit) => {
+  const cutoff = exposureBarCutoff(weights, width, limit);
+  return weights.filter((weight) => weight >= cutoff).length;
+};
+const dispersedWeights = [12, 10, 9, 8, 7, 6, 5, 5, 4, 4, 4, 3, 3, 2].map((weight) => weight / 100);
+assert.equal(countExposureBars(dispersedWeights, 320, 6), 6, 'mobile dispersed holdings keep a bounded bar list');
+assert.equal(countExposureBars(dispersedWeights, 600, 8), 8, 'desktop uses the larger row budget');
+assert.equal(countExposureBars([.6, .06, .04, .03, .02, .018, .014], 320, 6), 2, 'tiny bars move to numbers without filling the row budget');
+assert.equal(countExposureBars([.12, .1, .09, .08, .07, .06, .06, .04], 320, 6), 5, 'a tied group crossing the limit stays together');
+assert.equal(countExposureBars(Array(14).fill(.05), 320, 6), 0, 'equal holdings are not arbitrarily split by rank');
+assert.equal(countExposureBars([], 0, 6), 0, 'empty exposure is safe before measurement');
+assert.equal(countExposureBars([.01], 320, 6), 1, 'a single small holding still uses the full relative scale');
 
 function calculateRefreshInterval(symbolCount, config) {
   const count = Math.max(0, Math.floor(symbolCount));

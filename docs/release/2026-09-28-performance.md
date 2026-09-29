@@ -34,4 +34,12 @@ smooth curves. No database migrations, Worker changes or private-data reads.
 
 ## Deployment
 
-Pending Pages Git build and public asset verification.
+- Published commit: `14aaad7` on master.
+- Pages deployment: `ab856a83-93b9-4262-a95e-cb8dae514b92`.
+- Production entry: `index-CKwP3OAD.js`; CSS: `index-CNCpIXKu.css`;
+  performance chunk: `performance-8pAmlbzz.js`.
+- Cache-busted root and performance/login deep links succeed. Public chunk
+  contains monotone curves, period metrics, combined calendar and disclosures.
+- Production login rendered normally without missing-config warning; captured
+  console warnings/errors empty. No authenticated private portfolio inspected.
+- This post-deploy receipt is included with the exposure layout release.

@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Layers, ArrowUpRight, Plus, Info, Wifi, RefreshCw, TriangleAlert } from '@/components/icons';
+import { Layers, ArrowUpRight, Plus, Info, Wifi, RefreshCw, TriangleAlert, ChevronDown } from '@/components/icons';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -13,6 +13,7 @@ import { pct as fmtPct, usd } from '@/lib/format';
 import { refreshEtfHoldings } from '@/lib/etfHoldings';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { useEnterMotion } from '@/hooks/useEnterMotion';
+import { exposureBarCutoff } from '@/lib/exposureDisplay';
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
@@ -61,6 +62,31 @@ export function ExposurePage() {
 
   const topStocks = useMemo(() => lookThrough.stocks.slice(0, 14), [lookThrough.stocks]);
   const topStock = topStocks[0];
+  const maxWeight = topStock?.weightNav ?? 0;
+  const [trackNode, setTrackNode] = useState<HTMLDivElement | null>(null);
+  const [layout, setLayout] = useState({ width: 320, barLimit: 6 });
+  useEffect(() => {
+    if (!trackNode) return;
+    const desktop = window.matchMedia('(min-width: 640px)');
+    const measure = () => {
+      const width = trackNode.getBoundingClientRect().width;
+      const barLimit = desktop.matches ? 8 : 6;
+      setLayout((previous) => previous.width === width && previous.barLimit === barLimit ? previous : { width, barLimit });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(trackNode);
+    desktop.addEventListener('change', measure);
+    measure();
+    return () => {
+      observer.disconnect();
+      desktop.removeEventListener('change', measure);
+    };
+  }, [trackNode]);
+  const cutoff = exposureBarCutoff(topStocks.map((stock) => stock.weightNav), layout.width, layout.barLimit);
+  const barStocks = topStocks.filter((stock) => stock.weightNav >= cutoff);
+  const numericStocks = topStocks.filter((stock) => stock.weightNav < cutoff);
+  const barWeight = barStocks.reduce((sum, stock) => sum + stock.weightNav, 0);
+  const numericWeight = numericStocks.reduce((sum, stock) => sum + stock.weightNav, 0);
 
   const usedSources = useMemo(() => {
     const set = new Set<string>();
@@ -172,32 +198,28 @@ export function ExposurePage() {
 
       <motion.section
         variants={{ hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } } }}
-        className="grid gap-3 py-5 sm:grid-cols-2 lg:grid-cols-4"
+        className="grid gap-5 border-b border-border py-5 sm:grid-cols-[1fr_2fr] sm:gap-8"
       >
-        <ExposureSummaryCard
-          label="最大单票"
-          value={topStock ? `${topStock.ticker} ${fmtPct(topStock.weightNav, 1)}` : '—'}
-          sub={topStock ? `${usd.format(topStock.value)} · 占净值` : '无底层股票'}
-        />
-        <ExposureSummaryCard
-          label="已穿透到个股"
-          value={fmtPct(decomposedValue / nav, 1)}
-          sub="ETF 成分 + 直接持股"
-        />
-        <ExposureSummaryCard
-          label="未穿透长尾"
-          value={fmtPct(lookThrough.unclassifiedValue / nav, 1)}
-          sub="未列出的 ETF 小成分"
-        />
-        <ExposureSummaryCard
-          label="现金 / 国债"
-          value={fmtPct(lookThrough.cashValue / nav, 1)}
-          sub="SGOV / BOXX 等不拆股"
-        />
-        <p className="sm:col-span-2 lg:col-span-4 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
-          <Info className="mt-0.5 h-3 w-3 shrink-0" />
-          ETF 会按成分表拆到底层股票；现金替代和短债类 ETF 归入现金 / 国债；未覆盖的尾部成分单独列为未穿透长尾。
-        </p>
+        <div>
+          <div className="kicker">最大单票 · 占总净值</div>
+          <div className="mt-1 font-num text-2xl font-semibold">
+            {topStock ? <><span className="mr-3 text-sm">{topStock.ticker}</span>{fmtPct(topStock.weightNav, 1)}</> : '—'}
+          </div>
+          <div className="mt-1 text-[11px] text-muted-foreground">{topStock ? usd.format(topStock.value) : '无底层股票'}</div>
+        </div>
+        <div>
+          <div className="kicker">资产穿透覆盖</div>
+          <div className="my-3 flex h-2 gap-0.5 overflow-hidden rounded-full bg-surface-elevated" aria-hidden="true">
+            <div className="bg-brand/80" style={{ width: `${Math.max(0, decomposedValue / nav * 100)}%` }} />
+            <div className="bg-muted-foreground/60" style={{ width: `${Math.max(0, lookThrough.unclassifiedValue / nav * 100)}%` }} />
+            <div className="bg-muted-foreground/25" style={{ width: `${Math.max(0, lookThrough.cashValue / nav * 100)}%` }} />
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
+            <div>已穿透到个股 <strong className="inline-block font-num text-foreground">{fmtPct(decomposedValue / nav, 1)}</strong></div>
+            <div>未穿透长尾 <strong className="inline-block font-num text-foreground">{fmtPct(lookThrough.unclassifiedValue / nav, 1)}</strong></div>
+            <div>现金 / 国债 <strong className="inline-block font-num text-foreground">{fmtPct(lookThrough.cashValue / nav, 1)}</strong></div>
+          </div>
+        </div>
       </motion.section>
 
       {/* 穿透权重 */}
@@ -209,6 +231,7 @@ export function ExposurePage() {
           <div>
             <div className="workbench-eyebrow">True per-stock weights</div>
             <h2 className="mt-1 text-lg font-semibold">穿透后单票权重</h2>
+            {maxWeight > 0 && <p className="mt-1 text-[11px] text-muted-foreground">条长以最大持仓 {fmtPct(maxWeight, 1)} 为满格</p>}
           </div>
           <Button asChild variant="ghost" size="sm" className="shrink-0 text-brand">
             <Link to="/">回总览 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
@@ -225,18 +248,42 @@ export function ExposurePage() {
           ))}
         </div>
 
-        <Card className="overflow-hidden p-0">
-          <div className="grid grid-cols-[64px_minmax(0,1fr)_64px] items-center gap-3 border-b border-border bg-surface-elevated/50 px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            <div>代码</div>
-            <div>来源构成(条长 = 占净值)</div>
-            <div className="text-right">占净值</div>
+        {topStocks.length > 0 && <p className="mb-3 text-xs text-muted-foreground">重点 {barStocks.length} 只占 {fmtPct(barWeight, 1)}，其余 {numericStocks.length} 只占 {fmtPct(numericWeight, 1)}。</p>}
+        <Card className="relative overflow-hidden p-0">
+          <div aria-hidden="true" className="pointer-events-none invisible absolute inset-x-0 top-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 px-4 sm:grid-cols-[120px_minmax(0,1fr)_100px] sm:gap-x-5">
+            <span />
+            <div ref={setTrackNode} className="col-span-2 row-start-2 sm:col-span-1 sm:col-start-2 sm:row-start-1" />
+            <span />
           </div>
-          <div className="divide-y divide-border">
-            {topStocks.map((s, i) => (
-              <StockRow key={s.ticker} stock={s} index={i} />
-            ))}
-          </div>
+          {barStocks.length > 0 && <>
+            <div className="flex items-center justify-between gap-3 border-b border-border bg-surface-elevated/50 px-4 py-3 text-xs">
+              <span className="font-medium">主要敞口 · {barStocks.length} 只</span>
+              <span className="font-num text-muted-foreground">合计 {fmtPct(barWeight, 1)}</span>
+            </div>
+            <div className="divide-y divide-border" data-exposure-bars>
+              {barStocks.map((stock, i) => <StockRow key={stock.ticker} stock={stock} index={i} maxWeight={maxWeight} nav={nav} />)}
+            </div>
+          </>}
+          {numericStocks.length > 0 && <>
+            <div className="flex items-center justify-between gap-3 border-y border-border bg-surface-elevated/50 px-4 py-3 text-xs">
+              <span className="font-medium">数字列表 · {numericStocks.length} 只</span>
+              <span className="font-num text-muted-foreground">合计 {fmtPct(numericWeight, 1)}</span>
+            </div>
+            <div className="grid grid-cols-2 items-start" data-exposure-numbers>
+              {numericStocks.map((stock, i) => <StockRow key={stock.ticker} stock={stock} index={i + barStocks.length} maxWeight={maxWeight} nav={nav} numeric />)}
+            </div>
+          </>}
+          {topStocks.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">当前没有可展示的底层个股，资产构成见上方摘要。</p>}
         </Card>
+        <details className="mt-3 text-[11px] leading-5 text-muted-foreground">
+          <summary className="w-fit cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">自动分组依据</summary>
+          <p className="mt-2">条形过短的持仓转为数字列表；手机最多保留 6 项条形，桌面最多 8 项。同权重不拆组。分组随页面宽度和持仓变化，真实权重不变。</p>
+        </details>
+
+        <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
+          右侧百分比为占总净值的真实权重。颜色区分持有来源，点击任一行查看来源贡献。
+          {lookThrough.stocks.length > topStocks.length && <> 当前列表最多展示前 {topStocks.length} 大敞口；其他已穿透个股合计 {fmtPct((decomposedValue - topStocks.reduce((sum, stock) => sum + stock.value, 0)) / nav, 1)}。</>}
+        </p>
 
         <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
           <Info className="mt-0.5 h-3 w-3 shrink-0" />
@@ -254,55 +301,50 @@ function latestFetchedAt(sources: Record<string, { fetchedAt: string | null }>):
   return latest ? new Date(latest).toLocaleString('zh-CN', { hour12: false }) : '—';
 }
 
-function StockRow({ stock, index }: { stock: LookThroughStock; index: number }) {
+function StockRow({ stock, index, maxWeight, nav, numeric = false }: { stock: LookThroughStock; index: number; maxWeight: number; nav: number; numeric?: boolean }) {
+  const [open, setOpen] = useState(false);
   const enter = useEnterMotion();
-  const barWidthPct = Math.min(100, Math.max(2, stock.weightNav * 100));
+  const barWidthPct = maxWeight > 0 ? Math.min(100, Math.max(0, stock.weightNav / maxWeight * 100)) : 0;
   return (
     <motion.div
       {...enter({ opacity: 0, y: 4 }, { delay: index * 0.025 })}
       animate={{ opacity: 1, y: 0 }}
-      className="grid grid-cols-[64px_minmax(0,1fr)_64px] items-center gap-3 px-4 py-2.5"
+      className={numeric ? `min-w-0 border-b border-border ${open ? 'col-span-2' : 'odd:border-r'}` : undefined}
     >
-      <div className="flex items-center gap-1.5">
-        <span className="font-semibold">{stock.ticker}</span>
-      </div>
-      <div className="min-w-0">
-        <div
-          className="flex h-3 overflow-hidden rounded-full bg-surface-elevated"
-          style={{ width: `${barWidthPct}%`, minWidth: 18 }}
-        >
-          {stock.sources.map((src) => (
-            <div
-              key={src.via}
-              className="h-full"
-              style={{
-                width: `${(src.value / stock.value) * 100}%`,
-                background: sourceColor(src.via),
-              }}
-              title={`${sourceLabel(src.via)} ${fmtPct(src.value / Math.max(stock.value, 1e-9), 0)}`}
-            />
-          ))}
+      <details className="group" onToggle={(event) => setOpen(event.currentTarget.open)}>
+        <summary className={`cursor-pointer list-none items-center px-4 py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden ${numeric ? 'flex justify-between gap-2' : 'grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 sm:grid-cols-[120px_minmax(0,1fr)_100px] sm:gap-x-5'}`}>
+          <span className="flex min-w-0 items-center gap-2">
+            {!numeric && <span className="w-4 shrink-0 font-num text-[10px] text-muted-foreground" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>}
+            <span className={`break-all font-semibold ${numeric ? 'text-xs' : ''}`}>{stock.ticker}</span>
+          </span>
+          {!numeric && <div className="col-span-2 row-start-2 h-2.5 min-w-0 overflow-hidden rounded bg-surface-elevated sm:col-span-1 sm:col-start-2 sm:row-start-1" aria-hidden="true">
+            <div className="flex h-full overflow-hidden rounded" style={{ width: `${barWidthPct}%` }}>
+              {stock.sources.map((src) => (
+                <div
+                  key={src.via}
+                  className="h-full"
+                  style={{ width: `${src.value / Math.max(stock.value, 1e-9) * 100}%`, background: sourceColor(src.via) }}
+                />
+              ))}
+            </div>
+          </div>}
+          <span className={`col-start-2 row-start-1 flex shrink-0 items-center justify-end font-num font-semibold tabular-nums sm:col-start-3 ${numeric ? 'gap-1 text-xs' : 'gap-3 text-sm'}`}>
+            <span><span className="sr-only">占总净值 </span>{fmtPct(stock.weightNav, 1)}</span>
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-open:rotate-180" />
+          </span>
+        </summary>
+        <div className={`mx-4 mb-4 rounded-lg bg-surface-elevated/50 px-3 py-3 ${numeric ? '' : 'sm:ml-[156px]'}`}>
+          <p className="mb-2 text-[11px] text-muted-foreground">各来源对总净值的贡献 · 合计 {fmtPct(stock.weightNav, 2)}</p>
+          <dl className="space-y-2 text-xs">
+            {stock.sources.map((src) => (
+              <div key={src.via} className="flex items-center justify-between gap-3">
+                <dt className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm" style={{ background: sourceColor(src.via) }} aria-hidden="true" />{sourceLabel(src.via)}</dt>
+                <dd className="font-num tabular-nums">{fmtPct(src.value / nav, 2)}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
-        {/* 触摸端没有 hover title,手机上把来源拆分用紧凑文字显示 */}
-        <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground sm:hidden">
-          {stock.sources.map((src) => (
-            <span key={src.via} className="font-num">
-              {sourceLabel(src.via)} {fmtPct(src.value / Math.max(stock.value, 1e-9), 0)}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="text-right font-num text-sm font-semibold tabular-nums">{fmtPct(stock.weightNav, 1)}</div>
+      </details>
     </motion.div>
-  );
-}
-
-function ExposureSummaryCard({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-surface px-4 py-3">
-      <div className="kicker">{label}</div>
-      <div className="font-num mt-1 text-2xl font-semibold">{value}</div>
-      <div className="mt-1 text-[11px] text-muted-foreground">{sub}</div>
-    </div>
   );
 }

@@ -650,3 +650,107 @@ configured public environment. See docs/release/2026-09-28-performance.md.
 Pre-push release gates: performance Lighthouse mobile 84 / desktop 100,
 accessibility 100, CLS rounds to zero. Full gate still fails on unchanged
 settings desktop CLS 0.358 (previously baselined); Blink and AX audits pass.
+
+## Verified production — performance layout, 2026-09-28
+
+Published `14aaad7`; Pages `ab856a83-93b9-4262-a95e-cb8dae514b92`. Entry
+`index-CKwP3OAD.js`, CSS `index-CNCpIXKu.css`, performance chunk
+`performance-8pAmlbzz.js`. Cache-busted live assets verified combined calendar,
+period metrics and monotone curves. Root/performance/login load; login has no
+missing-config warning or console warnings/errors. No private account viewed,
+no Worker/database changes. Remaining issues: existing settings CLS and CI
+public-environment configuration; see release record. Receipt included with
+the subsequent exposure layout release.
+
+## 2026-09-29 — exposure layout discussion demo
+
+Owner requested a standalone demo after discussing mobile bars appearing equal.
+Added `outputs/exposure-demo.html` using synthetic data only, served at
+`http://127.0.0.1:4174/exposure-demo.html`. Bars scale relative to the largest
+weight with the scale stated explicitly; true NAV weights remain visible.
+Mobile rows put labels above full-width segmented bars. Native details show
+source contributions; top-eight list expands to fourteen. Compact coverage
+summary and desktop/mobile preview switch included. Browser verified mobile
+preview, source expansion and show-more/collapse interactions. Screenshot:
+`outputs/exposure-demo-preview.png`. No application, database or Worker changes;
+not committed or deployed. Next: owner reviews demo before local integration.
+
+## 2026-09-29 — exposure layout release authorized
+
+Owner approved the demo and requested commit/deployment. Implemented in
+`src/app/exposure.tsx`: relative bar scale, full-width mobile bars, native source
+disclosures, compact coverage summary and 8/14-stock toggle. Calculations,
+database, Workers and public share unchanged. Local checks, Blink compatibility
+and AX audit pass; Lighthouse and deployment pending. Details and known limits:
+`docs/release/2026-09-29-exposure.md`.
+
+Before commit/push, owner raised that a dominant holding still makes long-tail
+bars look like dots under linear scaling. Release has not been committed or
+pushed. Proposed a small-holdings focus toggle (exclude the largest chart row,
+keep it in the summary, clearly relabel the scale); alternatives are separately
+scaled groups or a numeric tail list. Awaiting the owner's display preference
+before further UI changes and production release. Existing tests remain valid
+for the first implementation; rerun affected checks after the chosen revision.
+
+Owner requested all three alternatives as demos before choosing. Created
+`outputs/exposure-compare.html`, opened in the built-in browser at
+`http://127.0.0.1:4174/exposure-compare.html`. Same synthetic 60%-to-0.1%
+portfolio for each: A focus toggle excludes largest row; B separately scaled
+>=5% and <5% groups; C numeric two-column tail below 5%. Source disclosures and
+mode toggles verified, all three fit 320px without overflow. No console errors.
+Original demo preserved. Screenshot: `outputs/exposure-compare-preview.png`.
+Next: owner chooses the candidate; integrate and verify before the already
+authorized commit/release. No commit/push/deployment performed in this turn.
+Initial candidate Lighthouse completed: exposure 88/100, AX100, CLS0; full
+suite still fails solely on known settings desktop CLS0.358. Release record
+updated. Other pre-existing working-tree files preserved.
+
+## 2026-09-29 — selected C, adaptive-boundary demo
+
+Owner selected C but requested continued demo work and removal of the fixed 5%
+boundary. Added `outputs/exposure-c-demo.html` and `outputs/exposure-c-demo.js`;
+opened at `http://127.0.0.1:4174/exposure-c-demo.html`. Auto groups by a minimum
+24px visible bar length using measured track width and maximum weight, rounded
+up to a displayed 0.1 percentage point. Manual slider overrides the boundary.
+Concentrated and balanced synthetic portfolios both sum to 82% decomposed.
+Verified concentrated phone/desktop boundaries 4.5%/2.4%, balanced desktop
+0.5%, manual all-numeric/all-bar endpoints, disclosures and 320px no overflow.
+Console errors/warnings empty. Numeric disclosures expand to a full row.
+Screenshot `outputs/exposure-c-preview.png`. Production React remains the prior
+uncommitted candidate; this adaptive C revision is demo-only. No deployment or
+database/Worker changes. Next: owner reviews C before integration and release.
+
+C demo follow-up: owner requested better automatic grouping for diversified
+holdings. Auto now combines the 24px readability floor with a six-row mobile /
+eight-row desktop bar budget. Equal weights stay together; a tied group crossing
+the budget moves entirely to numbers. Rank-derived boundaries use the actual
+smallest retained weight, not a fixed percentage. Manual override unchanged.
+Browser verified diversified phone 6 bars (52% NAV) / 8 numeric (30%), desktop
+8 bars (62%) / 6 numeric (20%); concentrated phone still 2 bars / 12 numeric.
+Demo remains on diversified desktop view. Screenshot:
+`outputs/exposure-c-balanced-preview.png`. Changed only the standalone demo
+HTML/JS and this handoff in this follow-up; no deployment or database impact.
+
+## 2026-09-29 — automatic C implemented locally
+
+Owner requested removing manual adjustment and integrating C locally for review.
+Updated `src/app/exposure.tsx`, added `src/lib/exposureDisplay.ts`, and added
+behavior fixtures to `scripts/verify-ui-behavior.mjs`. Actual track measurement
+via ResizeObserver combines a 24px readability floor with 6/8 mobile/desktop
+bar limits; ties are kept together. Numeric holdings use two columns and expand
+full-width for source details. Existing top-14 scope and remainder disclosure
+retained. Removed manual controls from standalone C demo too. Financial
+calculations, database, Workers and production unchanged; nothing committed.
+
+Verified typecheck, UI (including concentrated/dispersed/ties/all-equal/empty/
+single-stock grouping), finance, offline build, release budget and diff checks.
+Browser: desktop 4 bars/10 numbers, mobile 3 bars/11 numbers with bundled local
+data; source disclosure works, 390px and 320px no overflow. Current preview:
+`http://127.0.0.1:4182/exposure` (new port avoids stale service-worker assets on
+4180). Screenshot `outputs/exposure-c-local-preview.png`. Owner reviewed the
+local implementation and authorized release. Final C checks: finance,
+email-reminder, quote-status, share-privacy, UI, typecheck, offline build,
+release budget, Blink (18 combinations), and AX tree (26 views) pass.
+Lighthouse `/exposure` mobile/desktop performance 88/100, accessibility 100/100
+and CLS 0/0; the full-route gate still fails on the previously known
+`/settings` desktop CLS 0.358. See `docs/release/2026-09-29-exposure.md`.
