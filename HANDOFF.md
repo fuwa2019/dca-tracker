@@ -1,11 +1,30 @@
 # Current Handoff
 
-Updated: 2026-09-29
+Updated: 2026-10-06
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
+
+## 2026-10-06 — Schwab quote session detection (not deployed)
+
+- Verified live at 08:35 ET: after the owner re-authorized Schwab, the quote
+  Worker returns Schwab real-time pre-market prices in `price` (before that it
+  silently fell back to Yahoo). The normalizer reported `session: 'unknown'`.
+- Change (Worker only, uncommitted): `usMarketSessionAt` in
+  `workers/quote/src/nyseCalendar.ts` mirrors `getUsMarketSession` in
+  `src/lib/quote.ts`; `normalizeSchwabQuote` fills `session`,
+  `preMarketPrice`/`postMarketPrice` and `isExtended` from it, and after-hours
+  change is measured from the regular close like the Yahoo path. Worker labels
+  now match the frontend (早盘/盘中/盘后/夜盘/休市, was 盘前/收盘).
+- Checks: `test:schwab` new assertions pass; the script still fails later at
+  `benchmark labels use selected benchmark` (`src/app/performance.tsx`), which
+  fails identically on clean HEAD `c8a7803`. `test:quote-status`,
+  `test:nyse-calendar-sync`, `typecheck` pass.
+- Next: commit, then deploy `dca-quote` once the owner authorizes; confirm
+  `/api/market/quotes` shows `sessionLabel: 早盘` in pre-market. Overnight
+  Schwab coverage (20:00-04:00 ET) is still untested.
 
 ## 2026-09-29 — IBKR statement-anchored append (released)
 

@@ -30,6 +30,7 @@ import {
   exchangeSchwabAuthorizationCode,
   isSchwabCompatibleSymbol,
   marketDataProviderFromEnv,
+  marketSessionLabel,
   normalizeSymbol,
   parseSymbolsParam,
   refreshSchwabAccessToken,
@@ -1412,7 +1413,7 @@ function historySeriesToSnapshot(series: HistorySeries, env: Env, now = new Date
     postMarketChange: null,
     postMarketChangePct: null,
     session: 'closed',
-    sessionLabel: '收盘',
+    sessionLabel: sessionLabel('closed'),
     isExtended: false,
     marketState: 'CLOSED',
     source: historySourceForDailyPrices(env, series),
@@ -1789,12 +1790,7 @@ function sessionFromMarketState(state: string | null): QuoteOut['session'] {
 }
 
 function sessionLabel(session: QuoteOut['session']): string {
-  if (session === 'pre_market') return '盘前';
-  if (session === 'regular') return '盘中';
-  if (session === 'after_hours') return '盘后';
-  if (session === 'overnight') return '夜盘';
-  if (session === 'closed') return '收盘';
-  return '行情';
+  return marketSessionLabel(session);
 }
 
 function numOrNull(v: unknown): number | null {

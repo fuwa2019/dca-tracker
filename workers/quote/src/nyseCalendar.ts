@@ -82,6 +82,24 @@ export function lastCompletedNyseTradingDate(now = new Date()): string {
   return previousNyseTradingDay(today);
 }
 
+export type UsMarketSession = 'pre_market' | 'regular' | 'after_hours' | 'overnight' | 'closed';
+
+/** New York session windows; mirrors getUsMarketSession in src/lib/quote.ts. */
+export function usMarketSessionAt(now = new Date()): UsMarketSession {
+  const parts = newYorkParts(now);
+  const today = `${parts.year}-${parts.month}-${parts.day}`;
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const [y, m, d] = today.split('-').map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  if (weekday === 0) return minutes >= 20 * 60 ? 'overnight' : 'closed';
+  if (weekday === 6 || !isNyseTradingDay(today)) return 'closed';
+  if (minutes < 4 * 60) return 'overnight';
+  if (minutes < 9 * 60 + 30) return 'pre_market';
+  if (minutes < 16 * 60) return 'regular';
+  if (minutes < 20 * 60) return 'after_hours';
+  return weekday === 5 ? 'closed' : 'overnight';
+}
+
 export function isQuoteEligibleForProvisionalClose(asOf: string | undefined, tradingDate: string): boolean {
   if (!asOf || !isNyseTradingDay(tradingDate)) return false;
   const timestamp = new Date(asOf);
