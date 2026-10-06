@@ -115,7 +115,7 @@ export function AppShell() {
       <DesktopNav />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar title={pageTitle(location.pathname)} section={activeItem(location.pathname).section} />
-        <main ref={scrollContainerRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-24 lg:pb-10">
+        <main ref={scrollContainerRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-10">
           <RouteErrorBoundary resetKey={location.pathname}>
             <motion.div
               key={motionKey(location.pathname)}
@@ -218,22 +218,32 @@ function RouteTabs({ section }: { section: NavItem['section'] }) {
  * accessibility tree as the single `h1`.
  */
 function TopBar({ title, section }: { title: string; section: NavItem['section'] }) {
+  // On phones the bottom nav already lists every analysis view, so repeating
+  // them as tabs only costs a header row under the Dynamic Island.
+  const tabsInBottomNav = NAV.filter((item) => item.section === section).every((item) =>
+    MOBILE_NAV.some((mobile) => mobile.to === item.to),
+  );
   return (
     <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/95 lg:bg-background/90 lg:backdrop-blur lg:supports-[backdrop-filter]:bg-background/75">
       <h1 className="sr-only">{title}</h1>
       <div className="flex flex-col gap-y-2 px-3 py-2.5 lg:flex-row lg:items-center lg:gap-x-3 lg:px-6 lg:py-2.5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Logo className="lg:hidden" />
-          <div className="min-w-0 flex-1 overflow-x-auto">
+          <div className={cn('min-w-0 flex-1 overflow-x-auto', tabsInBottomNav && 'hidden lg:block')}>
             <RouteTabs section={section} />
           </div>
+          {tabsInBottomNav && (
+            <div className="min-w-0 flex-1 lg:hidden">
+              <MarketStatusBar className="flex" compact />
+            </div>
+          )}
           <LocalBadge className="hidden sm:inline-flex lg:hidden" />
           <div className="lg:hidden">
             <ThemeToggle />
           </div>
         </div>
 
-        <div className="lg:hidden">
+        <div className={cn('lg:hidden', tabsInBottomNav && 'hidden')}>
           <MarketStatusBar className="flex" compact />
         </div>
 
@@ -351,7 +361,7 @@ function DesktopNav() {
 
 function MobileNav() {
   return (
-    <nav aria-label="底部导航" className="safe-bottom fixed bottom-3 left-3 z-30 w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] lg:hidden">
+    <nav aria-label="底部导航" className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 z-30 w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] lg:hidden">
       <div className="flex overflow-hidden rounded-lg border border-border bg-surface px-1.5 py-1 shadow-[0_10px_28px_-18px_hsl(var(--elevation)/0.4)]">
         {MOBILE_NAV.map(({ to, label, icon: Icon }) => (
           <NavLink

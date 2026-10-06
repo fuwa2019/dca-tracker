@@ -170,7 +170,7 @@ function CalendarCell({ date, point, amount, percent, loading, selected, onSelec
   selected: boolean;
   onSelect: () => void;
 }) {
-  const base = 'min-h-[82px] min-w-0 rounded-md px-1 py-2 text-left sm:min-h-[88px] sm:px-2';
+  const base = 'min-h-[64px] min-w-0 rounded-md px-1 py-1.5 text-left sm:min-h-[88px] sm:px-2 sm:py-2';
   if (!date) return <div className={base} aria-hidden="true" />;
   if (!point) return <div className={cn(base, 'bg-surface-elevated/40 text-[10px] text-muted-foreground')}><span>{Number(date.slice(-2))}</span></div>;
   const value = amount != null && Number.isFinite(amount) ? amount : percent;

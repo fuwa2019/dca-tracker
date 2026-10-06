@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -103,10 +103,10 @@ export function ExposurePage() {
 
   // 只显示实际持有(命中)的 ETF 的成分表日期。
   const heldEtfCount = usedSources.filter((v) => v !== 'direct').length;
-  const asOfText = usedSources
+  const asOfEntries = usedSources
     .filter((v) => v !== 'direct' && asOf[v])
-    .map((v) => `${v} ${asOf[v]}`)
-    .join(' · ');
+    .map((v) => `${v} ${asOf[v]}`);
+  const asOfText = asOfEntries.join(' · ');
 
   const priceStale = model.quotesNone || model.quotesPartial || model.quotesError;
   const failedRefreshes = refresh.data?.results.filter((item) => item.status === 'failed') ?? [];
@@ -148,15 +148,20 @@ export function ExposurePage() {
             </div>
           )}
         </div>
-        <div className="flex min-w-0 items-end gap-2">
-          <div className="min-w-0 text-right">
-            <div className="flex items-center justify-end gap-1.5">
+        <div className="flex min-w-0 items-end justify-between gap-3 sm:justify-end sm:gap-2">
+          <div className="min-w-0 sm:text-right">
+            <div className="flex items-center gap-1.5 sm:justify-end">
               <div className="kicker">成分表更新</div>
               {isFallback && <StatusBadge tone="warn">静态兜底</StatusBadge>}
             </div>
-            <div className="max-w-[520px] truncate font-num text-[11px] text-muted-foreground" title={asOfText || undefined}>
-              <span className="sm:hidden">{heldEtfCount > 0 ? `${heldEtfCount} 个 ETF 来源` : '—'}</span>
-              <span className="hidden sm:inline">{asOfText || '—'}</span>
+            {/* Phones wrap per source instead of truncating, so every ETF's
+                snapshot date stays visible. */}
+            <div className="mt-0.5 max-w-[520px] font-num text-[11px] text-muted-foreground sm:mt-0 sm:truncate" title={asOfText || undefined}>
+              {asOfEntries.length > 0
+                ? asOfEntries.map((entry, i) => (
+                    <Fragment key={entry}>{i > 0 && ' · '}<span className="whitespace-nowrap">{entry}</span></Fragment>
+                  ))
+                : heldEtfCount > 0 ? `${heldEtfCount} 个 ETF 来源` : '—'}
             </div>
           </div>
           <Button
@@ -233,7 +238,7 @@ export function ExposurePage() {
             <h2 className="mt-1 text-lg font-semibold">穿透后单票权重</h2>
             {maxWeight > 0 && <p className="mt-1 text-[11px] text-muted-foreground">条长以最大持仓 {fmtPct(maxWeight, 1)} 为满格</p>}
           </div>
-          <Button asChild variant="ghost" size="sm" className="shrink-0 text-brand">
+          <Button asChild variant="ghost" size="sm" className="hidden shrink-0 text-brand lg:inline-flex">
             <Link to="/">回总览 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
           </Button>
         </div>

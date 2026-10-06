@@ -326,9 +326,9 @@ function PeriodSummary({ dateLabel, end, showBenchmark, benchmarkLabel }: {
     <div className="px-3 py-4 sm:px-4" aria-live="polite">
       <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {metrics.map(({ label, value }) => (
-          <div key={label}>
+          <div key={label} className="min-w-0">
             <div className="text-[10px] text-muted-foreground sm:text-xs">{label}</div>
-            <div className={cn('mt-1 font-num text-xl font-semibold tnum sm:text-3xl', value == null ? 'text-muted-foreground' : changeColor(value))}>
+            <div className={cn('mt-1 font-num text-lg font-semibold tnum sm:text-3xl', value == null ? 'text-muted-foreground' : changeColor(value))}>
               {value == null ? '—' : formatSignedPct(value)}
             </div>
           </div>
@@ -371,9 +371,9 @@ function PerformanceChart({ rows, showBenchmark, benchmarkLabel }: { rows: Chart
             axisLine={false}
             tickLine={false}
             tick={{ fontSize: 11, fill: AXIS_FILL }}
-            width={48}
+            width={axisWidth(domain)}
             domain={domain}
-            tickFormatter={(value) => `${Number(value).toFixed(1)}%`}
+            tickFormatter={formatAxisPct}
           />
           {showBenchmark && (
             <Line
@@ -668,6 +668,18 @@ function periodReturn(prevCumulative: number, currentCumulative: number): number
   if (!Number.isFinite(base) || Math.abs(base) < 1e-9) return 0;
   const value = (1 + currentCumulative) / base - 1;
   return Number.isFinite(value) ? value : 0;
+}
+
+// Long histories reach four-digit percentages; a decimal there only costs
+// axis width, which the 48px gutter could not fit on a phone.
+function formatAxisPct(value: number) {
+  const n = Number(value);
+  return `${Math.abs(n) >= 100 ? n.toFixed(0) : n.toFixed(1)}%`;
+}
+
+function axisWidth([min, max]: [number, number]) {
+  const chars = Math.max(formatAxisPct(min).length, formatAxisPct(max).length);
+  return Math.max(44, Math.ceil(chars * 6.6 + 6));
 }
 
 function chartDomain(values: number[]): [number, number] {

@@ -289,10 +289,14 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
                             {eventChip.label}
                           </StatusBadge>
                         </div>
-                        <div className="mt-0.5 truncate font-num text-[11px] text-muted-foreground">
-                          {shortDate(t.trade_date)} · {Number(t.shares).toFixed(4)} 股 @ {tradePriceLabel(t)}
-                          {t.source_currency && t.source_currency.toUpperCase() !== 'USD' ? ` · ${usd.format(Number(t.price))} USD/股` : ''}
-                          {fee > 0 ? ` · 费 ${usd.format(fee)}` : ''}
+                        {/* Wraps between groups rather than truncating, so the trade price stays readable on phones. */}
+                        <div className="mt-0.5 flex flex-wrap gap-x-1 font-num text-[11px] text-muted-foreground">
+                          <span className="whitespace-nowrap">{shortDate(t.trade_date)} · {Number(t.shares).toFixed(4)} 股</span>
+                          <span className="whitespace-nowrap">@ {tradePriceLabel(t)}</span>
+                          {t.source_currency && t.source_currency.toUpperCase() !== 'USD' && (
+                            <span className="whitespace-nowrap">· {usd.format(Number(t.price))} USD/股</span>
+                          )}
+                          {fee > 0 && <span className="whitespace-nowrap">· 费 {usd.format(fee)}</span>}
                         </div>
                       </div>
                     </div>

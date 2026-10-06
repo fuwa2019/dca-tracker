@@ -225,10 +225,12 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
             )}
           </div>
           <div className="overview-hero-actions flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="sm">
+            {/* Phones stack these full width: the primary action leads and
+                takes the larger share. */}
+            <Button asChild variant="outline" size="sm" className="max-sm:!flex-[1_1_0%]">
               <Link to="/health"><RefreshCw className="h-4 w-4" />数据健康</Link>
             </Button>
-            <Button asChild size="sm">
+            <Button asChild size="sm" className="max-sm:order-first max-sm:!flex-[1.4_1_0%]">
               <Link to="/transactions"><FileUp className="h-4 w-4" />导入或录入</Link>
             </Button>
           </div>
@@ -294,7 +296,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
         </div>
 
         <div className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
-          <span className="basis-full text-center text-[11px]">以下为成立以来（{dateRange}），不随上方区间变化</span>
+          <span className="basis-full text-balance text-center text-[11px]">以下为成立以来（{dateRange}），不随上方区间变化</span>
           <span>TWR <strong className={changeColor(portfolioCumulative)}>{signedPct(portfolioCumulative)}</strong></span>
           <span>超额 vs {selectedBenchmark} <strong className={changeColor(excessVsBenchmark)}>{signedPct(excessVsBenchmark)}</strong></span>
           <span>年化 XIRR <strong className={changeColor(xirr ?? 0)}>{xirr === null ? '—' : signedPct(xirr)}</strong></span>
@@ -338,7 +340,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
                 <div className="font-num text-2xl font-semibold">{targetProgress.toFixed(1)}%</div>
                 <div className="mt-1 text-xs text-muted-foreground">{usd.format(aggregates.nav)} / {usd.format(target)}</div>
               </div>
-              <div className="text-right text-xs text-muted-foreground">
+              <div className="shrink-0 whitespace-nowrap text-right text-xs text-muted-foreground">
                 {goal ? (
                   <>
                     <div className="font-num text-base text-foreground">P50 {formatGoalYears(goal.p50Years)}</div>
@@ -356,7 +358,8 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
         </aside>
       </div>
 
-      <section className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border pt-3" aria-labelledby="next-title">
+      {/* Repeats the hero actions; on phones the hero row is still one thumb away. */}
+      <section className="mt-4 hidden flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border pt-3 lg:flex" aria-labelledby="next-title">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 id="next-title" className="text-xs font-medium">保持账本可解释</h2>
           <p className="text-xs text-muted-foreground">导入后先核对，再刷新绩效。</p>
@@ -367,7 +370,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
         </div>
       </section>
 
-      {LOCAL_MODE && <div className="text-xs text-muted-foreground">本地演示数据 · 仅写入浏览器内存</div>}
+      {LOCAL_MODE && <div className="text-xs text-muted-foreground max-lg:mt-3">本地演示数据 · 仅写入浏览器内存</div>}
     </div>
   );
 }
