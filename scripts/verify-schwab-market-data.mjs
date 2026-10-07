@@ -892,7 +892,9 @@ try {
   assert.doesNotMatch(sanitized, /client-secret|access-secret|refresh-secret/, 'secrets redacted from logs');
 
   const perfSource = await readFile(path.join(root, 'src/app/performance.tsx'), 'utf8');
-  assert.match(perfSource, /\$\{selectedBenchmark\}/, 'benchmark labels use selected benchmark');
+  assert.match(perfSource, /const benchmark = ledger\.benchmark;/, 'performance reads the selected benchmark from the ledger');
+  assert.match(perfSource, /相对 \$\{benchmark\}/, 'benchmark summary uses the selected benchmark');
+  assert.match(perfSource, /benchmarkLabel=\{benchmark\}/, 'benchmark labels use the selected benchmark');
   assert.doesNotMatch(perfSource, /交易业绩是否跑赢 SPY/, 'benchmark title does not hard-code SPY');
 
   const readme = await readFile(path.join(root, 'README.md'), 'utf8');

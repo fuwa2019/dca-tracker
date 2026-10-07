@@ -1,6 +1,6 @@
 # Current Handoff
 
-Updated: 2026-10-06
+Updated: 2026-10-07
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
@@ -14,9 +14,18 @@ documents that own it, listed there and under Related Files below.
 - Released 2026-10-06 (owner authorized): `4f1a68a`, `dca-quote` version
   `ce713b1b`, recorded in `docs/release/2026-10-06-schwab-quote-session.md`.
   Live pre-market check returned `sessionLabel: 早盘` from Schwab.
-- Open: `test:schwab` fails at `benchmark labels use selected benchmark`
-  (`src/app/performance.tsx`), pre-existing on `c8a7803`. Schwab overnight
-  coverage (20:00-04:00 ET) is untested.
+- `test:schwab` benchmark assertion fixed 2026-10-06: it still looked for
+  `selectedBenchmark`, renamed to `benchmark` (`ledger.benchmark`) in
+  `5573e11`. The script passes in full.
+- Overnight checked live 21:45 ET 2026-10-06: Schwab `/quotes` has no
+  overnight trades. Every quote time stopped at 20:00 ET (the after-hours
+  last), and snapshot rows written after 20:00 carry `securityStatus` Closed.
+  Fresh Schwab quotes are labelled 夜盘 by the clock, while the same symbols
+  served from `quote_snapshots` show 休市 (Closed) or 行情 (Normal), because
+  `snapshotRowToQuote` maps the stored Schwab `securityStatus`.
+- Next (needs owner decision): either classify Schwab sessions by quote time
+  (a 20:00 after-hours price reads 盘后 overnight) or keep the clock label,
+  and make snapshot-served Schwab quotes use the same rule.
 
 ## 2026-09-29 — IBKR statement-anchored append (released)
 
