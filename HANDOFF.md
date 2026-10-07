@@ -7,6 +7,15 @@ The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
 
+## 2026-10-07 — user-facing copy cleanup (released)
+
+- Debug-style hints (layout explanations, changelog asides, RPC / cursor /
+  dirty / proxy / hex-token wording) were removed or reworded across overview,
+  exposure, performance, share, import, data health, and settings.
+- Released 2026-10-07 (owner authorized): `f4f5411`, recorded in
+  `docs/release/2026-10-07-copy-cleanup.md`. Frontend copy only; no database,
+  Worker, or secret change.
+
 ## 2026-10-06 — Schwab quote session detection (released)
 
 - Schwab quotes now carry `session`, pre/post-market prices and frontend-matching
