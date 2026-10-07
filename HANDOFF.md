@@ -10,7 +10,8 @@ documents that own it, listed there and under Related Files below.
 ## 2026-10-06 — Schwab quote session detection (released)
 
 - Schwab quotes now carry `session`, pre/post-market prices and frontend-matching
-  labels (早盘/盘中/盘后/夜盘/休市), computed from the New York clock.
+  labels (早盘/盘中/盘后/夜盘/休市); first by the New York clock, now by the
+  last trade time (below).
 - Released 2026-10-06 (owner authorized): `4f1a68a`, `dca-quote` version
   `ce713b1b`, recorded in `docs/release/2026-10-06-schwab-quote-session.md`.
   Live pre-market check returned `sessionLabel: 早盘` from Schwab.
