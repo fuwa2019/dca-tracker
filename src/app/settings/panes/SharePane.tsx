@@ -76,7 +76,7 @@ export function SharePane() {
       <div className="flex items-start gap-2 rounded-lg border border-border bg-surface-elevated px-3 py-2 text-xs">
         <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gain" />
         <p className="text-muted-foreground">
-          对方只能看见持仓 ticker、占比、收益率 % 和基准比较图。USD 金额、入金、汇兑损耗、个别交易都被服务端脱敏。
+          对方只能看见持仓 ticker、占比、收益率 % 和基准比较图。USD 金额、入金、汇兑损耗、个别交易都不会出现在分享页。
         </p>
       </div>
 
@@ -112,8 +112,8 @@ export function SharePane() {
               title={LOCAL_MODE ? '本地模式不生成分享链接' : '还没有分享链接'}
               description={
                 LOCAL_MODE
-                  ? '本地 demo 链接会固定展示在这里，用来调试只读分享界面。'
-                  : '点上方按钮生成一个 32 位 hex token，分享地址会立即显示在这里。'
+                  ? '本地 demo 链接会固定展示在这里，用于预览只读分享页面。'
+                  : '生成后，分享地址会显示在这里。'
               }
             />
           ) : (

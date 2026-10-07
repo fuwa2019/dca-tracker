@@ -271,7 +271,7 @@ export function DataHealthPage() {
           {backfillPrices.isPending && backfillProgress && (
             <p className="text-xs text-muted-foreground">
               正在补齐 {backfillProgress.currentTicker ?? '价格'}：已完成 {backfillProgress.completed}/{backfillProgress.total}，
-              剩余 {backfillProgress.remaining}。失败后会从当前批次 cursor 继续。
+              剩余 {backfillProgress.remaining}。中断后会从当前批次继续。
             </p>
           )}
           {backfillPrices.isError && (
@@ -282,7 +282,7 @@ export function DataHealthPage() {
           {refreshCache.isSuccess && (
             <p className="text-xs text-gain">
               刷新完成。
-              {cacheDirty && ' 缓存仍为 dirty，可能是日线价格刚写入或 source_hash 变化，请稍后再刷新一次。'}
+              {cacheDirty && ' 缓存仍待更新，可能是日线价格刚写入，请稍后再刷新一次。'}
             </p>
           )}
           {refreshCache.isError && (
@@ -314,7 +314,7 @@ export function DataHealthPage() {
             tone={adjustedMissing.length === 0 ? 'ok' : 'warn'}
           />
           <StatusLine label="当前基准" value={selectedBenchmark} />
-          <StatusLine label="历史价格宇宙" value={symbols.join(', ') || '暂无'} />
+          <StatusLine label="监控代码" value={symbols.join(', ') || '暂无'} />
         </CardContent>
       </Card>
 
@@ -373,7 +373,7 @@ export function DataHealthPage() {
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">价格覆盖</CardTitle>
           <CardDescription className="text-xs">
-            历史业绩曲线优先用 adjusted close（总回报口径）；缺失时回退 close。
+            历史业绩曲线优先使用复权收盘价（含分红）；缺失时使用普通收盘价。
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0 sm:px-5 sm:pb-5">

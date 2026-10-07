@@ -198,7 +198,6 @@ function PlannerResult({
         <div className="flex items-baseline justify-between gap-3">
           <div>
             <div className="text-sm font-semibold">首次达标时间分位</div>
-            <p className="mt-1 text-xs text-muted-foreground">P90 仍显示未在 40 年内达标的路径，不只统计成功者。</p>
           </div>
           <span className="font-num text-[11px] text-muted-foreground">{simulation.pathCount.toLocaleString('en-US')} 条路径</span>
         </div>
@@ -224,7 +223,7 @@ function PlannerResult({
           </p>
         </div>
         <p className="pl-5 text-muted-foreground">
-          研究输入截至 {simulation.asOf}；交互版用冻结公开历史收益和 {simulation.pathCount.toLocaleString('en-US')} 条路径。
+          研究输入截至 {simulation.asOf}；基于公开历史收益模拟 {simulation.pathCount.toLocaleString('en-US')} 条路径。
           若组合不是全仓 QQQM，这只是 QQQM 等效压力估算，不代表混合组合的精确预测。
         </p>
       </div>

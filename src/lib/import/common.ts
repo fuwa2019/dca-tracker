@@ -269,7 +269,7 @@ export function buildImportPreview(
     .map((row) => `第 ${row.source_index} 行：${row.reason ?? '无法导入'}`);
   const inFileDuplicateWarnings = rows
     .filter((row) => row.item && row.item.duplicate_ordinal > 1)
-    .map((row) => `第 ${row.source_index} 行与文件内前一行身份相同，保留第 ${row.item!.duplicate_ordinal} 次 source ordinal 以避免丢失重复执行。`);
+    .map((row) => `第 ${row.source_index} 行与前面某行完全相同，按第 ${row.item!.duplicate_ordinal} 笔重复成交保留。`);
   const reconciliation = buildReconciliation(normalized);
   // A partial-period statement starts from its opening cash, not zero.
   const openingCash = Number(parsed.detection.context?.[STATEMENT_OPENING_CASH_CONTEXT_KEY] ?? 0) || 0;

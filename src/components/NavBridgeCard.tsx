@@ -25,7 +25,7 @@ export function NavBridgeCard({ bridge }: Props) {
           计算拆解
         </h2>
         <span className="text-[11px] text-muted-foreground tnum">
-          {bridge ? `${bridge.startDate} 至 ${bridge.endDate} · 与图表区间一致` : '正在读取账本'}
+          {bridge ? `${bridge.startDate} 至 ${bridge.endDate}` : '正在读取账本'}
         </span>
       </div>
 

@@ -28,7 +28,7 @@ export function EmailPane() {
         <SettingsField
           htmlFor="mail"
           label="收件邮箱"
-          description="建议 Gmail / iCloud / Outlook（Resend 直发可达）"
+          description="建议使用 Gmail、iCloud 或 Outlook"
         >
           <Input
             id="mail"

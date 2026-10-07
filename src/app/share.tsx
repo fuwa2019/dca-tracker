@@ -324,7 +324,7 @@ export function SharePage() {
             <ShareHeroKpi
               label={`${benchmark} 同期 · Benchmark`}
               value={last ? signedPct(spyReturn) : '-'}
-              sub="复权价总回报 proxy"
+              sub="含分红总回报"
               tone={last ? changeColor(spyReturn) : 'text-muted-foreground'}
             />
             <ShareHeroKpi
@@ -372,7 +372,7 @@ export function SharePage() {
         </motion.section>
         {shortTermAnnualized && (
           <p className="-mt-2 text-[11px] leading-5 text-muted-foreground">
-            当前区间不足 90 天，年化值只是短期外推；累计 TWR 更适合判断这段表现。它与登录页的 XIRR 分别衡量价格表现和资金投入时点，因此可能同时为正负不同方向。
+            当前区间不足 90 天，年化值只是短期外推；累计 TWR 更适合判断这段表现。
           </p>
         )}
 
@@ -486,12 +486,8 @@ export function SharePage() {
               <div className="min-w-0">
                 <div className="text-sm font-semibold">穿透敞口</div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground">
-                  把 ETF 拆成底层股票后的真实单票权重 · 仅百分比
+                  把 ETF 拆成底层股票后的真实单票权重
                 </div>
-              </div>
-              <div className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-[11px] text-muted-foreground">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                穿透仅用权重
               </div>
             </div>
 

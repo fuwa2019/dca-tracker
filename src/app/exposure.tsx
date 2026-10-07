@@ -236,7 +236,6 @@ export function ExposurePage() {
           <div>
             <div className="workbench-eyebrow">True per-stock weights</div>
             <h2 className="mt-1 text-lg font-semibold">穿透后单票权重</h2>
-            {maxWeight > 0 && <p className="mt-1 text-[11px] text-muted-foreground">条长以最大持仓 {fmtPct(maxWeight, 1)} 为满格</p>}
           </div>
           <Button asChild variant="ghost" size="sm" className="hidden shrink-0 text-brand lg:inline-flex">
             <Link to="/">回总览 <ArrowUpRight className="h-3.5 w-3.5" /></Link>
@@ -280,11 +279,6 @@ export function ExposurePage() {
           </>}
           {topStocks.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">当前没有可展示的底层个股，资产构成见上方摘要。</p>}
         </Card>
-        <details className="mt-3 text-[11px] leading-5 text-muted-foreground">
-          <summary className="w-fit cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand">自动分组依据</summary>
-          <p className="mt-2">条形过短的持仓转为数字列表；手机最多保留 6 项条形，桌面最多 8 项。同权重不拆组。分组随页面宽度和持仓变化，真实权重不变。</p>
-        </details>
-
         <p className="mt-3 text-[11px] leading-5 text-muted-foreground">
           右侧百分比为占总净值的真实权重。颜色区分持有来源，点击任一行查看来源贡献。
           {lookThrough.stocks.length > topStocks.length && <> 当前列表最多展示前 {topStocks.length} 大敞口；其他已穿透个股合计 {fmtPct((decomposedValue - topStocks.reduce((sum, stock) => sum + stock.value, 0)) / nav, 1)}。</>}
@@ -293,7 +287,7 @@ export function ExposurePage() {
         <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
           <Info className="mt-0.5 h-3 w-3 shrink-0" />
           {isFallback
-            ? '当前使用内置静态成分表；其余归入未穿透长尾。页首“已穿透到个股 + 未穿透长尾 + 现金 / 国债”加起来等于总净值。'
+            ? '当前使用内置静态成分表；其余归入未穿透长尾。'
             : `当前使用官网完整成分快照；无法识别的现金、衍生品和权重残差归入未穿透长尾。${Object.values(sources).length > 0 ? ` 最近抓取 ${latestFetchedAt(sources)}。` : ''}`}
         </p>
       </motion.section>

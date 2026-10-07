@@ -48,7 +48,7 @@ export function BasisPane() {
           <SettingsField
             htmlFor="watchlist"
             label="自选列表"
-            description="逗号分隔，保存时自动大写去重"
+            description="多个代码用逗号分隔"
           >
             <Input
               id="watchlist"

@@ -277,13 +277,13 @@ assert.deepEqual(reasons.map((row) => row.status), ['ignore', 'block'], 'reasons
 assert.ok(reasons.every((row) => row.reason.length > 0), 'no retained row loses its reason text');
 
 assert.match(portfolioImport, /summarizeImportReceipt/, 'the receipt derives the four-number summary');
-assert.match(portfolioImport, /已导入 imported/, 'receipt reports imported');
-assert.match(portfolioImport, /重复 duplicates/, 'receipt reports duplicates');
-assert.match(portfolioImport, /未写入 skipped/, 'receipt reports skipped');
-assert.match(portfolioImport, /源文件总行 total/, 'receipt reports total');
+assert.match(portfolioImport, /label="已导入"/, 'receipt reports imported');
+assert.match(portfolioImport, /label="重复"/, 'receipt reports duplicates');
+assert.match(portfolioImport, /label="未写入"/, 'receipt reports skipped');
+assert.match(portfolioImport, /label="总行数"/, 'receipt reports total');
 assert.match(portfolioImport, /新增交易/, 'receipt keeps the existing ledger-record counts');
 assert.match(portfolioImport, /retainedRowReasons/, 'receipt keeps blocked and ignored reasons visible');
-assert.match(portfolioImport, /不做静默修正/, 'receipt states that nothing is silently corrected');
+assert.match(portfolioImport, /以下行未写入，原因如下/, 'receipt introduces the reasons for rows that were not written');
 assert.match(portfolioImport, /事件类型构成/, 'preview groups rows by event type');
 assert.match(portfolioImport, /ledgerEventChip/, 'preview rows carry a coloured event-type chip');
 assert.doesNotMatch(portfolioImport, /p_trades:\s*preview\.rows/, 'the RPC payload still sends normalized ledger items');

@@ -13,7 +13,7 @@ export function GoalPane() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">进度目标</CardTitle>
-          <CardDescription className="text-xs">目标金额用于总览进度与下方的概率规划；总览的达标时间与概率来自同一模型，不再使用单一年化假设</CardDescription>
+          <CardDescription className="text-xs">目标金额用于总览进度与下方的概率规划；总览的达标时间与概率来自同一模型</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <SettingsField htmlFor="target" label="目标金额 (USD)" description="长期净值目标；概率规划按今天购买力的 USD 解读">

@@ -604,7 +604,7 @@ export function PortfolioImportTools({ transactions }: Props) {
                     </label>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    {LOCAL_MODE ? '本地演示模式不会写入数据库。' : '写入由认证 RPC 在同一事务中完成。'}
+                    {LOCAL_MODE ? '本地演示模式不会写入数据库。' : '所有记录一次性写入，失败不会留下部分数据。'}
                   </p>
                 </>
               )}
@@ -738,7 +738,7 @@ function ImportProblemBanner({
         </p>
         <p className="mt-0.5 text-xs leading-5">
           {total} 行中 {importable} 行可以导入。
-          {tone === 'block' ? '被阻止的行保留原因，不做静默修正——可在下方逐行核对中就地修正，或修好源文件后重新选择。' : '这些行仍会导入，但语义可能被降级。'}
+          {tone === 'block' ? '被阻止的行会标明原因，可在下方逐行核对中就地修正，或修好源文件后重新选择。' : '这些行仍会导入，但语义可能被降级。'}
         </p>
         <ul className="mt-1.5 space-y-1 text-xs leading-5">
           {(tone === 'block' ? errors : warnings).slice(0, 6).map((message) => (
@@ -809,7 +809,6 @@ function ReconciliationSummary({ reconciliation }: { reconciliation: ImportRecon
     <section className="space-y-2" aria-labelledby="portfolio-import-reconciliation-title">
       <div className="flex items-center justify-between gap-2">
         <h3 id="portfolio-import-reconciliation-title" className="text-sm font-semibold">导入前对账</h3>
-        <span className="text-xs text-muted-foreground">归一化账本合计</span>
       </div>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
         <ReconciliationMetric label="期末现金" value={`${reconciliation.ending_cash_usd} USD`} />
@@ -868,7 +867,7 @@ function ImportRows({ rows, adapter, fixingSourceIndex, fixDraft, onStartFix, on
             <span role="columnheader">行</span>
             <span role="columnheader">动作</span>
             <span role="columnheader">状态</span>
-            <span role="columnheader">归一化值</span>
+            <span role="columnheader">识别结果</span>
             <span role="columnheader">说明</span>
           </div>
           {rows.map((row) => (
@@ -1031,17 +1030,16 @@ function ImportReceipt({
         <section className="space-y-2" aria-labelledby="portfolio-import-receipt-summary-title">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 id="portfolio-import-receipt-summary-title" className="text-sm font-semibold">源文件行汇总</h3>
-            <span className="text-xs text-muted-foreground">skipped 含 duplicates</span>
           </div>
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
-            <ReceiptMetric label="已导入 imported" value={summary.imported} />
-            <ReceiptMetric label="重复 duplicates" value={summary.duplicates} />
-            <ReceiptMetric label="未写入 skipped" value={summary.skipped} />
-            <ReceiptMetric label="源文件总行 total" value={summary.total} />
+            <ReceiptMetric label="已导入" value={summary.imported} />
+            <ReceiptMetric label="重复" value={summary.duplicates} />
+            <ReceiptMetric label="未写入" value={summary.skipped} />
+            <ReceiptMetric label="总行数" value={summary.total} />
           </div>
           <p className="text-xs leading-5 text-muted-foreground">
             源文件 {summary.total} 行中写入 {summary.imported} 行；其余 {summary.skipped} 行包含 {summary.duplicates} 行重复、
-            {summary.ignored} 行按来源规则忽略、{summary.blocked} 行被阻止。新增导入的已知重复在请求前已剔除，四数由数据库回执与预览逐行状态推导，未改变 RPC 契约。
+            {summary.ignored} 行按来源规则忽略、{summary.blocked} 行被阻止。
           </p>
         </section>
       )}
@@ -1059,7 +1057,7 @@ function ImportReceipt({
       {retainedReasons.length > 0 && (
         <section className="space-y-2" aria-labelledby="portfolio-import-receipt-reasons-title">
           <h3 id="portfolio-import-receipt-reasons-title" className="text-sm font-semibold">未写入行的原因</h3>
-          <p className="text-xs text-muted-foreground">这些行按原因保留展示，不做静默修正。</p>
+          <p className="text-xs text-muted-foreground">以下行未写入，原因如下。</p>
           <ul
             className="max-h-40 space-y-1 overflow-auto rounded-lg border border-border bg-surface-elevated px-3 py-2 text-xs leading-5"
             tabIndex={0}

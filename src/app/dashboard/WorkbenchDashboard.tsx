@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { formatGoalYears, signedPct, signedUsd, usd, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { LEDGER_IMPORT_V2, LOCAL_MODE } from '@/lib/localMode';
+import { LOCAL_MODE } from '@/lib/localMode';
 import type { DashboardModel } from './model';
 import type { HistoryPoint } from '@/lib/calc/history';
 import { summarizeLedgerWindow } from '@/lib/calc/portfolioLedger';
@@ -296,7 +296,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
         </div>
 
         <div className="mt-3 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
-          <span className="basis-full text-balance text-center text-[11px]">以下为成立以来（{dateRange}），不随上方区间变化</span>
+          <span className="basis-full text-balance text-center text-[11px]">成立以来 · {dateRange}</span>
           <span>TWR <strong className={changeColor(portfolioCumulative)}>{signedPct(portfolioCumulative)}</strong></span>
           <span>超额 vs {selectedBenchmark} <strong className={changeColor(excessVsBenchmark)}>{signedPct(excessVsBenchmark)}</strong></span>
           <span>年化 XIRR <strong className={changeColor(xirr ?? 0)}>{xirr === null ? '—' : signedPct(xirr)}</strong></span>
@@ -315,7 +315,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
 
         <aside aria-label="账本与操作" className="space-y-4">
           <section className="workbench-panel" aria-labelledby="summary-title">
-            <PanelHeader title="组合摘要" id="summary-title" detail="当前口径" />
+            <PanelHeader title="组合摘要" id="summary-title" />
             <dl className="mt-4 space-y-3">
               <SummaryRow label="今日盈亏" value={quotesUnsettled ? '—' : signedUsd(aggregates.dayPL)} detail={quotesUnsettled ? '等待完整行情' : Number.isFinite(dayChangePct) ? signedPct(dayChangePct) : '—'} tone={quotesUnsettled ? undefined : aggregates.dayPL} />
               <SummaryRow label="总收益 · 净值 − 净投入" value={signedUsd(aggregates.totalPL)} detail={Number.isFinite(totalReturnPct) ? `${signedPct(totalReturnPct)} / 净投入` : '—'} tone={aggregates.totalPL} />
@@ -324,12 +324,11 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
           </section>
 
           <section className="workbench-panel" aria-labelledby="status-title">
-            <PanelHeader title="账本状态" id="status-title" detail="写入前可追溯" />
+            <PanelHeader title="账本状态" id="status-title" />
             <div className="mt-4 space-y-3">
               <StateRow icon={dataState.tone === 'ok' ? CheckCircle2 : Activity} label="行情与持仓" value={dataState.label} detail={dataState.detail} tone={dataState.tone} />
               {(quotesError || quotesNone) && <Button variant="outline" size="sm" onClick={retryQuotes}><RefreshCw className="h-3.5 w-3.5" />重试行情</Button>}
               <StateRow icon={cacheDirty ? RefreshCw : CheckCircle2} label="绩效缓存" value={cacheDirty ? '待刷新' : '已同步'} detail={cacheDirty ? '交易或现金事件发生了变化' : '当前结果可继续查看'} tone={cacheDirty ? 'warn' : 'ok'} />
-              <StateRow icon={Database} label="导入模型" value={LEDGER_IMPORT_V2 ? '组合账本' : '兼容模式'} detail={LEDGER_IMPORT_V2 ? 'Schwab · IBKR · 多币种 · 导出 TradingView' : '建议切换统一预览'} tone={LEDGER_IMPORT_V2 ? 'ok' : 'warn'} />
             </div>
           </section>
 
@@ -361,7 +360,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
       {/* Repeats the hero actions; on phones the hero row is still one thumb away. */}
       <section className="mt-4 hidden flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border pt-3 lg:flex" aria-labelledby="next-title">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 id="next-title" className="text-xs font-medium">保持账本可解释</h2>
+          <h2 id="next-title" className="text-xs font-medium">日常维护</h2>
           <p className="text-xs text-muted-foreground">导入后先核对，再刷新绩效。</p>
         </div>
         <div className="flex flex-wrap gap-2">

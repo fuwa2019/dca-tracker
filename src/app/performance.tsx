@@ -90,7 +90,6 @@ export function PerformancePage() {
             <p className="mt-1 text-xs text-muted-foreground break-words">
               {cacheError ?? (refreshCache.error as Error)?.message ?? '请稍后重试'}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">本页数字直接来自账本，不受影响。</p>
           </div>
         </Card>
       )}
@@ -143,7 +142,7 @@ export function PerformancePage() {
                 size="sm"
                 onClick={() => refreshCache.mutate()}
                 disabled={refreshCache.isPending || history.length === 0}
-                title="重算分享页读取的百分比缓存"
+                title="更新分享页数据"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${refreshCache.isPending ? 'animate-spin' : ''}`} />
                 {refreshCache.isPending ? '刷新中' : '刷新分享缓存'}

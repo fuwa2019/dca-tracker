@@ -170,10 +170,6 @@ export function LoginPage() {
             {error}
           </motion.p>
         )}
-
-        <p className="text-center text-xs text-muted-foreground">
-          只读分享视图无需登录 — 直接访问 <code className="font-mono">/share/&lt;token&gt;</code>
-        </p>
       </motion.div>
     </main>
   );

@@ -73,7 +73,7 @@ export function TransactionsPage() {
         </div>
         <div className="mt-5 grid gap-2 border-t border-border pt-4 text-xs sm:grid-cols-3">
           <ImportRule label="写入来源" value={LEDGER_IMPORT_V2 ? 'Schwab · IBKR · 多币种' : 'Schwab 兼容导入'} />
-          <ImportRule label="写入边界" value="事务提交，失败不留半条记录" />
+          <ImportRule label="写入方式" value="整批写入，失败自动回滚" />
           <ImportRule label="现有账本" value={`${txns.length} 笔交易 · ${positions.length} 个持仓`} />
         </div>
       </section>
@@ -115,8 +115,8 @@ export function TransactionsPage() {
         <div className="flex min-w-0 gap-3">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gain" aria-hidden="true" />
           <div>
-            <h2 className="text-sm font-semibold">可审计边界</h2>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">源文件身份、结算金额、现金事件和导入回执会保留在账本合同中，不直接改写原始计算函数。</p>
+            <h2 className="text-sm font-semibold">可追溯</h2>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">源文件、结算金额、现金事件和导入回执都会保留，便于随时核对。</p>
           </div>
         </div>
         <BookOpen className="hidden h-5 w-5 text-muted-foreground sm:block" aria-hidden="true" />

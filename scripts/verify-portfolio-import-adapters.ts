@@ -30,7 +30,7 @@ assert.ok(schwabPreview.trades.length >= 3);
 assert.ok(schwabPreview.cash_events.length >= 1);
 assert.equal(schwabPreview.status_counts.ignore, 0, 'known Schwab cash actions are not silently ignored');
 assert.equal(schwabPreview.status_counts.block, 1, 'the malformed Schwab row must remain blocked');
-assert.ok(schwabPreview.warnings.some((warning) => warning.includes('source ordinal')));
+assert.ok(schwabPreview.warnings.some((warning) => warning.includes('重复成交')));
 assert.ok(schwabPreview.reconciliation.ending_shares.VGT);
 assert.ok(schwabPreview.reconciliation.ending_cash_usd);
 assert.equal(schwabPreview.trades.find((row) => row.ticker === 'VGT')?.usd_amount, '-200.3703703670');
