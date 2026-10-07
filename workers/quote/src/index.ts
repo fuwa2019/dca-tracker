@@ -45,6 +45,7 @@ import {
   isoDateInNewYork,
   isNyseTradingDay,
   lastCompletedNyseTradingDate,
+  usMarketSessionForQuoteTime,
 } from './nyseCalendar.js';
 import {
   fetchEtfHoldingSnapshotWithFallback,
@@ -664,12 +665,13 @@ async function readQuoteSnapshots(env: Env, symbols: string[]): Promise<QuoteOut
   return rows.flatMap(snapshotRowToQuote);
 }
 
-function snapshotRowToQuote(row: QuoteSnapshotRow): QuoteOut[] {
+export function snapshotRowToQuote(row: QuoteSnapshotRow): QuoteOut[] {
   const ticker = normalizeSymbol(row.ticker ?? '');
   const price = numOrNull(row.price);
   if (!ticker || price === null) return [];
   const source = row.source?.trim().toLowerCase() === 'schwab' ? 'schwab' : 'yahoo';
   const fetchedAt = row.updated_at ?? new Date().toISOString();
+  const session = snapshotSession(row, source);
   return [{
     ticker,
     price,
@@ -678,15 +680,15 @@ function snapshotRowToQuote(row: QuoteSnapshotRow): QuoteOut[] {
     change: numOrNull(row.change),
     changePct: numOrNull(row.change_pct),
     regularPrice: price,
-    preMarketPrice: null,
+    preMarketPrice: session === 'pre_market' ? price : null,
     preMarketChange: null,
     preMarketChangePct: null,
-    postMarketPrice: null,
+    postMarketPrice: session === 'after_hours' ? price : null,
     postMarketChange: null,
     postMarketChangePct: null,
-    session: sessionFromMarketState(row.market_state ?? null),
-    sessionLabel: sessionLabel(sessionFromMarketState(row.market_state ?? null)),
-    isExtended: false,
+    session,
+    sessionLabel: sessionLabel(session),
+    isExtended: session === 'pre_market' || session === 'after_hours' || session === 'overnight',
     marketState: row.market_state ?? null,
     source,
     asOf: row.as_of_timestamp ?? row.updated_at ?? undefined,
@@ -695,6 +697,21 @@ function snapshotRowToQuote(row: QuoteSnapshotRow): QuoteOut[] {
     providerLabel: `${source}-snapshot`,
     cachedAt: fetchedAt,
   }];
+}
+
+const SNAPSHOT_MARKET_STATES = new Set(['PRE', 'REGULAR', 'POST', 'OVERNIGHT', 'CLOSED']);
+
+/**
+ * Schwab rows written before 2026-10-07 stored Schwab's securityStatus
+ * ("Normal", "Closed"); those fall back to the session of the quote time.
+ */
+function snapshotSession(row: QuoteSnapshotRow, source: QuoteOut['source']): QuoteOut['session'] {
+  const state = row.market_state ?? null;
+  if (source !== 'schwab' || (state !== null && SNAPSHOT_MARKET_STATES.has(state))) {
+    return sessionFromMarketState(state);
+  }
+  const asOf = row.as_of_timestamp ? new Date(row.as_of_timestamp) : null;
+  return asOf && Number.isFinite(asOf.getTime()) ? usMarketSessionForQuoteTime(asOf) : 'unknown';
 }
 
 function snapshotsCoverClosedMarket(symbols: string[], quotes: QuoteOut[], now = new Date()): boolean {

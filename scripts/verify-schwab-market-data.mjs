@@ -83,39 +83,86 @@ try {
     assert.equal(calendarMod.usMarketSessionAt(new Date(at)), expected, message);
   }
 
-  const schwabRow = {
-    quote: { lastPrice: 714.71, closePrice: 712.32, netChange: 2.39, netPercentChange: 0.3355, quoteTime: Date.parse('2026-10-06T12:35:48Z') },
-    regular: { regularMarketLastPrice: 712.32 },
+  const quoteSessionCases = [
+    ['2026-10-06T20:00:00.120Z', 'regular', '16:00:00 ET closing print stays in the regular session'],
+    ['2026-10-06T20:01:00Z', 'after_hours', '16:01 ET is after-hours'],
+    ['2026-10-07T00:00:00.041Z', 'after_hours', '20:00:00 ET after-hours last print stays after-hours'],
+    ['2026-10-10T00:00:00.041Z', 'after_hours', 'Friday 20:00:00 ET print stays after-hours'],
+    ['2026-10-07T01:45:00Z', 'overnight', '21:45 ET trade is overnight'],
+    ['2026-10-06T08:00:00.500Z', 'pre_market', '04:00 ET opening print is pre-market'],
+    ['2026-10-06T13:30:00.500Z', 'regular', '09:30 ET opening print is regular'],
+  ];
+  for (const [at, expected, message] of quoteSessionCases) {
+    assert.equal(calendarMod.usMarketSessionForQuoteTime(new Date(at)), expected, message);
+  }
+
+  const schwabRow = (tradeTime, quote = {}, regular = { regularMarketLastPrice: 712.32 }) => ({
+    quote: {
+      lastPrice: 714.71,
+      closePrice: 712.32,
+      netChange: 2.39,
+      netPercentChange: 0.3355,
+      quoteTime: Date.parse('2026-10-06T12:35:48Z'),
+      tradeTime: Date.parse(tradeTime),
+      securityStatus: 'Normal',
+      ...quote,
+    },
+    regular,
     reference: { symbol: 'VOO' },
-  };
-  const preMarket = mod.normalizeSchwabQuote('VOO', schwabRow, new Date('2026-10-06T12:35:50Z'));
-  assert.equal(preMarket.session, 'pre_market', 'Schwab quote at 08:35 ET is pre-market');
+  });
+  const preMarket = mod.normalizeSchwabQuote('VOO', schwabRow('2026-10-06T12:35:40Z'), new Date('2026-10-06T12:35:50Z'));
+  assert.equal(preMarket.session, 'pre_market', 'trade at 08:35 ET is pre-market');
   assert.equal(preMarket.sessionLabel, '早盘', 'pre-market label matches the frontend');
+  assert.equal(preMarket.marketState, 'PRE', 'Schwab marketState is stored Yahoo-style');
   assert.equal(preMarket.isExtended, true, 'pre-market is extended hours');
   assert.equal(preMarket.preMarketPrice, 714.71, 'Schwab lastPrice is the pre-market price');
   assert.equal(preMarket.preMarketChange, 2.39, 'pre-market change is measured from the previous close');
   assert.equal(preMarket.price, 714.71, 'pre-market quote keeps lastPrice as price');
   assert.equal(preMarket.postMarketPrice, null, 'pre-market quote has no post-market price');
 
-  const regular = mod.normalizeSchwabQuote('VOO', schwabRow, new Date('2026-10-06T15:00:00Z'));
-  assert.equal(regular.session, 'regular', 'Schwab quote at 11:00 ET is regular');
+  const noPreMarketTrade = mod.normalizeSchwabQuote('VOO', schwabRow('2026-10-05T23:58:00Z'), new Date('2026-10-06T12:35:50Z'));
+  assert.equal(noPreMarketTrade.session, 'after_hours', 'a pre-market quote without a new trade keeps the after-hours session');
+  assert.equal(noPreMarketTrade.preMarketPrice, null, 'no pre-market price before the first pre-market trade');
+
+  const regular = mod.normalizeSchwabQuote('VOO', schwabRow('2026-10-06T15:00:00Z'), new Date('2026-10-06T15:00:05Z'));
+  assert.equal(regular.session, 'regular', 'trade at 11:00 ET is regular');
   assert.equal(regular.sessionLabel, '盘中', 'regular label matches the frontend');
   assert.equal(regular.isExtended, false, 'regular session is not extended');
   assert.equal(regular.preMarketPrice, null, 'regular quote has no pre-market price');
 
-  const afterHours = mod.normalizeSchwabQuote('VOO', {
-    ...schwabRow,
-    quote: { ...schwabRow.quote, lastPrice: 716, netChange: 3.68 },
-    regular: { regularMarketLastPrice: 715 },
-  }, new Date('2026-10-06T21:00:00Z'));
-  assert.equal(afterHours.session, 'after_hours', 'Schwab quote at 17:00 ET is after-hours');
+  const afterHours = mod.normalizeSchwabQuote(
+    'VOO',
+    schwabRow('2026-10-07T00:00:00.041Z', { lastPrice: 716, netChange: 3.68 }, { regularMarketLastPrice: 715 }),
+    new Date('2026-10-07T01:45:00Z'),
+  );
+  assert.equal(afterHours.session, 'after_hours', 'overnight fetch of the 20:00 ET last print reads as after-hours');
   assert.equal(afterHours.sessionLabel, '盘后', 'after-hours label matches the frontend');
+  assert.equal(afterHours.marketState, 'POST', 'after-hours marketState is POST');
   assert.equal(afterHours.postMarketPrice, 716, 'Schwab lastPrice is the post-market price');
   assert.equal(afterHours.postMarketChange, 1, 'post-market change is measured from the regular close');
   assert.equal(afterHours.change, 1, 'after-hours change follows the Yahoo path');
   assert.equal(afterHours.regularPrice, 715, 'regular close stays in regularPrice');
 
-  assert.equal(mod.normalizeSchwabQuote('VOO', schwabRow, new Date('2026-10-10T16:00:00Z')).sessionLabel, '休市', 'closed label matches the frontend');
+  const snapshotRow = (marketState, source = 'schwab') => workerMod.snapshotRowToQuote({
+    ticker: 'VOO',
+    price: 716.84,
+    prev_close: 712.32,
+    market_state: marketState,
+    source,
+    as_of_timestamp: '2026-10-07T00:00:00.041Z',
+    updated_at: '2026-10-07T01:46:00.000Z',
+  })[0];
+  assert.equal(snapshotRow('POST').sessionLabel, '盘后', 'stored POST snapshot maps back to after-hours');
+  assert.equal(snapshotRow('POST').postMarketPrice, 716.84, 'after-hours snapshot exposes the post-market price');
+  assert.equal(snapshotRow('Closed').session, 'after_hours', 'legacy Schwab securityStatus Closed uses the quote time');
+  assert.equal(snapshotRow('Normal').session, 'after_hours', 'legacy Schwab securityStatus Normal uses the quote time');
+  assert.equal(snapshotRow('CLOSED').session, 'closed', 'daily-close snapshots stay closed');
+  assert.equal(snapshotRow('Normal', 'yahoo').session, 'unknown', 'Yahoo snapshots keep the marketState mapping');
+
+  const quoteTimeOnly = mod.normalizeSchwabQuote('VOO', { quote: { lastPrice: 714.71, closePrice: 712.32, quoteTime: Date.parse('2026-10-06T15:00:00Z') } }, new Date('2026-10-07T01:45:00Z'));
+  assert.equal(quoteTimeOnly.session, 'regular', 'quoteTime classifies the session when tradeTime is missing');
+  const noTimes = mod.normalizeSchwabQuote('VOO', { quote: { lastPrice: 714.71, closePrice: 712.32 } }, new Date('2026-10-10T16:00:00Z'));
+  assert.equal(noTimes.sessionLabel, '休市', 'without quote times the fetch clock decides, and closed matches the frontend');
 
   assert.equal(
     workerMod.historyCacheKey('schwab', ['VOO', 'QQQM'], '5y'),

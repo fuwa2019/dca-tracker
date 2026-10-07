@@ -1,4 +1,4 @@
-import { isoDateInNewYork, usMarketSessionAt } from './nyseCalendar.js';
+import { isoDateInNewYork, usMarketSessionForQuoteTime } from './nyseCalendar.js';
 
 export type MarketDataProviderName = 'yahoo' | 'schwab';
 
@@ -11,6 +11,7 @@ export interface SchwabQuote {
     netChange?: number;
     netPercentChange?: number;
     quoteTime?: number;
+    tradeTime?: number;
     realtime?: boolean;
     delayed?: boolean;
     delayMinutes?: number;
@@ -325,6 +326,16 @@ export class SchwabMarketDataClient implements MarketDataProvider {
   }
 }
 
+/** Yahoo-style marketState, so a stored snapshot maps back to the same session. */
+export function marketStateForSession(session: NormalizedQuote['session']): string | null {
+  if (session === 'pre_market') return 'PRE';
+  if (session === 'regular') return 'REGULAR';
+  if (session === 'after_hours') return 'POST';
+  if (session === 'overnight') return 'OVERNIGHT';
+  if (session === 'closed') return 'CLOSED';
+  return null;
+}
+
 /** Labels match getUsMarketSession in src/lib/quote.ts. */
 export function marketSessionLabel(session: NormalizedQuote['session']): string {
   if (session === 'pre_market') return '早盘';
@@ -342,9 +353,11 @@ export function normalizeSchwabQuote(symbol: string, row: SchwabQuote, now = new
   const regularPrice = numOrNull(row.regular?.regularMarketLastPrice) ?? price;
   const netChange = numOrNull(row.quote?.netChange) ?? numOrNull(row.regular?.regularMarketNetChange) ?? diff(price, prevClose);
   const netChangePct = percentToRatio(row.quote?.netPercentChange ?? row.regular?.regularMarketPercentChange) ?? ratio(netChange, prevClose);
-  // Schwab's lastPrice carries extended-hours trades; the session comes from the
-  // New York clock, as Yahoo's marketState does on the Yahoo path.
-  const session = usMarketSessionAt(now);
+  // Schwab's lastPrice carries extended-hours trades, so the session is the one
+  // the last trade happened in. Schwab has no overnight trades: after 20:00 ET
+  // the price stays the after-hours last and reads as after-hours.
+  const tradedAt = numOrNull(row.quote?.tradeTime) ?? numOrNull(row.quote?.quoteTime ?? row.quoteTime);
+  const session = usMarketSessionForQuoteTime(tradedAt !== null && tradedAt > 0 ? new Date(tradedAt) : now);
   const postMarketChange = session === 'after_hours' ? diff(price, regularPrice) : null;
   const postMarketChangePct = session === 'after_hours' ? ratio(postMarketChange, regularPrice) : null;
   const change = session === 'after_hours' ? postMarketChange : netChange;
@@ -369,7 +382,7 @@ export function normalizeSchwabQuote(symbol: string, row: SchwabQuote, now = new
     session,
     sessionLabel: marketSessionLabel(session),
     isExtended: session === 'pre_market' || session === 'after_hours' || session === 'overnight',
-    marketState: row.quote?.securityStatus ?? null,
+    marketState: marketStateForSession(session),
     source: 'schwab',
     asOf: epochMillisToIso(row.quote?.quoteTime ?? row.quoteTime),
     fetchedAt,

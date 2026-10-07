@@ -100,6 +100,17 @@ export function usMarketSessionAt(now = new Date()): UsMarketSession {
   return weekday === 5 ? 'closed' : 'overnight';
 }
 
+const CLOSING_PRINT_GRACE_MS = 60_000;
+
+/**
+ * Session a price was traded in. Closing prints are stamped at the bell
+ * (16:00:00 and 20:00:00 ET), so they belong to the session that just ended.
+ */
+export function usMarketSessionForQuoteTime(at: Date): UsMarketSession {
+  const earlier = usMarketSessionAt(new Date(at.getTime() - CLOSING_PRINT_GRACE_MS));
+  return earlier === 'regular' || earlier === 'after_hours' ? earlier : usMarketSessionAt(at);
+}
+
 export function isQuoteEligibleForProvisionalClose(asOf: string | undefined, tradingDate: string): boolean {
   if (!asOf || !isNyseTradingDay(tradingDate)) return false;
   const timestamp = new Date(asOf);
