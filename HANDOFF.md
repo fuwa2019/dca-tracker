@@ -1,6 +1,6 @@
 # Current Handoff
 
-Updated: 2026-10-07
+Updated: 2026-10-09
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
@@ -864,3 +864,40 @@ deep links returned HTTP 200; the exposure chunk includes automatic grouping
 and numeric-list UI. The production login form rendered without a missing
 configuration warning or console errors/warnings. No private account, database
 or Worker was accessed or changed; details are in the release record.
+
+## 2026-10-09 — share permission demo
+
+Owner asked for per-link share permissions with two levels: 1) the current
+report view (percentages only), 2) full read-only — the owner's own layout
+with every page except settings, minus the important write actions (add,
+edit, delete). Local only, not committed or deployed.
+
+- Owner side: `outputs/share-permission-demo.html` / `.js` (synthetic links),
+  served by `dev-local` at
+  `http://localhost:5174/outputs/share-permission-demo.html`. Choose the level
+  when creating a link; switch it per link (upgrade needs a confirmation that
+  lists what becomes visible; downgrade is immediate); comparison table.
+- Visitor side embeds the real app rather than a mock. Report links open the
+  real local share page; full read-only opens the real pages with
+  `?sharePreview=full` (`src/lib/sharePreview.ts`, `READ_ONLY_SHARE`;
+  development builds only, kept per tab in sessionStorage, `?sharePreview=off`
+  or the banner's 退出预览 clears it). In that mode: no settings in either nav
+  (the phone bottom nav shows 健康 in its place), `/settings/*` renders
+  `ReadOnlySettingsBlocked`, a banner sits above the top bar, and these are
+  hidden: manual entry, the import panel, row edit/delete menus, cashflow
+  add/edit/delete, exposure/share-cache/performance-cache refresh, price
+  backfill, Schwab reauthorize, closed-symbol delete, the share-link audit,
+  the goal-planner link, the dev seed panel, and ledger export.
+- Production: `READ_ONLY_SHARE` folds to `false`; a stub-env build contains
+  none of the preview code.
+- Checks: typecheck, test:ui, test:share-privacy, test:finance, build (stub
+  public env) and release budget (first load 184.05 / 194 KiB gzip) pass.
+  Browser: all seven views plus `/settings` and `/settings/share` in
+  read-only mode at desktop width, ledger page at 390px with no overflow,
+  report link renders the real share page with no amounts, no console errors.
+- Open decision: full read-only conflicts with the public-share privacy
+  contract (PROJECT.md, AGENTS.md, `test:share-privacy`). Shipping it needs a
+  decision record amending that contract, a new migration (`share_links.scope`
+  plus authenticated-by-token RPCs for the amounts), a scope-aware privacy
+  check, and wiring `READ_ONLY_SHARE` to the link's scope instead of a dev flag.
+  Next: owner reviews the demo.

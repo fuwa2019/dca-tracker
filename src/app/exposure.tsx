@@ -12,6 +12,7 @@ import type { LookThroughStock } from '@/lib/calc/lookThrough';
 import { pct as fmtPct, usd } from '@/lib/format';
 import { refreshEtfHoldings } from '@/lib/etfHoldings';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { READ_ONLY_SHARE } from '@/lib/sharePreview';
 import { useEnterMotion } from '@/hooks/useEnterMotion';
 import { exposureBarCutoff } from '@/lib/exposureDisplay';
 
@@ -119,7 +120,7 @@ export function ExposurePage() {
           icon={Layers}
           title="还没有可穿透的持仓"
           description="先录入买入交易,这里会把每个 ETF 拆成底层股票,显示 NVDA 等单票的真实敞口。"
-          action={<Button asChild size="sm"><Link to="/transactions"><Plus className="h-3.5 w-3.5" /> 添加交易</Link></Button>}
+          action={READ_ONLY_SHARE ? undefined : <Button asChild size="sm"><Link to="/transactions"><Plus className="h-3.5 w-3.5" /> 添加交易</Link></Button>}
         />
       </div>
     );
@@ -164,7 +165,7 @@ export function ExposurePage() {
                 : heldEtfCount > 0 ? `${heldEtfCount} 个 ETF 来源` : '—'}
             </div>
           </div>
-          <Button
+          {!READ_ONLY_SHARE && <Button
             variant="outline"
             size="sm"
             className="shrink-0"
@@ -174,7 +175,7 @@ export function ExposurePage() {
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refresh.isPending ? 'animate-spin' : ''}`} />
             {refresh.isPending ? '刷新中' : '刷新敞口'}
-          </Button>
+          </Button>}
         </div>
       </motion.header>
 

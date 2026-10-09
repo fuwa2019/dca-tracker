@@ -31,6 +31,7 @@ import { isoDateInNewYork } from '@/lib/nyse-calendar';
 import { getSelectedBenchmark } from '@/lib/settings';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { READ_ONLY_SHARE } from '@/lib/sharePreview';
 import { LOCAL_BENCHMARK, localPortfolioHistory, localPriceMap, localShareLinks } from '@/lib/localData';
 import type { Database as Db } from '@/lib/database.types';
 
@@ -243,7 +244,7 @@ export function DataHealthPage() {
                   : '按顺序：先补价格，再刷缓存。业绩曲线使用当前基准的实际价格日，处理完成后回到「业绩」页确认曲线。'}
               </CardDescription>
             </div>
-            <div className="flex flex-wrap gap-2">
+            {!READ_ONLY_SHARE && <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -261,7 +262,7 @@ export function DataHealthPage() {
                 <RefreshCw className={cn('h-3.5 w-3.5', refreshCache.isPending && 'animate-spin')} />
                 刷新业绩缓存
               </Button>
-            </div>
+            </div>}
           </div>
           {backfillPrices.isSuccess && (
             <p className="text-xs text-gain">
@@ -330,7 +331,7 @@ export function DataHealthPage() {
                   Schwab refresh token 有效期 7 天，过期后行情自动降级到 Yahoo 备用源。失效时点「重新授权」跳转 Schwab 登录，回调会写回新 token。
                 </CardDescription>
               </div>
-              <Button
+              {!READ_ONLY_SHARE && <Button
                 size="sm"
                 variant={schwabAuth.data?.state === 'invalid_grant' ? 'default' : 'outline'}
                 onClick={() => reauthorize.mutate()}
@@ -338,7 +339,7 @@ export function DataHealthPage() {
               >
                 <KeyRound className="h-3.5 w-3.5" />
                 {reauthorize.isPending ? '跳转中…' : '重新授权'}
-              </Button>
+              </Button>}
             </div>
             {reauthorize.isError && (
               <p className="text-xs text-loss break-words">
@@ -423,7 +424,7 @@ export function DataHealthPage() {
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
-                        {c.currentPosition === 'closed' ? (
+                        {c.currentPosition === 'closed' && !READ_ONLY_SHARE ? (
                           <Button
                             type="button"
                             variant="ghost"
@@ -448,7 +449,8 @@ export function DataHealthPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      {/* Share links belong to settings, which a read-only share cannot see. */}
+      {!READ_ONLY_SHARE && <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">分享链接审计</CardTitle>
           <CardDescription className="text-xs">
@@ -483,10 +485,10 @@ export function DataHealthPage() {
             ))
           )}
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Seeding writes real rows, so it exists only in development builds. */}
-      {!LOCAL_MODE && import.meta.env.DEV && <DemoDataPanel />}
+      {!LOCAL_MODE && !READ_ONLY_SHARE && import.meta.env.DEV && <DemoDataPanel />}
 
       {healthLoading && (
         <p className="text-xs text-muted-foreground">正在读取数据健康状态…</p>

@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { cny, usd, signedUsd, signedPct, changeColor, shortDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { READ_ONLY_SHARE } from '@/lib/sharePreview';
 import type { Database } from '@/lib/database.types';
 
 type CashRow = Database['public']['Tables']['cashflows']['Row'];
@@ -61,7 +62,7 @@ export function CashflowsPage() {
           <Kicker en="Cash Flow" zh="资金流水" />
           <p className="mt-1.5 text-[11px] text-muted-foreground">入金与出金是外部资金流，决定 TWR 子区间与 XIRR；股息、利息、税费与换汇损益属于投资收益。手工换汇 (CNY) 只用于汇损统计。</p>
         </div>
-        <Dialog open={adding} onOpenChange={setAdding}>
+        {!READ_ONLY_SHARE && <Dialog open={adding} onOpenChange={setAdding}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="h-4 w-4" />添加资金流</Button>
           </DialogTrigger>
@@ -82,7 +83,7 @@ export function CashflowsPage() {
               ? <CashEventForm onDone={() => setAdding(false)} />
               : <CashflowForm onDone={() => setAdding(false)} />}
           </DialogContent>
-        </Dialog>
+        </Dialog>}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -105,11 +106,11 @@ export function CashflowsPage() {
           icon={Plus}
           title="还没有资金流水"
           description="可添加手工换汇，或从交易 CSV 导入原始入金和按日个股划转。"
-          action={
+          action={READ_ONLY_SHARE ? undefined : (
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus className="h-3.5 w-3.5" /> 添加第一笔
             </Button>
-          }
+          )}
         />
       ) : (
         <Card className="overflow-hidden p-0">
@@ -163,7 +164,7 @@ export function CashflowsPage() {
                     <div className={cn('w-24 shrink-0 text-right text-xs tnum', changeColor(-loss))}>
                       {isManualFxTransfer && usdAmt > 0 ? `${signedUsd(-loss)} (${signedPct(-loss / Math.max(ideal, 1e-9))})` : '—'}
                     </div>
-                    <div className="flex shrink-0 gap-1">
+                    {!READ_ONLY_SHARE && <div className="flex shrink-0 gap-1">
                       {(isManualFxTransfer || isManualEvent) && (
                         <Button aria-label={`编辑 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
                           <Pencil className="h-3.5 w-3.5" />
@@ -172,7 +173,7 @@ export function CashflowsPage() {
                       <Button aria-label={`删除 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
-                    </div>
+                    </div>}
                   </div>
 
                   {/* Mobile: two-line card */}
@@ -205,7 +206,7 @@ export function CashflowsPage() {
                         )}
                         {c.note && <span className="truncate">· {c.note}</span>}
                       </div>
-                      <div className="ml-2 flex shrink-0 gap-1">
+                      {!READ_ONLY_SHARE && <div className="ml-2 flex shrink-0 gap-1">
                         {(isManualFxTransfer || isManualEvent) && (
                           <Button aria-label={`编辑 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(c)}>
                             <Pencil className="h-3.5 w-3.5" />
@@ -214,7 +215,7 @@ export function CashflowsPage() {
                         <Button aria-label={`删除 ${shortDate(displayDate)} 资金流`} variant="ghost" size="icon" className="h-8 w-8 text-loss" onClick={() => setDeleting(c)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
-                      </div>
+                      </div>}
                     </div>
                   </div>
                 </motion.div>

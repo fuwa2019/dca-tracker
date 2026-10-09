@@ -18,6 +18,8 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { MarketStatusBar } from '@/components/MarketStatusBar';
 import { RouteFallback } from '@/components/RouteFallback';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { ReadOnlyShareBanner } from '@/components/ReadOnlyShare';
 
 function LocalBadge({ className }: { className?: string }) {
   if (!LOCAL_MODE) return null;
@@ -46,14 +48,22 @@ interface NavItem {
   exact?: boolean;
 }
 
+const OVERVIEW: NavItem = { to: '/', label: '总览', icon: LayoutDashboard, section: 'analysis', exact: true };
+const PERFORMANCE: NavItem = { to: '/performance', label: '绩效', icon: BarChart3, section: 'analysis' };
+const EXPOSURE: NavItem = { to: '/exposure', label: '穿透敞口', icon: Layers, section: 'analysis' };
+const LEDGER: NavItem = { to: '/transactions', label: '账本与导入', icon: BookOpen, section: 'ledger', exact: true };
+const HEALTH: NavItem = { to: '/health', label: '数据健康', icon: Activity, section: 'ops' };
+const SETTINGS: NavItem = { to: '/settings', label: '设置', icon: Settings, section: 'ops' };
+
+// A read-only share sees every view except settings.
 const NAV: ReadonlyArray<NavItem> = [
-  { to: '/', label: '总览', icon: LayoutDashboard, section: 'analysis', exact: true },
-  { to: '/performance', label: '绩效', icon: BarChart3, section: 'analysis' },
-  { to: '/exposure', label: '穿透敞口', icon: Layers, section: 'analysis' },
-  { to: '/transactions', label: '账本与导入', icon: BookOpen, section: 'ledger', exact: true },
+  OVERVIEW,
+  PERFORMANCE,
+  EXPOSURE,
+  LEDGER,
   { to: '/transactions/all', label: '全部交易', icon: List, section: 'ledger', tabOnly: true },
-  { to: '/health', label: '数据健康', icon: Activity, section: 'ops' },
-  { to: '/settings', label: '设置', icon: Settings, section: 'ops' },
+  HEALTH,
+  ...(READ_ONLY_SHARE ? [] : [SETTINGS]),
 ];
 
 /**
@@ -75,11 +85,11 @@ const RAIL_ITEMS: ReadonlyArray<RailItem> = [
 
 
 const MOBILE_NAV: ReadonlyArray<NavItem> = [
-  NAV[0],
-  NAV[1],
-  { ...NAV[2], label: '敞口' },
-  { ...NAV[3], label: '账本' },
-  NAV[6],
+  OVERVIEW,
+  PERFORMANCE,
+  { ...EXPOSURE, label: '敞口' },
+  { ...LEDGER, label: '账本' },
+  READ_ONLY_SHARE ? { ...HEALTH, label: '健康' } : SETTINGS,
 ];
 
 function activeItem(pathname: string) {
@@ -90,6 +100,8 @@ function activeItem(pathname: string) {
 }
 
 function pageTitle(pathname: string) {
+  // A read-only share has no settings item, but still lands on the blocked page.
+  if (pathname.startsWith('/settings')) return SETTINGS.label;
   return activeItem(pathname).label;
 }
 
@@ -114,6 +126,7 @@ export function AppShell() {
     <div className="flex h-full w-full overflow-hidden bg-background lg:flex-row">
       <DesktopNav />
       <div className="flex min-w-0 flex-1 flex-col">
+        <ReadOnlyShareBanner />
         <TopBar title={pageTitle(location.pathname)} section={activeItem(location.pathname).section} />
         <main ref={scrollContainerRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-10">
           <RouteErrorBoundary resetKey={location.pathname}>

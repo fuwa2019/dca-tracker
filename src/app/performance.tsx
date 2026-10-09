@@ -13,6 +13,7 @@ import { usePerformanceCacheStatus, useRefreshPerformanceCache } from '@/hooks/u
 import { availableRanges, sliceByRange, type RangeKey } from '@/lib/calc/history';
 import { summarizeLedgerWindow } from '@/lib/calc/portfolioLedger';
 import { signedPct } from '@/lib/format';
+import { READ_ONLY_SHARE } from '@/lib/sharePreview';
 
 export function PerformancePage() {
   const [range, setRange] = useState<RangeKey>('ALL');
@@ -136,7 +137,7 @@ export function PerformancePage() {
                   数据健康
                 </Link>
               </Button>
-              <Button
+              {!READ_ONLY_SHARE && <Button
                 type="button"
                 variant="outline"
                 size="sm"
@@ -146,7 +147,7 @@ export function PerformancePage() {
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${refreshCache.isPending ? 'animate-spin' : ''}`} />
                 {refreshCache.isPending ? '刷新中' : '刷新分享缓存'}
-              </Button>
+              </Button>}
             </div>
           </div>
 

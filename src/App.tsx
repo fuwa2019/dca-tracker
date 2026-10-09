@@ -4,6 +4,8 @@ import { AppShell } from '@/components/AppShell';
 import { RequireAuth } from '@/components/RequireAuth';
 import { RouteFallback } from '@/components/RouteFallback';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { ReadOnlySettingsBlocked } from '@/components/ReadOnlyShare';
 
 // Every route is a separate chunk. The entry bundle otherwise carried all of
 // them plus recharts, which is what bound emulated-mobile LCP to script
@@ -51,16 +53,20 @@ export default function App() {
           <Route path="/transactions/all" element={<TransactionsAllPage />} />
           <Route path="/cashflows" element={LOCAL_MODE ? <Navigate to="/transactions" replace /> : <CashflowsPage />} />
           <Route path="/health" element={<DataHealthPage />} />
-          <Route path="/settings" element={<SettingsLayout />}>
-            <Route index element={<SettingsIndex />} />
-            <Route path="goal" element={<GoalPane />} />
-            <Route path="basis" element={<BasisPane />} />
-            <Route path="email" element={<EmailPane />} />
-            <Route path="share" element={<SharePane />} />
-            <Route path="appearance" element={<AppearancePane />} />
-            <Route path="account" element={<AccountPane />} />
-            <Route path="*" element={<Navigate to="/settings" replace />} />
-          </Route>
+          {READ_ONLY_SHARE ? (
+            <Route path="/settings/*" element={<ReadOnlySettingsBlocked />} />
+          ) : (
+            <Route path="/settings" element={<SettingsLayout />}>
+              <Route index element={<SettingsIndex />} />
+              <Route path="goal" element={<GoalPane />} />
+              <Route path="basis" element={<BasisPane />} />
+              <Route path="email" element={<EmailPane />} />
+              <Route path="share" element={<SharePane />} />
+              <Route path="appearance" element={<AppearancePane />} />
+              <Route path="account" element={<AccountPane />} />
+              <Route path="*" element={<Navigate to="/settings" replace />} />
+            </Route>
+          )}
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

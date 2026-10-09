@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { num6, usd, shortDate, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { READ_ONLY_SHARE } from '@/lib/sharePreview';
 import type { Database } from '@/lib/database.types';
 import { transactionCashEffect, transactionFee } from '@/lib/calc/transactionAmounts';
 import {
@@ -189,9 +190,11 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
                 {visible('price') && <th scope="col" className="w-28 px-3 py-2 text-right font-medium">价格</th>}
                 <SortableHeader label="现金影响" sortKey="amount" sort={sort} onSort={setSort} className="w-32 px-3 py-2 text-right" />
                 {visible('note') && <th scope="col" className="px-3 py-2 text-left font-medium">备注</th>}
-                <th scope="col" className="w-12 px-2 py-2">
-                  <span className="sr-only">行操作</span>
-                </th>
+                {!READ_ONLY_SHARE && (
+                  <th scope="col" className="w-12 px-2 py-2">
+                    <span className="sr-only">行操作</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -252,9 +255,11 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
                           {t.note || '—'}
                         </td>
                       )}
-                      <td className="px-2 py-2.5 text-right">
-                        <RowMenu row={t} onEdit={setEditing} onDelete={setDeleting} />
-                      </td>
+                      {!READ_ONLY_SHARE && (
+                        <td className="px-2 py-2.5 text-right">
+                          <RowMenu row={t} onEdit={setEditing} onDelete={setDeleting} />
+                        </td>
+                      )}
                     </motion.tr>
                   );
                 })}
@@ -308,7 +313,7 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
                           valueClassName={changeColor(cashEffect)}
                         />
                       </div>
-                      <RowMenu row={t} onEdit={setEditing} onDelete={setDeleting} />
+                      {!READ_ONLY_SHARE && <RowMenu row={t} onEdit={setEditing} onDelete={setDeleting} />}
                     </div>
                   </div>
                 </motion.div>

@@ -12,6 +12,7 @@ import { SchwabTransactionTools } from '@/components/SchwabTransactionTools';
 import { PortfolioImportTools } from '@/components/PortfolioImportTools';
 import { LedgerExportTools } from '@/components/LedgerExportTools';
 import { LEDGER_IMPORT_V2 } from '@/lib/localMode';
+import { READ_ONLY_SHARE } from '@/lib/sharePreview';
 
 export function TransactionsPage() {
   const [adding, setAdding] = useState(false);
@@ -41,7 +42,7 @@ export function TransactionsPage() {
         <p className="workbench-lede">
           所有交易和现金事件都先经过预览、去重和对账，再进入组合计算。
         </p>
-        <div className="flex flex-wrap gap-2">
+        {!READ_ONLY_SHARE && <div className="flex flex-wrap gap-2">
           <Dialog open={adding} onOpenChange={setAdding}>
             <DialogTrigger asChild>
               <Button size="sm"><Plus className="h-4 w-4" />手工录入</Button>
@@ -51,10 +52,10 @@ export function TransactionsPage() {
               <TxnForm defaultTicker={defaultTicker} onDone={() => setAdding(false)} />
             </DialogContent>
           </Dialog>
-        </div>
+        </div>}
       </header>
 
-      <section className="workbench-panel mt-4" aria-labelledby="import-title">
+      {!READ_ONLY_SHARE && <section className="workbench-panel mt-4" aria-labelledby="import-title">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-brand-soft text-brand">
@@ -76,9 +77,9 @@ export function TransactionsPage() {
           <ImportRule label="写入方式" value="整批写入，失败自动回滚" />
           <ImportRule label="现有账本" value={`${txns.length} 笔交易 · ${positions.length} 个持仓`} />
         </div>
-      </section>
+      </section>}
 
-      <section className="workbench-panel mt-4" aria-labelledby="export-title">
+      {!READ_ONLY_SHARE && <section className="workbench-panel mt-4" aria-labelledby="export-title">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <h2 id="export-title" className="text-sm font-semibold">导出账本</h2>
@@ -88,7 +89,7 @@ export function TransactionsPage() {
           </div>
           <LedgerExportTools />
         </div>
-      </section>
+      </section>}
 
       <section className="mt-6" aria-labelledby="recent-ledger-title">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-2">

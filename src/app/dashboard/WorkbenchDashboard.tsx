@@ -20,6 +20,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { formatGoalYears, signedPct, signedUsd, usd, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { READ_ONLY_SHARE } from '@/lib/sharePreview';
 import type { DashboardModel } from './model';
 import type { HistoryPoint } from '@/lib/calc/history';
 import { summarizeLedgerWindow } from '@/lib/calc/portfolioLedger';
@@ -177,14 +178,16 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
               推荐先使用统一导入预览；它会识别 Schwab、IBKR 券商文件，并逐行标出导入、重复、忽略或阻止。
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild>
-              <Link to="/transactions"><FileUp className="h-4 w-4" />开始导入</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link to="/transactions"><Plus className="h-4 w-4" />手工录入</Link>
-            </Button>
-          </div>
+          {!READ_ONLY_SHARE && (
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <Link to="/transactions"><FileUp className="h-4 w-4" />开始导入</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/transactions"><Plus className="h-4 w-4" />手工录入</Link>
+              </Button>
+            </div>
+          )}
         </section>
       </div>
     );
@@ -230,9 +233,11 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
             <Button asChild variant="outline" size="sm" className="max-sm:!flex-[1_1_0%]">
               <Link to="/health"><RefreshCw className="h-4 w-4" />数据健康</Link>
             </Button>
-            <Button asChild size="sm" className="max-sm:order-first max-sm:!flex-[1.4_1_0%]">
-              <Link to="/transactions"><FileUp className="h-4 w-4" />导入或录入</Link>
-            </Button>
+            {!READ_ONLY_SHARE && (
+              <Button asChild size="sm" className="max-sm:order-first max-sm:!flex-[1.4_1_0%]">
+                <Link to="/transactions"><FileUp className="h-4 w-4" />导入或录入</Link>
+              </Button>
+            )}
           </div>
         </header>
 
@@ -333,7 +338,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
           </section>
 
           <section className="workbench-panel" aria-labelledby="target-title">
-            <PanelHeader title="目标进度" id="target-title" detail="QQQM 研究模型 · 基线情景" action={<Link className="workbench-link" to="/settings/goal">概率规划 <ArrowUpRight className="h-3.5 w-3.5" /></Link>} />
+            <PanelHeader title="目标进度" id="target-title" detail="QQQM 研究模型 · 基线情景" action={READ_ONLY_SHARE ? undefined : <Link className="workbench-link" to="/settings/goal">概率规划 <ArrowUpRight className="h-3.5 w-3.5" /></Link>} />
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
                 <div className="font-num text-2xl font-semibold">{targetProgress.toFixed(1)}%</div>
@@ -358,7 +363,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
       </div>
 
       {/* Repeats the hero actions; on phones the hero row is still one thumb away. */}
-      <section className="mt-4 hidden flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border pt-3 lg:flex" aria-labelledby="next-title">
+      {!READ_ONLY_SHARE && <section className="mt-4 hidden flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border pt-3 lg:flex" aria-labelledby="next-title">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 id="next-title" className="text-xs font-medium">日常维护</h2>
           <p className="text-xs text-muted-foreground">导入后先核对，再刷新绩效。</p>
@@ -367,7 +372,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
           <Button asChild variant="outline" size="sm"><Link to="/transactions"><FileUp className="h-4 w-4" />统一导入</Link></Button>
           <Button asChild variant="outline" size="sm"><Link to="/health"><Database className="h-4 w-4" />检查数据</Link></Button>
         </div>
-      </section>
+      </section>}
 
       {LOCAL_MODE && <div className="text-xs text-muted-foreground max-lg:mt-3">本地演示数据 · 仅写入浏览器内存</div>}
     </div>
