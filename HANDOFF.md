@@ -905,7 +905,7 @@ edit, delete). Local only, not committed or deployed.
   Production behavior is unchanged; the preview runs only in development.
   Next: owner decides on the privacy contract before real full read-only links.
 
-## 2026-10-09 — full read-only share scope (migration pending)
+## 2026-10-09 — full read-only share scope (released)
 
 Owner amended the privacy rule and asked for a real release of full read-only
 links. Decision: `docs/decisions/2026-10-09-full-read-only-share-scope.md`;
@@ -935,8 +935,9 @@ state the rule per scope.
 - CI set, UI, migration numbering/overloads, offline build and budget
   (183.47 / 194 KiB) pass.
 
-Release order — 0059 must be live before the front end ships:
-1. Owner applies `supabase/migrations/0059_share_link_scope.sql` in the
-   Supabase SQL editor (this session has no SQL execution access).
-2. Verify anonymously that `shared_link_scope` exists, then push `master`
-   (Pages deploy) and record the release.
+Released 2026-10-09: the owner applied 0059 in the SQL editor; anonymous
+probes confirmed both functions; `c295986` deployed as Pages entry
+`index-DsLEnpKb.js`. Record: `docs/release/2026-10-09-full-share-scope.md`.
+Existing links stay `report`. Next: the owner creates or raises a link to
+`完整只读` and opens it in a private window to confirm the real end-to-end path,
+which no one has exercised in production yet.
