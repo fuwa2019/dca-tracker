@@ -20,7 +20,7 @@ import { supabase } from '@/lib/supabase';
 import { cny, usd, signedUsd, signedPct, changeColor, shortDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 import type { Database } from '@/lib/database.types';
 
 type CashRow = Database['public']['Tables']['cashflows']['Row'];

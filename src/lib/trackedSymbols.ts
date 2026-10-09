@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { fetchHistory, fetchHistoryPage, type HistoryProgress, type HistorySeries } from '@/lib/quote';
 import { normalizeSymbol, normalizeSymbols } from '@/lib/symbols';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 
 export type TrackedSymbolSource = 'dashboard' | 'settings' | 'transaction' | 'manual';
 
@@ -41,6 +42,7 @@ export async function registerTrackedSymbol(input: AddTrackedSymbolInput) {
 export async function registerTrackedSymbols(symbols: Iterable<string>, source: TrackedSymbolSource) {
   const normalized = normalizeSymbols(symbols);
   if (LOCAL_MODE) return normalized; // offline build never tracks symbols server-side
+  if (READ_ONLY_SHARE) return normalized; // registration is an owner write
   await Promise.all(normalized.map((symbol) => registerTrackedSymbol({ symbol, source })));
   return normalized;
 }

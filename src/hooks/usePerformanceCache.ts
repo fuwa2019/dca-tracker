@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { normalizeSymbol } from '@/lib/symbols';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { SHARE_TOKEN } from '@/lib/shareSession';
 import { localCacheStatus } from '@/lib/localData';
 import { refreshLedgerShareCache } from '@/lib/etfHoldings';
 import type {
@@ -30,6 +31,8 @@ export function usePerformanceCacheStatus(benchmark?: string) {
     queryKey,
     queryFn: async () => {
       if (LOCAL_MODE) return localCacheStatus;
+      // Cache status is an owner-only maintenance view.
+      if (SHARE_TOKEN) return null;
       const previous = qc.getQueryData<PerformanceCacheStatus | null>(queryKey);
       const { data, error } = await rpcPerformanceCacheStatus(normalizedBenchmark);
       if (error) {

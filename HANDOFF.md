@@ -904,3 +904,39 @@ edit, delete). Local only, not committed or deployed.
   `index-DpTC8GEk.js`, recorded in `docs/release/2026-10-09-share-preview.md`.
   Production behavior is unchanged; the preview runs only in development.
   Next: owner decides on the privacy contract before real full read-only links.
+
+## 2026-10-09 — full read-only share scope (migration pending)
+
+Owner amended the privacy rule and asked for a real release of full read-only
+links. Decision: `docs/decisions/2026-10-09-full-read-only-share-scope.md`;
+PROJECT.md, AGENTS.md and `docs/architecture/performance-and-privacy.md` now
+state the rule per scope.
+
+- Migration `0059_share_link_scope.sql`: `share_links.scope` (`report` default
+  | `full`), `shared_link_scope(token)` (scope only, no visit count) and
+  `shared_full_ledger(token)` (full, unrevoked, unexpired links only; settings,
+  accounts, transactions, cashflows from a column allowlist; no user id, import
+  key, batch id or reminder email; counts a visit).
+- Front end: `/share/<token>` checks the scope; a full link stores the token
+  per tab (`src/lib/shareSession.ts`) and reloads into the normal pages, whose
+  hooks read `shared_full_ledger` (`src/lib/sharedLedger.ts`) and the existing
+  share history cache. Settings, write controls, and owner-only maintenance
+  reads are hidden. Settings → 分享链接 chooses the scope on creation and per
+  link, with a confirmation before raising a link to full.
+- `test:share-privacy` has a separate full-scope allowlist plus checks for the
+  scope / revocation / expiry gate, owner filtering, and no whole-row
+  serialization; four mutations of 0059 each fail it.
+- Verified on a scratch local Postgres 15 (all 59 migrations replayed, Supabase
+  roles stubbed): anon gets only its own link's owner rows; report, revoked,
+  expired and unknown tokens get an error; no email / import key / user id in
+  the payload; anon and another user cannot change a link's scope (RLS); the
+  owner can. Local browser: owner scope controls and confirmation, full link →
+  read-only pages without settings, report link → percentages only.
+- CI set, UI, migration numbering/overloads, offline build and budget
+  (183.47 / 194 KiB) pass.
+
+Release order — 0059 must be live before the front end ships:
+1. Owner applies `supabase/migrations/0059_share_link_scope.sql` in the
+   Supabase SQL editor (this session has no SQL execution access).
+2. Verify anonymously that `shared_link_scope` exists, then push `master`
+   (Pages deploy) and record the release.

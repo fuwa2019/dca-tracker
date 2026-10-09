@@ -27,10 +27,13 @@ project truth.
 - Keep `src/lib/calc/` pure.
 - Add a new append-only migration for every database, RLS, trigger, or RPC
   change. Never rewrite an applied migration.
-- Preserve public-share privacy: no absolute amounts, cashflows, trades,
-  exchange loss, contact details, or private fields. `npm run test:share-privacy`
-  enforces the anonymous surface and its payload allowlist; run it after any
-  change to a `shared_*` function, an anon grant, or the history cache payload.
+- Preserve public-share privacy per scope. Report-scope links: no absolute
+  amounts, cashflows, trades, exchange loss, contact details, or private
+  fields. Full-scope links (owner opt-in): amounts and ledger rows only through
+  `shared_full_ledger`'s column allowlist, never ids of users, import keys,
+  contact details, settings, or any write path. `npm run test:share-privacy`
+  enforces the anonymous surface and both allowlists; run it after any change
+  to a `shared_*` function, an anon grant, or the history cache payload.
 - Keep the dashboard and public share performance on the same cached TWR
   contract.
 - Do not add a `Database` generic to the shared Supabase client.

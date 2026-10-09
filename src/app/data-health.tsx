@@ -31,7 +31,7 @@ import { isoDateInNewYork } from '@/lib/nyse-calendar';
 import { getSelectedBenchmark } from '@/lib/settings';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 import { LOCAL_BENCHMARK, localPortfolioHistory, localPriceMap, localShareLinks } from '@/lib/localData';
 import type { Database as Db } from '@/lib/database.types';
 
@@ -95,7 +95,7 @@ export function DataHealthPage() {
       if (error) throw error;
       return ((data as TrackedSymbolCoverageRpcRow[]) ?? []).map(normalizeCoverageRow);
     },
-    enabled: !LOCAL_MODE,
+    enabled: !LOCAL_MODE && !READ_ONLY_SHARE,
     staleTime: 5 * 60_000,
   });
 
@@ -110,6 +110,7 @@ export function DataHealthPage() {
       if (error) throw error;
       return data ?? [];
     },
+    enabled: !READ_ONLY_SHARE,
     staleTime: 60_000,
   });
 
@@ -194,9 +195,11 @@ export function DataHealthPage() {
     <div className="workbench-page space-y-5">
       <header className="workbench-intro">
         <p className="workbench-lede">
-          {LOCAL_MODE
-            ? '本地 Debug 模式使用内置 10 年 QQQ 数据，不连接 Supabase / Quote Worker。'
-            : '检查价格覆盖、业绩缓存、分享安全和计算输入状态。'}
+          {READ_ONLY_SHARE
+            ? '账务核对：现金、持仓与对账单逐项核对的结果。'
+            : LOCAL_MODE
+              ? '本地 Debug 模式使用内置 10 年 QQQ 数据，不连接 Supabase / Quote Worker。'
+              : '检查价格覆盖、业绩缓存、分享安全和计算输入状态。'}
         </p>
       </header>
 
@@ -208,253 +211,258 @@ export function DataHealthPage() {
           tone={ledger.loading ? 'info' : !hasEvents && ledger.ledger.cash.length === 0 ? 'bad' : ledger.unreconciled ? 'bad' : ledger.checks.some((c) => c.status === 'warn') ? 'warn' : 'ok'}
           detail={ledger.loading ? '正在读取账本' : `${txns.length} 笔交易 · ${ledger.ledger.cash.length} 条现金事件`}
         />
-        <HealthTile
+        {!READ_ONLY_SHARE && <HealthTile
           icon={Database}
           label="价格覆盖"
           value={healthLoading ? '检查中' : stalePrices.length === 0 ? '正常' : `${stalePrices.length} 项需检查`}
           tone={healthLoading ? 'info' : stalePrices.length === 0 ? 'ok' : 'warn'}
           detail={healthLoading ? '正在读取价格覆盖' : `${coverage.reduce((sum, c) => sum + c.points, 0)} 个日线点`}
-        />
-        <HealthTile
+        />}
+        {!READ_ONLY_SHARE && <HealthTile
           icon={TrendingUp}
           label="计算缓存"
           value={healthLoading ? '检查中' : refreshCache.isPending ? '刷新中' : !cacheExists ? '未初始化' : cacheDirty ? '待刷新' : '最新'}
           tone={healthLoading || refreshCache.isPending ? 'info' : !cacheExists ? 'warn' : cacheDirty ? 'warn' : 'ok'}
           detail={healthLoading ? '正在读取缓存状态' : cachePoints != null ? `${cachePoints} 个曲线点` : refreshCache.isPending ? '正在重算' : '暂无缓存'}
-        />
-        <HealthTile
+        />}
+        {!READ_ONLY_SHARE && <HealthTile
           icon={ShieldCheck}
           label="分享安全"
           value={healthLoading ? '检查中' : `${activeShares.length} 个有效`}
           tone={healthLoading ? 'info' : 'ok'}
           detail={healthLoading ? '正在读取分享链接' : `${(shareLinks.data ?? []).length} 个总链接`}
-        />
+        />}
       </div>
 
       <LedgerChecksCard checks={ledger.checks} loading={ledger.loading} />
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-lg">运维操作</CardTitle>
-              <CardDescription className="text-xs">
-                {LOCAL_MODE
-                  ? '本地模式下价格和缓存来自内置样本；操作按钮只演示状态，不写外部服务。'
-                  : '按顺序：先补价格，再刷缓存。业绩曲线使用当前基准的实际价格日，处理完成后回到「业绩」页确认曲线。'}
-              </CardDescription>
-            </div>
-            {!READ_ONLY_SHARE && <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => backfillPrices.mutate()}
-                disabled={backfillPrices.isPending || (!LOCAL_MODE && backfillTargets.length === 0)}
-              >
-                <RefreshCw className={cn('h-3.5 w-3.5', backfillPrices.isPending && 'animate-spin')} />
-                补齐日线价格
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => refreshCache.mutate()}
-                disabled={refreshCache.isPending || !hasEvents}
-              >
-                <RefreshCw className={cn('h-3.5 w-3.5', refreshCache.isPending && 'animate-spin')} />
-                刷新业绩缓存
-              </Button>
-            </div>}
-          </div>
-          {backfillPrices.isSuccess && (
-            <p className="text-xs text-gain">
-              {LOCAL_MODE ? '本地日线样本已确认完整。' : `日线价格已写入 ${backfillPrices.data ?? 0} 个数据点。`}
-            </p>
-          )}
-          {backfillPrices.isPending && backfillProgress && (
-            <p className="text-xs text-muted-foreground">
-              正在补齐 {backfillProgress.currentTicker ?? '价格'}：已完成 {backfillProgress.completed}/{backfillProgress.total}，
-              剩余 {backfillProgress.remaining}。中断后会从当前批次继续。
-            </p>
-          )}
-          {backfillPrices.isError && (
-            <p className="text-xs text-loss break-words">
-              补齐失败：{(backfillPrices.error as Error)?.message ?? '未知错误'}。进度已保留，下次会继续当前批次。
-            </p>
-          )}
-          {refreshCache.isSuccess && (
-            <p className="text-xs text-gain">
-              刷新完成。
-              {cacheDirty && ' 缓存仍待更新，可能是日线价格刚写入，请稍后再刷新一次。'}
-            </p>
-          )}
-          {refreshCache.isError && (
-            <p className="text-xs text-loss break-words">
-              刷新失败：{(refreshCache.error as Error)?.message ?? '未知错误'}
-            </p>
-          )}
-        </CardHeader>
-        <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <StatusLine label="最早计算日期" value={earliestDate ?? '暂无'} />
-          <StatusLine label="缓存更新时间" value={formatDateTime(cacheStatus.data?.updated_at)} />
-          <StatusLine
-            label="最近刷新耗时"
-            value={cacheStatus.data?.refresh_ms != null ? `${cacheStatus.data.refresh_ms} ms` : '暂无'}
-          />
-          <StatusLine
-            label="缓存错误"
-            value={cacheStatus.data?.error ?? '无'}
-            tone={cacheStatus.data?.error ? 'bad' : 'ok'}
-          />
-          <StatusLine
-            label="交易日历"
-            value={newestBenchmark ? `${selectedBenchmark} 价格日至 ${newestBenchmark}` : `等待 ${selectedBenchmark} 价格`}
-            tone={newestBenchmark ? 'ok' : 'warn'}
-          />
-          <StatusLine
-            label="复权价覆盖"
-            value={adjustedMissing.length === 0 ? '完整' : `${adjustedMissing.length} 个 ticker 缺复权价`}
-            tone={adjustedMissing.length === 0 ? 'ok' : 'warn'}
-          />
-          <StatusLine label="当前基准" value={selectedBenchmark} />
-          <StatusLine label="监控代码" value={symbols.join(', ') || '暂无'} />
-        </CardContent>
-      </Card>
-
-      {LOCAL_MODE ? (
-        <LocalQuoteSourceCard />
-      ) : (
+      {/* Maintenance reads owner-only server state, so a read-only share skips it. */}
+      {!READ_ONLY_SHARE && (
+        <>
         <Card>
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-              <CardTitle className="text-lg">行情授权（Schwab）</CardTitle>
+                <CardTitle className="text-lg">运维操作</CardTitle>
                 <CardDescription className="text-xs">
-                  Schwab refresh token 有效期 7 天，过期后行情自动降级到 Yahoo 备用源。失效时点「重新授权」跳转 Schwab 登录，回调会写回新 token。
+                  {LOCAL_MODE
+                    ? '本地模式下价格和缓存来自内置样本；操作按钮只演示状态，不写外部服务。'
+                    : '按顺序：先补价格，再刷缓存。业绩曲线使用当前基准的实际价格日，处理完成后回到「业绩」页确认曲线。'}
                 </CardDescription>
               </div>
-              {!READ_ONLY_SHARE && <Button
-                size="sm"
-                variant={schwabAuth.data?.state === 'invalid_grant' ? 'default' : 'outline'}
-                onClick={() => reauthorize.mutate()}
-                disabled={reauthorize.isPending || schwabAuth.data?.state === 'unconfigured'}
-              >
-                <KeyRound className="h-3.5 w-3.5" />
-                {reauthorize.isPending ? '跳转中…' : '重新授权'}
-              </Button>}
+              {!READ_ONLY_SHARE && <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => backfillPrices.mutate()}
+                  disabled={backfillPrices.isPending || (!LOCAL_MODE && backfillTargets.length === 0)}
+                >
+                  <RefreshCw className={cn('h-3.5 w-3.5', backfillPrices.isPending && 'animate-spin')} />
+                  补齐日线价格
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => refreshCache.mutate()}
+                  disabled={refreshCache.isPending || !hasEvents}
+                >
+                  <RefreshCw className={cn('h-3.5 w-3.5', refreshCache.isPending && 'animate-spin')} />
+                  刷新业绩缓存
+                </Button>
+              </div>}
             </div>
-            {reauthorize.isError && (
+            {backfillPrices.isSuccess && (
+              <p className="text-xs text-gain">
+                {LOCAL_MODE ? '本地日线样本已确认完整。' : `日线价格已写入 ${backfillPrices.data ?? 0} 个数据点。`}
+              </p>
+            )}
+            {backfillPrices.isPending && backfillProgress && (
+              <p className="text-xs text-muted-foreground">
+                正在补齐 {backfillProgress.currentTicker ?? '价格'}：已完成 {backfillProgress.completed}/{backfillProgress.total}，
+                剩余 {backfillProgress.remaining}。中断后会从当前批次继续。
+              </p>
+            )}
+            {backfillPrices.isError && (
               <p className="text-xs text-loss break-words">
-                {(reauthorize.error as Error)?.message ?? '获取授权链接失败'}
+                补齐失败：{(backfillPrices.error as Error)?.message ?? '未知错误'}。进度已保留，下次会继续当前批次。
+              </p>
+            )}
+            {refreshCache.isSuccess && (
+              <p className="text-xs text-gain">
+                刷新完成。
+                {cacheDirty && ' 缓存仍待更新，可能是日线价格刚写入，请稍后再刷新一次。'}
+              </p>
+            )}
+            {refreshCache.isError && (
+              <p className="text-xs text-loss break-words">
+                刷新失败：{(refreshCache.error as Error)?.message ?? '未知错误'}
               </p>
             )}
           </CardHeader>
           <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            <StatusLine label="最早计算日期" value={earliestDate ?? '暂无'} />
+            <StatusLine label="缓存更新时间" value={formatDateTime(cacheStatus.data?.updated_at)} />
             <StatusLine
-              label="Token 状态"
-              value={schwabAuthValue(schwabAuth.isLoading, schwabAuth.data)}
-              tone={schwabAuthTone(schwabAuth.isLoading, schwabAuth.data)}
+              label="最近刷新耗时"
+              value={cacheStatus.data?.refresh_ms != null ? `${cacheStatus.data.refresh_ms} ms` : '暂无'}
             />
             <StatusLine
-              label="Access token 有效期"
-              value={
-                schwabAuth.data?.state === 'ok' && schwabAuth.data.expiresIn != null
-                  ? `${schwabAuth.data.expiresIn}s`
-                  : '—'
-              }
+              label="缓存错误"
+              value={cacheStatus.data?.error ?? '无'}
+              tone={cacheStatus.data?.error ? 'bad' : 'ok'}
             />
             <StatusLine
-              label="详情"
-              value={schwabAuth.data?.message ?? '无'}
-              tone={schwabAuth.data?.message ? 'warn' : 'ok'}
+              label="交易日历"
+              value={newestBenchmark ? `${selectedBenchmark} 价格日至 ${newestBenchmark}` : `等待 ${selectedBenchmark} 价格`}
+              tone={newestBenchmark ? 'ok' : 'warn'}
             />
+            <StatusLine
+              label="复权价覆盖"
+              value={adjustedMissing.length === 0 ? '完整' : `${adjustedMissing.length} 个 ticker 缺复权价`}
+              tone={adjustedMissing.length === 0 ? 'ok' : 'warn'}
+            />
+            <StatusLine label="当前基准" value={selectedBenchmark} />
+            <StatusLine label="监控代码" value={symbols.join(', ') || '暂无'} />
           </CardContent>
         </Card>
-      )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">价格覆盖</CardTitle>
-          <CardDescription className="text-xs">
-            历史业绩曲线优先使用复权收盘价（含分红）；缺失时使用普通收盘价。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0 sm:px-5 sm:pb-5">
-          <div className="relative overflow-x-auto">
-            <table className="w-full min-w-[920px] text-sm">
-              <caption className="sr-only">价格覆盖：每个代码的历史价格区间与缺失天数</caption>
-              <thead>
-                <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
-                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Ticker</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">名称</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">监控状态</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Required Start</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Price Min</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Price Max</th>
-                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">Coverage</th>
-                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">复权覆盖</th>
-                  <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">状态</th>
-                  <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {coverage.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="px-4 py-6 text-center text-xs text-muted-foreground">
-                      还没有监控代码 — 录入交易后会自动开始监控。
-                    </td>
+        {LOCAL_MODE ? (
+          <LocalQuoteSourceCard />
+        ) : (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                <CardTitle className="text-lg">行情授权（Schwab）</CardTitle>
+                  <CardDescription className="text-xs">
+                    Schwab refresh token 有效期 7 天，过期后行情自动降级到 Yahoo 备用源。失效时点「重新授权」跳转 Schwab 登录，回调会写回新 token。
+                  </CardDescription>
+                </div>
+                {!READ_ONLY_SHARE && <Button
+                  size="sm"
+                  variant={schwabAuth.data?.state === 'invalid_grant' ? 'default' : 'outline'}
+                  onClick={() => reauthorize.mutate()}
+                  disabled={reauthorize.isPending || schwabAuth.data?.state === 'unconfigured'}
+                >
+                  <KeyRound className="h-3.5 w-3.5" />
+                  {reauthorize.isPending ? '跳转中…' : '重新授权'}
+                </Button>}
+              </div>
+              {reauthorize.isError && (
+                <p className="text-xs text-loss break-words">
+                  {(reauthorize.error as Error)?.message ?? '获取授权链接失败'}
+                </p>
+              )}
+            </CardHeader>
+            <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              <StatusLine
+                label="Token 状态"
+                value={schwabAuthValue(schwabAuth.isLoading, schwabAuth.data)}
+                tone={schwabAuthTone(schwabAuth.isLoading, schwabAuth.data)}
+              />
+              <StatusLine
+                label="Access token 有效期"
+                value={
+                  schwabAuth.data?.state === 'ok' && schwabAuth.data.expiresIn != null
+                    ? `${schwabAuth.data.expiresIn}s`
+                    : '—'
+                }
+              />
+              <StatusLine
+                label="详情"
+                value={schwabAuth.data?.message ?? '无'}
+                tone={schwabAuth.data?.message ? 'warn' : 'ok'}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">价格覆盖</CardTitle>
+            <CardDescription className="text-xs">
+              历史业绩曲线优先使用复权收盘价（含分红）；缺失时使用普通收盘价。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0 sm:px-5 sm:pb-5">
+            <div className="relative overflow-x-auto">
+              <table className="w-full min-w-[920px] text-sm">
+                <caption className="sr-only">价格覆盖：每个代码的历史价格区间与缺失天数</caption>
+                <thead>
+                  <tr className="border-b border-border bg-surface-elevated/50 text-muted-foreground">
+                    <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Ticker</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">名称</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">监控状态</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Required Start</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Price Min</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">Price Max</th>
+                    <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">Coverage</th>
+                    <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">复权覆盖</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-medium uppercase tracking-wider">状态</th>
+                    <th className="px-4 py-2 text-right text-[11px] font-medium uppercase tracking-wider">操作</th>
                   </tr>
-                ) : (
-                  coverage.map((c) => (
-                    <tr key={c.ticker} className="border-b border-border last:border-0">
-                      <td className="px-4 py-2.5 font-medium">{c.ticker}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{c.name ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{positionLabel(c.currentPosition)}</td>
-                      <td className="px-4 py-2.5 tnum text-muted-foreground">{c.requiredStart ?? '—'}</td>
-                      <td className="px-4 py-2.5 tnum text-muted-foreground">{c.priceMinDate ?? '—'}</td>
-                      <td className="px-4 py-2.5 tnum text-muted-foreground">{c.priceMaxDate ?? '—'}</td>
-                      <td className="px-4 py-2.5 text-right tnum">{Math.round(c.coveragePct)}%</td>
-                      <td className="px-4 py-2.5 text-right tnum">
-                        {c.points > 0 ? `${Math.round((c.adjustedPoints / c.points) * 100)}%` : '—'}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <StatusBadge tone={toStatusTone(c.status)} dot>
-                          {c.note}
-                        </StatusBadge>
-                        {c.backfillError && (
-                          <p className="mt-1 max-w-[260px] break-words text-[11px] text-loss">{c.backfillError}</p>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        {c.currentPosition === 'closed' && !READ_ONLY_SHARE ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-loss"
-                            disabled={deleteClosedSymbol.isPending}
-                            onClick={() => deleteClosedSymbol.mutate(c.ticker)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            删除
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
+                </thead>
+                <tbody>
+                  {coverage.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-6 text-center text-xs text-muted-foreground">
+                        还没有监控代码 — 录入交易后会自动开始监控。
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                  ) : (
+                    coverage.map((c) => (
+                      <tr key={c.ticker} className="border-b border-border last:border-0">
+                        <td className="px-4 py-2.5 font-medium">{c.ticker}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{c.name ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{positionLabel(c.currentPosition)}</td>
+                        <td className="px-4 py-2.5 tnum text-muted-foreground">{c.requiredStart ?? '—'}</td>
+                        <td className="px-4 py-2.5 tnum text-muted-foreground">{c.priceMinDate ?? '—'}</td>
+                        <td className="px-4 py-2.5 tnum text-muted-foreground">{c.priceMaxDate ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-right tnum">{Math.round(c.coveragePct)}%</td>
+                        <td className="px-4 py-2.5 text-right tnum">
+                          {c.points > 0 ? `${Math.round((c.adjustedPoints / c.points) * 100)}%` : '—'}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <StatusBadge tone={toStatusTone(c.status)} dot>
+                            {c.note}
+                          </StatusBadge>
+                          {c.backfillError && (
+                            <p className="mt-1 max-w-[260px] break-words text-[11px] text-loss">{c.backfillError}</p>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          {c.currentPosition === 'closed' && !READ_ONLY_SHARE ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-loss"
+                              disabled={deleteClosedSymbol.isPending}
+                              onClick={() => deleteClosedSymbol.mutate(c.ticker)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              删除
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+        </>
+      )}
 
       {/* Share links belong to settings, which a read-only share cannot see. */}
       {!READ_ONLY_SHARE && <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-lg">分享链接审计</CardTitle>
           <CardDescription className="text-xs">
-            分享页只读公开收益率曲线和持仓比例，不返回金额或交易明细。
+            报告视图只公开收益率曲线和持仓比例；完整只读另含金额与交易明细，由所有者逐条授权。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
@@ -478,6 +486,9 @@ export function DataHealthPage() {
                 </code>
                 <StatusBadge tone={s.revoked ? 'neutral' : 'ok'} dot>
                   {s.revoked ? '已撤销' : '有效'}
+                </StatusBadge>
+                <StatusBadge tone={s.scope === 'full' ? 'warn' : 'neutral'}>
+                  {s.scope === 'full' ? '完整只读' : '报告视图'}
                 </StatusBadge>
                 <span className="text-muted-foreground tnum">访问 {s.access_count ?? 0} 次</span>
                 <span className="text-muted-foreground tnum">最近 {formatDateTime(s.last_accessed_at)}</span>

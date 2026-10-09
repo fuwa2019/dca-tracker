@@ -21,7 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { num6, usd, shortDate, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 import type { Database } from '@/lib/database.types';
 import { transactionCashEffect, transactionFee } from '@/lib/calc/transactionAmounts';
 import {

@@ -5,6 +5,8 @@ import { aggregatePositions } from '@/lib/calc/position';
 import { normalizeSymbol } from '@/lib/symbols';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { summarizeCashflows } from '@/lib/calc/cashflows';
+import { SHARE_TOKEN } from '@/lib/shareSession';
+import { fetchSharedLedger } from '@/lib/sharedLedger';
 import {
   localCashflows,
   localPortfolioHistory,
@@ -27,6 +29,7 @@ export function useAccounts() {
     queryKey: ['accounts'],
     queryFn: async () => {
       if (LOCAL_MODE) return [];
+      if (SHARE_TOKEN) return (await fetchSharedLedger()).accounts;
       const { data, error } = await supabase.from('accounts').select('*').order('created_at');
       if (error) {
         if (error.code === '42P01' || error.code === 'PGRST205' || /accounts/.test(error.message ?? '')) return [];
@@ -45,6 +48,7 @@ export function useTransactions() {
       if (LOCAL_MODE) {
         return [...localTransactions].sort((a, b) => b.trade_date.localeCompare(a.trade_date) || b.created_at.localeCompare(a.created_at));
       }
+      if (SHARE_TOKEN) return (await fetchSharedLedger()).transactions;
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
@@ -62,6 +66,7 @@ export function useCashflows() {
     queryKey: ['cashflows'],
     queryFn: async () => {
       if (LOCAL_MODE) return [...localCashflows].sort((a, b) => b.cny_out_date.localeCompare(a.cny_out_date));
+      if (SHARE_TOKEN) return (await fetchSharedLedger()).cashflows;
       const { data, error } = await supabase
         .from('cashflows')
         .select('*')
@@ -78,6 +83,7 @@ export function useSettings() {
     queryKey: ['settings'],
     queryFn: async () => {
       if (LOCAL_MODE) return localSettings;
+      if (SHARE_TOKEN) return (await fetchSharedLedger()).settings;
       const { data, error } = await supabase.from('settings').select('*').abortSignal(AbortSignal.timeout(CORE_REQUEST_TIMEOUT_MS)).maybeSingle();
       if (error) throw error;
       return data;
@@ -91,6 +97,13 @@ export function usePortfolioHistory(benchmark?: string) {
     queryKey: ['portfolio_history', normalizedBenchmark ?? 'default'],
     queryFn: async () => {
       if (LOCAL_MODE) return localPortfolioHistory;
+      if (SHARE_TOKEN) {
+        // A visitor has no session, so read the owner's cached share curve.
+        const shared = await supabase.rpc('shared_performance_history', { p_token: SHARE_TOKEN });
+        if (shared.error) throw shared.error;
+        const history = shared.data as SharedHistory | { error: string } | null;
+        return history && !('error' in history) ? normalizeHistory(history) : null;
+      }
       const performance = await rpcPerformanceHistory(normalizedBenchmark);
       if (!performance.error && performance.data && !('error' in performance.data)) {
         return normalizeHistory(performance.data as PerformanceHistory);

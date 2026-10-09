@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -27,8 +27,9 @@ import { cn } from '@/lib/utils';
 import { availableRanges, sliceByRange, type HistoryPoint, type RangeKey } from '@/lib/calc/history';
 import { computeLookThrough } from '@/lib/calc/lookThrough';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { LOCAL_SHARE_TOKEN, localPortfolioHistory, localShareLinks, localSharedPortfolio } from '@/lib/localData';
+import { localPortfolioHistory, localShareLinks, localSharedPortfolio } from '@/lib/localData';
 import { useEtfHoldings } from '@/hooks/useEtfHoldings';
+import { beginFullShare, endFullShare } from '@/lib/shareSession';
 import type { PerformanceHistory, SharedPortfolio, SharedHistory } from '@/lib/database.types';
 
 const SHARE_DISTRIBUTION_COLOR_BY_LABEL: Record<string, string> = {
@@ -54,6 +55,41 @@ export function SharePage() {
   const { token } = useParams<{ token: string }>();
   const shareToken = isValidShareToken(token) ? token : null;
   const [range, setRange] = useState<RangeKey>('ALL');
+  const [fullShareBlocked, setFullShareBlocked] = useState(false);
+
+  // A full-scope link opens the owner's pages read-only; everything else keeps
+  // this percentage-only report. Before migration 0059 every link is a report.
+  const scope = useQuery({
+    queryKey: ['share', 'scope', shareToken],
+    queryFn: async (): Promise<'report' | 'full'> => {
+      if (!shareToken) throw new Error('invalid_token');
+      if (LOCAL_MODE) {
+        const link = localShareLinks.find((row) => row.token === shareToken && !row.revoked);
+        return link?.scope === 'full' ? 'full' : 'report';
+      }
+      const { data, error } = await supabase.rpc('shared_link_scope', { p_token: shareToken });
+      if (error) {
+        if (isMissingRpc(error)) return 'report';
+        throw error;
+      }
+      return (data as { scope?: string } | null)?.scope === 'full' ? 'full' : 'report';
+    },
+    enabled: !!shareToken,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+  const showReport = scope.data === 'report' || fullShareBlocked;
+
+  useEffect(() => {
+    if (!shareToken || !scope.data) return;
+    if (scope.data === 'report') {
+      endFullShare();
+      return;
+    }
+    // Reload rather than navigate: the read-only session is read once at load.
+    if (beginFullShare(shareToken)) window.location.replace('/');
+    else setFullShareBlocked(true);
+  }, [shareToken, scope.data]);
 
   const portfolio = useQuery({
     queryKey: ['share', 'portfolio', shareToken],
@@ -68,7 +104,7 @@ export function SharePage() {
       if (error) throw error;
       return data as SharedPortfolio | { error: string };
     },
-    enabled: !!shareToken,
+    enabled: !!shareToken && showReport,
     staleTime: 5 * 60_000,
     placeholderData: (previous) => previous,
     refetchOnWindowFocus: false,
@@ -87,7 +123,7 @@ export function SharePage() {
       if (legacy.error) throw legacy.error;
       return legacy.data as SharedHistory | { error: string };
     },
-    enabled: !!shareToken,
+    enabled: !!shareToken && showReport,
     staleTime: 10 * 60_000,
     placeholderData: (previous) => previous,
     refetchOnWindowFocus: false,
@@ -212,6 +248,8 @@ export function SharePage() {
   );
 
   if (!shareToken) return <Centered>分享链接无效或已过期</Centered>;
+  if (scope.error) return <Centered>加载失败，请稍后再试</Centered>;
+  if (!showReport) return <Centered>正在打开只读视图...</Centered>;
   if (portfolio.isLoading) return <Centered>加载中...</Centered>;
   if (portfolio.error) return <Centered>加载失败，请稍后再试</Centered>;
   const data = portfolio.data;
@@ -756,7 +794,7 @@ function calendarDaysBetween(startDate: string | undefined, endDate: string | un
 }
 
 function isValidShareToken(value: string | undefined): value is string {
-  if (LOCAL_MODE && value === LOCAL_SHARE_TOKEN) return true;
+  if (LOCAL_MODE && localShareLinks.some((link) => link.token === value)) return true;
   return /^[a-f0-9]{32}$/i.test(value ?? '');
 }
 

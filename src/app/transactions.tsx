@@ -12,7 +12,7 @@ import { SchwabTransactionTools } from '@/components/SchwabTransactionTools';
 import { PortfolioImportTools } from '@/components/PortfolioImportTools';
 import { LedgerExportTools } from '@/components/LedgerExportTools';
 import { LEDGER_IMPORT_V2 } from '@/lib/localMode';
-import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 
 export function TransactionsPage() {
   const [adding, setAdding] = useState(false);

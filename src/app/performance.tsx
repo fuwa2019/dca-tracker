@@ -13,7 +13,7 @@ import { usePerformanceCacheStatus, useRefreshPerformanceCache } from '@/hooks/u
 import { availableRanges, sliceByRange, type RangeKey } from '@/lib/calc/history';
 import { summarizeLedgerWindow } from '@/lib/calc/portfolioLedger';
 import { signedPct } from '@/lib/format';
-import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 
 export function PerformancePage() {
   const [range, setRange] = useState<RangeKey>('ALL');

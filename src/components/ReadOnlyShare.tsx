@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { EyeOff, ShieldCheck } from '@/components/icons';
-import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 
 /** The strip above the top bar while a full read-only share is being viewed. */
 export function ReadOnlyShareBanner() {
@@ -12,9 +12,9 @@ export function ReadOnlyShareBanner() {
         <span className="font-medium">只读分享</span>
         <span className="text-muted-foreground"> · 所有者授权的完整视图，不含设置，不能修改数据</span>
       </span>
-      {/* A full reload, so the flag is read again and cleared. */}
-      <a href="/?sharePreview=off" className="shrink-0 text-muted-foreground underline-offset-2 hover:underline">
-        退出预览
+      {/* A full reload, so the session is read again and cleared. */}
+      <a href="/?share=off" className="shrink-0 text-muted-foreground underline-offset-2 hover:underline">
+        退出只读视图
       </a>
     </div>
   );

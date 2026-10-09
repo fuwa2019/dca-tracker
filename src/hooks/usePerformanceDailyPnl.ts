@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { SHARE_TOKEN } from '@/lib/shareSession';
 import { normalizeSymbol } from '@/lib/symbols';
 import type { PerformanceDailyPnl } from '@/lib/database.types';
 
@@ -18,7 +19,7 @@ export function usePerformanceDailyPnl({
   const normalizedBenchmark = normalizeSymbol(benchmark ?? '') || 'SPY';
   return useQuery<PerformanceDailyPnl>({
     queryKey: ['performance_daily_pnl', normalizedBenchmark, startDate ?? '', endDate ?? ''],
-    enabled: enabled && !LOCAL_MODE && !!startDate && !!endDate,
+    enabled: enabled && !LOCAL_MODE && !SHARE_TOKEN && !!startDate && !!endDate,
     queryFn: async () => {
       if (!startDate || !endDate) throw new Error('缺少金额日历日期范围');
       const { data, error } = await supabase.rpc('performance_daily_pnl', {

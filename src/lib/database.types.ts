@@ -191,6 +191,8 @@ export interface TrackedSymbolRow {
 export type TrackedSymbolInsert = Partial<Omit<TrackedSymbolRow, 'symbol'>> & { symbol: string };
 export type TrackedSymbolUpdate = Partial<TrackedSymbolInsert>;
 
+/** 'report' is percentage-only; 'full' is the owner-authorized read-only view (0059). */
+export type ShareScope = 'report' | 'full';
 export interface ShareLinkRow {
   token: string;
   user_id: string;
@@ -199,12 +201,15 @@ export interface ShareLinkRow {
   created_at: string;
   access_count?: number;
   last_accessed_at?: string | null;
+  /** Absent before migration 0059, which treats every link as 'report'. */
+  scope?: ShareScope;
 }
 export interface ShareLinkInsert {
   token: string;
   user_id: string;
   expires_at?: string | null;
   revoked?: boolean;
+  scope?: ShareScope;
   created_at?: string;
   access_count?: number;
   last_accessed_at?: string | null;

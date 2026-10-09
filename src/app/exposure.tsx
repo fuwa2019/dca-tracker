@@ -12,7 +12,7 @@ import type { LookThroughStock } from '@/lib/calc/lookThrough';
 import { pct as fmtPct, usd } from '@/lib/format';
 import { refreshEtfHoldings } from '@/lib/etfHoldings';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 import { useEnterMotion } from '@/hooks/useEnterMotion';
 import { exposureBarCutoff } from '@/lib/exposureDisplay';
 

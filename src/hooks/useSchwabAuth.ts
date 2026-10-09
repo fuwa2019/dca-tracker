@@ -5,6 +5,7 @@ import {
   type SchwabAuthStatus,
 } from '@/lib/schwab';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 
 export function useSchwabAuthStatus() {
   return useQuery<SchwabAuthStatus>({
@@ -15,6 +16,8 @@ export function useSchwabAuthStatus() {
       }
       return fetchSchwabAuthStatus();
     },
+    // Provider authorization is owner maintenance; a read-only share skips it.
+    enabled: !READ_ONLY_SHARE,
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     retry: false,

@@ -269,6 +269,7 @@ export const localCacheStatus: PerformanceCacheStatus = {
 };
 
 export const LOCAL_SHARE_TOKEN = 'localdemoactive000000000000000001';
+export const LOCAL_FULL_SHARE_TOKEN = 'localdemofullview000000000000003';
 
 const localQuoteByTicker = new Map(localQuotes.map((q) => [q.ticker, q]));
 const localSharePositions = aggregatePositions(localTransactions)
@@ -308,6 +309,17 @@ export const localShareLinks: ShareLinkRow[] = [
     created_at: localPortfolioHistory.generated_at,
     access_count: 12,
     last_accessed_at: localPortfolioHistory.generated_at,
+    scope: 'report',
+  },
+  {
+    token: LOCAL_FULL_SHARE_TOKEN,
+    user_id: LOCAL_USER.id,
+    expires_at: null,
+    revoked: false,
+    created_at: localPortfolioHistory.generated_at,
+    access_count: 4,
+    last_accessed_at: localPortfolioHistory.generated_at,
+    scope: 'full',
   },
   {
     token: 'localdemorevoked0000000000000002',

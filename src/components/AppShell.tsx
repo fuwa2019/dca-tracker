@@ -18,7 +18,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { MarketStatusBar } from '@/components/MarketStatusBar';
 import { RouteFallback } from '@/components/RouteFallback';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 import { ReadOnlyShareBanner } from '@/components/ReadOnlyShare';
 
 function LocalBadge({ className }: { className?: string }) {

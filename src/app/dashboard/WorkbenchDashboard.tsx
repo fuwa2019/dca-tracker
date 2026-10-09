@@ -20,7 +20,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { formatGoalYears, signedPct, signedUsd, usd, changeColor } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 import type { DashboardModel } from './model';
 import type { HistoryPoint } from '@/lib/calc/history';
 import { summarizeLedgerWindow } from '@/lib/calc/portfolioLedger';

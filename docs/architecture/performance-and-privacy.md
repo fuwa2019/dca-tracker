@@ -81,7 +81,16 @@ For explicit price backfill:
 
 ## Public Share Boundary
 
-The public share RPCs may expose:
+Every share link has a scope (migration 0059, decision
+`docs/decisions/2026-10-09-full-read-only-share-scope.md`). `report` is the
+default and the contract below. `full` is an owner opt-in per link: the
+visitor sees the owner's pages read-only, with amounts, through one entry
+point, `shared_full_ledger`, which only answers a valid, unexpired, unrevoked
+`full` link and builds every row from a column allowlist. Neither scope ever
+exposes user ids, import keys, batch ids, the reminder email, settings
+controls, or any write path.
+
+The report-scope share RPCs may expose:
 
 - holding labels and percentage weights;
 - cash weight percentage;
@@ -98,4 +107,6 @@ They must not expose:
 - intermediate values that allow amounts to be reconstructed.
 
 Every new share field must be traced to a public-safe database/RPC value and
-covered by privacy-focused review.
+covered by privacy-focused review. A new field in the full-scope payload must be
+added to `FULL_SCOPE_ALLOWED_KEYS` in `scripts/verify-public-share-privacy.mjs`
+on purpose; the gate rejects anything else.

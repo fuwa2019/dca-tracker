@@ -1,9 +1,12 @@
 // Public-share privacy gate.
 //
-// The red line in PROJECT.md is that an anonymous share response carries no
+// The red line in PROJECT.md is that a report-scope share response carries no
 // absolute amounts, cashflows, trades, exchange loss, contact details or
-// private fields. This checks that statically, against the migration set, so a
-// future migration cannot widen the anonymous surface unnoticed.
+// private fields. A full-scope link (0059, owner opt-in) may carry amounts and
+// ledger rows, but only through one entry point that is gated on
+// `scope = 'full'` and builds every row from a column allowlist. This checks
+// both statically, against the migration set, so a future migration cannot
+// widen the anonymous surface unnoticed.
 //
 // What it can and cannot see, stated up front:
 //
@@ -28,10 +31,43 @@ const MIGRATIONS = process.env.SHARE_PRIVACY_MIGRATIONS ?? 'supabase/migrations'
 
 /** Effective anonymous surface. Adding to this list is a deliberate act. */
 const EXPECTED_ANON_FUNCTIONS = [
+  'public.shared_full_ledger',
   'public.shared_history',
+  'public.shared_link_scope',
   'public.shared_performance_history',
   'public.shared_portfolio',
 ];
+
+/**
+ * The full-scope entry point. It is the only anonymous path allowed to return
+ * amounts, and only for a link the owner set to 'full'.
+ */
+const FULL_SCOPE_FUNCTION = 'public.shared_full_ledger';
+
+/** Every JSON key the full-scope entry point may emit. */
+const FULL_SCOPE_ALLOWED_KEYS = new Set([
+  // envelope
+  'scope', 'generated_at', 'settings', 'accounts', 'transactions', 'cashflows', 'error',
+  // settings (no user id, no reminder email)
+  'target_usd', 'expected_annual_ret', 'monthly_dca_usd', 'cost_basis_default', 'watchlist',
+  'benchmarks', 'selected_benchmark', 'performance_method', 'updated_at',
+  // accounts
+  'id', 'name', 'broker', 'base_currency', 'statement_cash_usd', 'statement_as_of', 'created_at',
+  // transactions
+  'account_id', 'trade_date', 'ticker', 'side', 'price', 'shares', 'fees_usd', 'settled_amount_usd',
+  'source_currency', 'source_price', 'source_amount', 'fx_rate_to_usd', 'kind', 'note',
+  'source_description', 'import_source',
+  // cashflows
+  'cny_out_date', 'cny_amount', 'usd_in_date', 'usd_amount', 'effective_date', 'target_rate',
+  'fees_cny', 'cashflow_kind', 'source_action',
+]);
+
+/** Keys that never reach any anonymous reader, full scope included. */
+const FULL_SCOPE_FORBIDDEN_KEY_PATTERN = /user|email|token|import_key|batch_id|password|secret/i;
+
+/** Scope lookup: says which view to open, carries nothing else. */
+const SCOPE_LOOKUP_FUNCTION = 'public.shared_link_scope';
+const SCOPE_LOOKUP_ALLOWED_KEYS = new Set(['scope', 'error']);
 
 /** Every JSON key an anonymous entry point may emit itself. */
 const ALLOWED_PAYLOAD_KEYS = new Set([
@@ -243,19 +279,54 @@ for (const name of anonList) {
     }
   }
 
+  const fullScope = name === FULL_SCOPE_FUNCTION;
+  const allowedKeys = fullScope
+    ? FULL_SCOPE_ALLOWED_KEYS
+    : name === SCOPE_LOOKUP_FUNCTION ? SCOPE_LOOKUP_ALLOWED_KEYS : ALLOWED_PAYLOAD_KEYS;
+  const forbiddenKeys = fullScope ? FULL_SCOPE_FORBIDDEN_KEY_PATTERN : FORBIDDEN_KEY_PATTERN;
   for (const pair of emittedPairs(definition.body)) {
     if (pair.key === null) {
       failures.push(`${name}（${definition.file}）用非字面量作为 JSON 键：${pair.rawKey.slice(0, 60)}`);
       continue;
     }
-    if (!ALLOWED_PAYLOAD_KEYS.has(pair.key)) {
+    if (!allowedKeys.has(pair.key)) {
       failures.push(`${name}（${definition.file}）输出了不在允许清单里的键 '${pair.key}'。`);
     }
-    if (FORBIDDEN_KEY_PATTERN.test(pair.key)) {
+    if (forbiddenKeys.test(pair.key)) {
       failures.push(`${name}（${definition.file}）输出了疑似内部标识或金额的键 '${pair.key}'。`);
     }
     if (/\bv_user_id\b|\bp_token\b|share_links/.test(pair.value)) {
       failures.push(`${name}（${definition.file}）把内部标识写进了 '${pair.key}' 的值：${pair.value.slice(0, 60)}`);
+    }
+  }
+}
+
+// ------------------------------------------- full scope is gated and allowlisted
+{
+  const definition = definitions.get(FULL_SCOPE_FUNCTION);
+  if (!definition) {
+    failures.push(`找不到 ${FULL_SCOPE_FUNCTION}：完整只读分享的入口缺失。`);
+  } else {
+    const body = stripComments(definition.body);
+    const gates = [
+      [/scope\s*=\s*'full'/i, "只接受 scope = 'full' 的链接"],
+      [/revoked\s*=\s*false/i, '拒绝已撤销的链接'],
+      [/expires_at\s+is\s+null\s+or\s+expires_at\s*>\s*now\(\)/i, '拒绝已过期的链接'],
+    ];
+    for (const [pattern, label] of gates) {
+      if (!pattern.test(body)) failures.push(`${FULL_SCOPE_FUNCTION}（${definition.file}）必须${label}。`);
+    }
+    if (/to_jsonb\s*\(|row_to_json\s*\(|\.\*/i.test(body)) {
+      failures.push(`${FULL_SCOPE_FUNCTION}（${definition.file}）整行序列化：每一行都必须按列白名单逐键构建。`);
+    }
+    for (const table of ['settings', 'accounts', 'transactions', 'cashflows']) {
+      const reads = [...body.matchAll(new RegExp(`from\\s+public\\.${table}\\b`, 'gi'))].length;
+      const ownerFiltered = [...body.matchAll(
+        new RegExp(`from\\s+public\\.${table}\\s+(\\w+)\\s+where\\s+\\1\\.user_id\\s*=\\s*v_user_id`, 'gi'),
+      )].length;
+      if (reads !== ownerFiltered) {
+        failures.push(`${FULL_SCOPE_FUNCTION}（${definition.file}）读取 ${table} 时没有按链接所有者过滤。`);
+      }
     }
   }
 }
@@ -324,6 +395,7 @@ for (const file of files) {
 }
 notes.push(`扫描了 ${files.length} 个迁移文件，${patchedReplacements} 处动态函数体改写。`);
 notes.push(`匿名入口：${anonList.join(', ')}`);
+notes.push(`完整只读入口：${FULL_SCOPE_FUNCTION}（scope = 'full'、未撤销、未过期、按所有者过滤、按列白名单构建）`);
 notes.push(`未静态审计：_performance_history_for_user_fast_base（0029 重命名后一直原地打补丁），由公开边界的白名单投影兜底。`);
 
 // ------------------------------- the ledger_twr_v2 write surface stays private

@@ -16,15 +16,16 @@ The current product includes:
 - account NAV, daily and cumulative P&L, XIRR, and TWR reporting;
 - selectable benchmarks and historical performance;
 - price-coverage and performance-cache health workflows;
-- sanitized, read-only share links;
+- read-only share links with a per-link scope: percentage-only report
+  (default) or owner-authorized full read-only view;
 - monthly funding reminder email;
 - an offline local demo mode;
 - draft-only X content operations and analysis scripts.
 
 ## Product Goal and Scope
 
-- Users: one authenticated portfolio owner and recipients of sanitized,
-  read-only share links.
+- Users: one authenticated portfolio owner and recipients of read-only share
+  links.
 - Core problem: maintain an application-owned record of a multi-currency,
   multi-market portfolio and report trustworthy holdings, cashflow, and
   performance metrics without exposing private financial data.
@@ -35,7 +36,8 @@ The current product includes:
   sharing.
 - Out of scope: brokerage order execution, brokerage account or position sync,
   anonymous reconstruction of private history, and disclosure of absolute
-  portfolio amounts through public links.
+  portfolio amounts through report-scope links. Amounts reach a share visitor
+  only through a link the owner set to full scope.
 
 ## Sources of Truth
 
@@ -106,8 +108,8 @@ More detail:
   and scheduled cache refresh.
 - `workers/email-cron/`: NYSE-calendar reminder scheduling and email delivery.
 - `supabase/migrations/`: append-only schema and RPC history, currently through
-  `0054_portfolio_multi_currency.sql`; production was verified through
-  `0054` after the explicit migration authorization on 2026-09-04.
+  `0059_share_link_scope.sql`. Production state per migration is recorded in
+  `HANDOFF.md` and the dated files under `docs/release/`.
 - `scripts/`: regression checks, local dataset generation, operational market
   data helpers, and X content tooling.
 - `tests/fixtures/`: finance and long-horizon regression fixtures.
@@ -190,7 +192,9 @@ CI runs the three worker/root installs followed by finance, email-reminder,
 quote-status, share-privacy, typecheck, build, and release-budget.
 
 `test:share-privacy` reads the migration set and fails if the anonymous share
-surface widens, if an anonymous entry point emits a key outside its allowlist,
+surface widens, if an anonymous entry point emits a key outside its allowlist
+(report and full scope have separate allowlists), if `shared_full_ledger` stops
+gating on scope, revocation, expiry, or the link owner,
 if the cached history stops being projected through
 `_public_share_sanitize_history`, or if an anonymous path starts recomputing
 instead of reading cache. It cannot audit the cache writer chain —
@@ -216,12 +220,20 @@ for the production application.
 - User-owned tables are protected by RLS using `auth.uid() = user_id`.
 - Service-role access belongs only in Workers or explicitly authorized
   administration.
+- Share links have a scope (migration 0059,
+  `docs/decisions/2026-10-09-full-read-only-share-scope.md`). New links default
+  to `report`; the owner raises a link to `full` after a confirmation.
 - `shared_portfolio(token)` and `shared_performance_history(token)` return only
-  public-safe percentages, dates, labels, and holdings weights.
-- Public share responses must never expose USD/CNY values, cashflows,
+  public-safe percentages, dates, labels, and holdings weights, for any scope.
+  Report-scope responses must never expose USD/CNY values, cashflows,
   transaction detail, exchange loss, contact data, or private user fields.
-- The share page reads cached performance and must never anonymously recompute
-  a user's history or call a live API to reconstruct it.
+- `shared_full_ledger(token)` answers only a valid, unexpired, unrevoked `full`
+  link. It returns allowlisted settings, account, transaction, and cashflow
+  columns, never user ids, import keys, batch ids, or the reminder email. The
+  visitor's browser computes figures with the owner's ledger engine and sees no
+  settings and no write control.
+- No share path anonymously recomputes a user's history or calls a live API to
+  reconstruct it; the curve is the cached share history.
 
 ## Financial Contracts
 

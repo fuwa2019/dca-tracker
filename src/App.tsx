@@ -4,7 +4,7 @@ import { AppShell } from '@/components/AppShell';
 import { RequireAuth } from '@/components/RequireAuth';
 import { RouteFallback } from '@/components/RouteFallback';
 import { LOCAL_MODE } from '@/lib/localMode';
-import { READ_ONLY_SHARE } from '@/lib/sharePreview';
+import { READ_ONLY_SHARE } from '@/lib/shareSession';
 import { ReadOnlySettingsBlocked } from '@/components/ReadOnlyShare';
 
 // Every route is a separate chunk. The entry bundle otherwise carried all of
