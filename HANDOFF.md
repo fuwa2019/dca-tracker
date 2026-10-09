@@ -900,4 +900,7 @@ edit, delete). Local only, not committed or deployed.
   decision record amending that contract, a new migration (`share_links.scope`
   plus authenticated-by-token RPCs for the amounts), a scope-aware privacy
   check, and wiring `READ_ONLY_SHARE` to the link's scope instead of a dev flag.
-  Next: owner reviews the demo.
+- Released 2026-10-09 (owner authorized): `bdaf36d`, Pages entry
+  `index-DpTC8GEk.js`, recorded in `docs/release/2026-10-09-share-preview.md`.
+  Production behavior is unchanged; the preview runs only in development.
+  Next: owner decides on the privacy contract before real full read-only links.
