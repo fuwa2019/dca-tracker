@@ -362,7 +362,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
             {contributionPace && (
               <p className="mt-3 text-xs text-muted-foreground">
                 近 {Math.max(1, Math.round(contributionPace.windowMonths))} 个月实际入金 ≈ {usd.format(contributionPace.monthlyUsd)}/月
-                {contributionPace.averageIntervalDays !== null && ` · 约每 ${Math.max(1, Math.round(contributionPace.averageIntervalDays))} 天一次`}
+                {` · 入金 ${contributionPace.depositCount} 次`}
               </p>
             )}
           </section>

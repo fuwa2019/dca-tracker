@@ -942,18 +942,19 @@ Existing links stay `report`. Next: the owner creates or raises a link to
 `完整只读` and opens it in a private window to confirm the real end-to-end path,
 which no one has exercised in production yet.
 
-## 2026-10-13 — overview goal progress uses observed deposits (local, not committed)
+## 2026-10-13 — overview goal progress uses observed deposits (released)
 
 The overview「目标进度」panel no longer feeds `settings.monthly_dca_usd` into the
 goal simulation. `src/lib/calc/contributionPace.ts` reads the ledger's external
 cash flows: window = last 12 months, or from the first deposit for a younger
 ledger (that first deposit is opening capital, excluded); withdrawals offset;
 under 30 days of history gives no estimate. The panel shows the pace and the
-average deposit interval. The settings goal planner still uses the typed
+deposit count. The settings goal planner still uses the typed
 amount, and the reminder email Worker is unchanged.
 
 Verified: `test:finance` (new pace assertions in `verify-goal-probability.mjs`),
 `test:ui`, `test:share-privacy`, `typecheck`, `build:local`, release budget
 (183.46 / 194 KiB). Browser on bundled demo data: panel shows the pace and
 P50 / 20-year figures, 375px with no horizontal overflow, no console errors.
-No database, Worker or deployment change; not committed.
+No database or Worker change. Release record:
+`docs/release/2026-10-13-goal-observed-pace.md`.
