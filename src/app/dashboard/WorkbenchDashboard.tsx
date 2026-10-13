@@ -81,6 +81,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
     totalReturnPct,
     target,
     goal,
+    contributionPace,
     xirr,
     portfolioCumulative,
     excessVsBenchmark,
@@ -338,7 +339,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
           </section>
 
           <section className="workbench-panel" aria-labelledby="target-title">
-            <PanelHeader title="目标进度" id="target-title" detail="QQQM 研究模型 · 基线情景" action={READ_ONLY_SHARE ? undefined : <Link className="workbench-link" to="/settings/goal">概率规划 <ArrowUpRight className="h-3.5 w-3.5" /></Link>} />
+            <PanelHeader title="目标进度" id="target-title" detail="QQQM 研究模型 · 按实际入金" action={READ_ONLY_SHARE ? undefined : <Link className="workbench-link" to="/settings/goal">概率规划 <ArrowUpRight className="h-3.5 w-3.5" /></Link>} />
             <div className="mt-4 flex items-end justify-between gap-3">
               <div>
                 <div className="font-num text-2xl font-semibold">{targetProgress.toFixed(1)}%</div>
@@ -351,13 +352,19 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
                     <div>20 年内达标 {goal.within20Years === null ? '—' : `${Math.round(goal.within20Years * 100)}%`}</div>
                   </>
                 ) : (
-                  <div>设置月定投后显示达标概率</div>
+                  <div>入金记录不足一个月，暂无法估算</div>
                 )}
               </div>
             </div>
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-elevated">
               <div className="h-full rounded-full bg-brand transition-[width]" style={{ width: `${targetProgress}%` }} />
             </div>
+            {contributionPace && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                近 {Math.max(1, Math.round(contributionPace.windowMonths))} 个月实际入金 ≈ {usd.format(contributionPace.monthlyUsd)}/月
+                {contributionPace.averageIntervalDays !== null && ` · 约每 ${Math.max(1, Math.round(contributionPace.averageIntervalDays))} 天一次`}
+              </p>
+            )}
           </section>
         </aside>
       </div>

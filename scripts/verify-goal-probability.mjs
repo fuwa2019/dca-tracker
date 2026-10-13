@@ -3,6 +3,7 @@ import {
   GOAL_HORIZONS_YEARS,
   simulateQqqmGoal,
 } from '../src/lib/calc/goalProbability.ts';
+import { observedContributionPace } from '../src/lib/calc/contributionPace.ts';
 
 const input = {
   initialValueUsd: 0.25,
@@ -67,6 +68,61 @@ for (const stress of [
   assert.equal(result.stress, stress);
   assert.ok(result.quantiles.p10 <= result.quantiles.p90);
 }
+
+const ext = (date, amountUsd, kind = 'broker_deposit') => ({ date, kind, amountUsd, role: 'external' });
+
+// A young ledger: the first deposit is opening capital, not pace.
+const young = observedContributionPace([
+  ext('2026-04-13', 1000),
+  ext('2026-05-13', 100),
+  ext('2026-06-13', 100),
+  ext('2026-07-13', 100),
+  ext('2026-08-13', 100),
+  ext('2026-09-13', 100),
+  ext('2026-10-13', 100),
+  { date: '2026-09-01', kind: 'dividend', amountUsd: 50, role: 'internal' },
+], '2026-10-13');
+assert.ok(young);
+assert.equal(young.startDate, '2026-04-13');
+assert.equal(young.depositCount, 6);
+assert.ok(Math.abs(young.monthlyUsd - 600 / (183 / (365.25 / 12))) < 1e-9);
+assert.ok(Math.abs(young.averageIntervalDays - 183 / 6) < 1e-9);
+
+// An old ledger: deposits before the 12-month window are ignored.
+const old = observedContributionPace([
+  ext('2024-01-10', 5000),
+  ext('2025-09-01', 5000),
+  ext('2025-12-01', 1200),
+  ext('2026-06-01', 1200),
+], '2026-10-13');
+assert.ok(old);
+assert.equal(old.startDate, '2025-10-13');
+assert.equal(old.depositCount, 2);
+assert.ok(Math.abs(old.monthlyUsd - 2400 / (365 / (365.25 / 12))) < 1e-9);
+
+// Withdrawals offset deposits; the pace never goes negative.
+const drained = observedContributionPace([
+  ext('2026-01-01', 1000),
+  ext('2026-03-01', 100),
+  ext('2026-05-01', -400, 'broker_withdrawal'),
+], '2026-10-13');
+assert.ok(drained);
+assert.equal(drained.monthlyUsd, 0);
+
+// Too little history or no external deposits gives no pace.
+assert.equal(observedContributionPace([ext('2026-10-01', 500)], '2026-10-13'), null);
+assert.equal(observedContributionPace([], '2026-10-13'), null);
+assert.equal(observedContributionPace([
+  { date: '2026-01-01', kind: 'dividend', amountUsd: 10, role: 'internal' },
+], '2026-10-13'), null);
+
+// Several deposits on one date count as one deposit day.
+const sameDay = observedContributionPace([
+  ext('2026-01-01', 1000),
+  ext('2026-06-01', 50),
+  ext('2026-06-01', 50),
+], '2026-10-13');
+assert.equal(sameDay.depositCount, 1);
 
 console.log('goal probability fixtures ok', JSON.stringify({
   p50Years: baseline.quantiles.p50,

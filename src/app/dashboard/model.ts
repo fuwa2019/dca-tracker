@@ -10,6 +10,8 @@ import { usePerformanceCacheStatus } from '@/hooks/usePerformanceCache';
 import { useLedger } from '@/hooks/useLedger';
 import { aggregatePositions, unrealizedPL, type Position } from '@/lib/calc/position';
 import { QQQM_GOAL_UI_PATHS, simulateQqqmGoal } from '@/lib/calc/goalProbability';
+import { observedContributionPace, type ContributionPace } from '@/lib/calc/contributionPace';
+import { todayLocalIso } from '@/lib/format';
 import type { HistoryPoint } from '@/lib/calc/history';
 import type { LedgerSeries, LedgerSummary } from '@/lib/calc/portfolioLedger';
 import type { LedgerCheck } from '@/lib/calc/ledgerChecks';
@@ -63,10 +65,12 @@ export interface DashboardModel {
   totalReturnPct: number;
   target: number;
   monthlyDca: number;
+  /** Monthly contribution read from the ledger's deposits, not the setting. */
+  contributionPace: ContributionPace | null;
   /**
    * Goal outlook from the same probability model as the settings planner
-   * (QQQM research model, baseline scenario). Null until NAV, target and a
-   * monthly contribution are all known.
+   * (QQQM research model, baseline scenario), fed the observed contribution
+   * pace. Null until NAV, target and at least a month of deposits are known.
    */
   goal: { p50Years: number; within20Years: number | null } | null;
   xirr: number | null;
@@ -167,14 +171,18 @@ export function useDashboardModel(): DashboardModel {
 
   const target = Number(settings?.target_usd ?? 1_000_000);
   const monthlyDca = Number(settings?.monthly_dca_usd ?? 0);
-  const hasMonthly = settings?.monthly_dca_usd != null;
+  const contributionPace = useMemo(
+    () => observedContributionPace(ledgerModel.ledger.cash, todayLocalIso()),
+    [ledgerModel.ledger],
+  );
+  const observedMonthly = contributionPace ? Math.round(contributionPace.monthlyUsd) : null;
   // Rounded so live quote ticks do not rerun thousands of paths.
   const navForGoal = Math.round(aggregates.nav / 10) * 10;
   const goal = useMemo(() => {
-    if (ledgerModel.loading || !hasMonthly || target <= 0 || navForGoal < 0) return null;
+    if (ledgerModel.loading || observedMonthly === null || target <= 0 || navForGoal < 0) return null;
     const simulation = simulateQqqmGoal({
       initialValueUsd: navForGoal,
-      monthlyContributionUsd: monthlyDca,
+      monthlyContributionUsd: observedMonthly,
       targetUsd: target,
       stress: 'baseline',
       pathCount: QQQM_GOAL_UI_PATHS,
@@ -184,7 +192,7 @@ export function useDashboardModel(): DashboardModel {
       p50Years: simulation.quantiles.p50,
       within20Years: simulation.successByYear.find((point) => point.years === 20)?.probability ?? null,
     };
-  }, [ledgerModel.loading, hasMonthly, target, navForGoal, monthlyDca]);
+  }, [ledgerModel.loading, observedMonthly, target, navForGoal]);
 
   const last = history[history.length - 1];
   const isEmpty = positions.length === 0 && cashflows.length === 0 && txns.length === 0;
@@ -218,6 +226,7 @@ export function useDashboardModel(): DashboardModel {
     totalReturnPct,
     target,
     monthlyDca,
+    contributionPace,
     goal,
     xirr: summary.xirr,
     portfolioCumulative: summary.twr ?? 0,
