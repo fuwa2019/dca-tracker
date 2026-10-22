@@ -1,11 +1,26 @@
 # Current Handoff
 
-Updated: 2026-10-09
+Updated: 2026-10-21
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
+
+## 2026-10-21 — Schwab overnight quotes (released)
+
+- Schwab's `/quotes` `extended` node carries overnight trades (seen live
+  22:14 ET); the `quote` node stops at 20:00 ET. The earlier "no overnight"
+  finding was wrong. Details and the fix in
+  `docs/release/2026-10-06-schwab-quote-session.md` (2026-10-21 correction).
+- Worker: `workers/quote/src/marketData.ts` reads `extended`;
+  `provisionalDailyPriceRows` skips overnight quotes. No frontend change; the
+  overnight polling slowdown tried first was withdrawn once the data was found.
+- Verified: `test:schwab`, `test:quote-status`, `test:nyse-calendar-sync`,
+  `typecheck`.
+- Deployed `dca-quote` version `8e9bf038` (owner authorized); live check at
+  22:19 ET returned `session: overnight` / 夜盘 for VOO, QQQ, NVDA, SMH.
+  No database or Pages change. The code is not committed yet.
 
 ## 2026-10-07 — user-facing copy cleanup (released)
 

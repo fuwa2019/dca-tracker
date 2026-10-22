@@ -48,3 +48,29 @@ coverage during 20:00-04:00 ET remains untested.
   unchanged. At 21:52 ET, uncached VOO/QQQ/AMD/MSFT/NVDA/TSLA/AAPL and the
   snapshot-served SPY all returned `session: after_hours`, `sessionLabel: 盘后`,
   `marketState: POST`, `postMarketPrice` = the 20:00 ET last price.
+
+## 2026-10-21 correction: Schwab does carry overnight trades
+
+The 2026-10-06 conclusion above ("Schwab `/quotes` has no overnight trades")
+was wrong. It only looked at the `quote` node. A full `/quotes` response
+(no `fields` parameter, which is how the Worker calls it) also has an
+`extended` node, and that node carries overnight trades.
+
+- Observed by the owner in the Schwab developer portal at 22:14 ET on
+  2026-10-21: VOO `extended.lastPrice` 707.38, `tradeTime` 22:14:07 ET, bid/ask
+  707.36/707.38, while `quote.lastPrice` 707.292 stopped at 19:59:59 ET. QQQ
+  and NVDA showed the same shape.
+- Code change: `normalizeSchwabQuote` uses
+  `extended.lastPrice` when its `tradeTime` is newer than the `quote` node's,
+  so the session reads 夜盘 by trade time. Overnight change is measured from
+  the regular close, like after-hours. `provisionalDailyPriceRows` skips
+  overnight quotes, because a trade after midnight ET is dated the next
+  trading day before it opens.
+- Pre-market quotes still become the trading day's provisional close; that
+  predates this change and was not altered.
+- Deployed `dca-quote` version `8e9bf038-e8ae-4660-8cf2-01ee614fbe03`
+  (owner authorized, wrangler 3.114.17, from the uncommitted working tree);
+  bindings unchanged. At 22:19 ET on 2026-10-21, an uncached
+  `/api/market/quotes?symbols=VOO,QQQ,NVDA,SMH` returned `session: overnight`,
+  `sessionLabel: 夜盘`, `marketState: OVERNIGHT` for all four, with 22:19 ET
+  quote times; VOO 707.01 against the 710.72 regular close (−0.52%).

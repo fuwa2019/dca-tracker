@@ -143,6 +143,48 @@ try {
   assert.equal(afterHours.change, 1, 'after-hours change follows the Yahoo path');
   assert.equal(afterHours.regularPrice, 715, 'regular close stays in regularPrice');
 
+  // Shape observed live on 2026-10-21 22:14 ET: quote stops at the 20:00 ET
+  // after-hours last; overnight trades only arrive in `extended`.
+  const overnightRow = {
+    quote: {
+      lastPrice: 707.292,
+      closePrice: 706.8,
+      netChange: 0.492,
+      netPercentChange: 0.06960951,
+      quoteTime: 1792627199001,
+      tradeTime: 1792627199716,
+      securityStatus: 'Normal',
+    },
+    extended: { lastPrice: 707.38, mark: 707.38, bidPrice: 707.36, askPrice: 707.38, quoteTime: 1792635248524, tradeTime: 1792635247000 },
+    regular: { regularMarketLastPrice: 710.72 },
+    reference: { symbol: 'VOO' },
+  };
+  const overnight = mod.normalizeSchwabQuote('VOO', overnightRow, new Date(1792635250000));
+  assert.equal(overnight.price, 707.38, 'a newer extended trade is the overnight price');
+  assert.equal(overnight.session, 'overnight', 'a 22:14 ET extended trade is overnight');
+  assert.equal(overnight.sessionLabel, '夜盘', 'overnight label matches the frontend');
+  assert.equal(overnight.marketState, 'OVERNIGHT', 'overnight marketState is stored Yahoo-style');
+  assert.equal(overnight.isExtended, true, 'overnight is extended hours');
+  assert.ok(Math.abs(overnight.change - -3.34) < 1e-9, 'overnight change is measured from the regular close');
+  assert.equal(overnight.postMarketPrice, null, 'overnight quote has no post-market price');
+  assert.equal(overnight.asOf, new Date(1792635248524).toISOString(), 'overnight asOf is the extended quote time');
+
+  const staleExtended = mod.normalizeSchwabQuote(
+    'VOO',
+    { ...overnightRow, extended: { ...overnightRow.extended, tradeTime: 1792627000000 } },
+    new Date(1792635250000),
+  );
+  assert.equal(staleExtended.price, 707.292, 'an older extended trade does not replace quote.lastPrice');
+  assert.equal(staleExtended.session, 'after_hours', 'without a newer extended trade the 20:00 ET last stays after-hours');
+
+  assert.deepEqual(
+    workerMod.provisionalDailyPriceRows('2026-10-22', [
+      { ticker: 'VOO', price: 707.38, source: 'schwab', session: 'overnight', asOf: '2026-10-22T04:30:00.000Z' },
+    ]),
+    [],
+    'an overnight quote dated the next trading day never becomes its provisional close',
+  );
+
   const snapshotRow = (marketState, source = 'schwab') => workerMod.snapshotRowToQuote({
     ticker: 'VOO',
     price: 716.84,

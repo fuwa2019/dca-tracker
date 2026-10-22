@@ -1448,6 +1448,9 @@ export function provisionalDailyPriceRows(
   updatedAt = new Date().toISOString(),
 ) {
   return quotes.flatMap((q) => {
+    // An overnight trade after midnight ET is dated the next trading day, which
+    // has not opened yet; it is never that day's close.
+    if (q.session === 'overnight') return [];
     if (q.price === null || !isQuoteEligibleForProvisionalClose(q.asOf, tradingDate)) return [];
     return [{
       ticker: q.ticker,

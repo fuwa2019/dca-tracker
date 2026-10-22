@@ -17,6 +17,14 @@ export interface SchwabQuote {
     delayMinutes?: number;
     securityStatus?: string;
   };
+  extended?: {
+    lastPrice?: number;
+    mark?: number;
+    bidPrice?: number;
+    askPrice?: number;
+    quoteTime?: number;
+    tradeTime?: number;
+  };
   quoteTime?: number;
   realtime?: boolean;
   delayed?: boolean;
@@ -348,20 +356,31 @@ export function marketSessionLabel(session: NormalizedQuote['session']): string 
 
 export function normalizeSchwabQuote(symbol: string, row: SchwabQuote, now = new Date()): NormalizedQuote {
   const ticker = normalizeSymbol(row.reference?.symbol ?? row.symbol ?? symbol);
-  const price = numOrNull(row.quote?.lastPrice) ?? numOrNull(row.quote?.mark) ?? numOrNull(row.regular?.regularMarketLastPrice);
+  // Schwab's quote.lastPrice carries pre-market and after-hours trades but stops
+  // at the 20:00 ET after-hours last. Overnight (20:00-04:00 ET) trades arrive
+  // only in the `extended` node, so the more recent of the two wins, and the
+  // session is the one that trade happened in.
+  const quoteTradedAt = numOrNull(row.quote?.tradeTime) ?? numOrNull(row.quote?.quoteTime ?? row.quoteTime);
+  const extendedPrice = numOrNull(row.extended?.lastPrice);
+  const extendedTradedAt = numOrNull(row.extended?.tradeTime);
+  const useExtended = extendedPrice !== null && extendedTradedAt !== null && extendedTradedAt > (quoteTradedAt ?? 0);
+  const price = useExtended
+    ? extendedPrice
+    : numOrNull(row.quote?.lastPrice) ?? numOrNull(row.quote?.mark) ?? numOrNull(row.regular?.regularMarketLastPrice);
   const prevClose = numOrNull(row.quote?.closePrice);
   const regularPrice = numOrNull(row.regular?.regularMarketLastPrice) ?? price;
   const netChange = numOrNull(row.quote?.netChange) ?? numOrNull(row.regular?.regularMarketNetChange) ?? diff(price, prevClose);
   const netChangePct = percentToRatio(row.quote?.netPercentChange ?? row.regular?.regularMarketPercentChange) ?? ratio(netChange, prevClose);
-  // Schwab's lastPrice carries extended-hours trades, so the session is the one
-  // the last trade happened in. Schwab has no overnight trades: after 20:00 ET
-  // the price stays the after-hours last and reads as after-hours.
-  const tradedAt = numOrNull(row.quote?.tradeTime) ?? numOrNull(row.quote?.quoteTime ?? row.quoteTime);
+  const tradedAt = useExtended ? extendedTradedAt : quoteTradedAt;
   const session = usMarketSessionForQuoteTime(tradedAt !== null && tradedAt > 0 ? new Date(tradedAt) : now);
-  const postMarketChange = session === 'after_hours' ? diff(price, regularPrice) : null;
-  const postMarketChangePct = session === 'after_hours' ? ratio(postMarketChange, regularPrice) : null;
-  const change = session === 'after_hours' ? postMarketChange : netChange;
-  const changePct = session === 'after_hours' ? postMarketChangePct : netChangePct;
+  // After-hours and overnight both move against the latest regular close.
+  const sinceRegularClose = session === 'after_hours' || session === 'overnight';
+  const regularCloseChange = sinceRegularClose ? diff(price, regularPrice) : null;
+  const regularCloseChangePct = sinceRegularClose ? ratio(regularCloseChange, regularPrice) : null;
+  const postMarketChange = session === 'after_hours' ? regularCloseChange : null;
+  const postMarketChangePct = session === 'after_hours' ? regularCloseChangePct : null;
+  const change = sinceRegularClose ? regularCloseChange : netChange;
+  const changePct = sinceRegularClose ? regularCloseChangePct : netChangePct;
   const fetchedAt = now.toISOString();
   const realtime = boolOrUndefined(row.quote?.realtime ?? row.realtime);
   const delayed = boolOrUndefined(row.quote?.delayed ?? row.delayed);
@@ -384,7 +403,7 @@ export function normalizeSchwabQuote(symbol: string, row: SchwabQuote, now = new
     isExtended: session === 'pre_market' || session === 'after_hours' || session === 'overnight',
     marketState: marketStateForSession(session),
     source: 'schwab',
-    asOf: epochMillisToIso(row.quote?.quoteTime ?? row.quoteTime),
+    asOf: epochMillisToIso(useExtended ? row.extended?.quoteTime ?? extendedTradedAt : row.quote?.quoteTime ?? row.quoteTime),
     fetchedAt,
     realtime: realtime ?? (delayed === true ? false : undefined),
     delayMinutes: numOrUndefined(row.quote?.delayMinutes ?? row.delayMinutes),
