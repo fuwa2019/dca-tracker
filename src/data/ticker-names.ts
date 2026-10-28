@@ -9,6 +9,7 @@ const TICKER_NAMES: Record<string, string> = {
   VGT: 'Vanguard 信息技术 ETF',
   SMH: 'VanEck 半导体 ETF',
   SGOV: 'iShares 0-3月美国国债 ETF',
+  BOXX: 'Alpha Architect 1-3月箱式价差 ETF',
   NVDA: '英伟达',
   AAPL: '苹果',
   MSFT: '微软',
