@@ -22,6 +22,15 @@
   not zero (a partial history would be written as the whole source).
 - The preview's negative-cash warning starts from the statement opening cash.
 
+## 2026-10-28 changes
+
+- **IBKR linked-account transfers**: a multi-account export (the summary cash
+  covers every listed account) shows a transfer as 取款 in one account and a
+  same-day 存款 of the same amount in another. `dropInternalTransfers` in
+  `src/lib/import/ibkr.ts` pairs them by the 账户/Account column and ignores
+  both rows; they are not external cash flows of the combined ledger. An
+  unpaired 取款 is a normal `broker_withdrawal`.
+
 ## 2026-09-25 changes
 
 - **Write sources are broker files only** (`IMPORTABLE_SOURCES`: Schwab, IBKR).

@@ -181,6 +181,25 @@ assert.match(ibkrMergePreview.rows.find((row) => row.status === 'ignore')?.reaso
 assert.equal(ibkrMergePreview.detection.context?.statement_ending_cash, '96.2843796710');
 assert.equal(ibkrMergePreview.detection.context?.statement_as_of, '2026-09-24');
 assert.equal(ibkrBaseCurrencyPreview.rows.find((row) => row.source_index === 8)?.reason, '操作类型无法映射', 'other Adjustment rows must remain blocked');
+
+// A transfer between linked accounts in one export nets to zero and is not
+// an external cash flow; a lone 取款 is still a withdrawal.
+const ibkrInternalTransferText = [
+  'Transaction History,Header,日期,账户,说明,交易类型,代码,数量,价格,Price Currency,总额,佣金,净额,子类型,汇率,交易费用,乘数',
+  'Transaction History,Data,2026-10-27,U***33918,现金转账,存款,-,-,-,-,500.0,-,500.0,-,1.0,-,1.0',
+  'Transaction History,Data,2026-10-27,U***18397,现金转账,取款,-,-,-,-,-500.0,-,-500.0,-,1.0,-,1.0',
+  'Transaction History,Data,2026-10-27,U***33918,电子资金转账,存款,-,-,-,-,300.0,-,300.0,-,1.0,-,1.0',
+  'Transaction History,Data,2026-10-28,U***18397,电子资金转账,取款,-,-,-,-,-80.0,-,-80.0,-,1.0,-,1.0',
+].join('\n');
+const ibkrInternalTransferPreview = ibkrImportAdapter.audit({ text: ibkrInternalTransferText, fileName: 'internal-transfer.csv' });
+assert.equal(ibkrInternalTransferPreview.status_counts.block, 0, '取款 maps to a withdrawal');
+assert.equal(ibkrInternalTransferPreview.status_counts.ignore, 2, 'both legs of the internal transfer are dropped');
+assert.match(ibkrInternalTransferPreview.rows.find((row) => row.source_index === 3)?.reason ?? '', /账户间内部互转（U\*\*\*18397 → U\*\*\*33918）/);
+assert.deepEqual(
+  ibkrInternalTransferPreview.cash_events.map((row) => [row.event_type, row.usd_amount]),
+  [['broker_deposit', '300.0000000000'], ['broker_withdrawal', '-80.0000000000']],
+  'unpaired deposits and withdrawals stay external cash flows',
+);
 const officialIbkrShape = read('ibkr-activity-statement-official-en.csv');
 const officialIbkrPreview = ibkrImportAdapter.audit({ text: officialIbkrShape, fileName: 'activity-statement-trades.csv' });
 assert.equal(officialIbkrPreview.errors.length, 0, 'official IBKR Trades aliases should parse');

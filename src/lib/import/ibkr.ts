@@ -50,7 +50,8 @@ type IbkrColumn =
   | 'description'
   | 'usd_amount'
   | 'fx_rate'
-  | 'exchange';
+  | 'exchange'
+  | 'account';
 
 interface IbkrParsedImport extends ParsedImport {
   columns: Partial<Record<IbkrColumn, number>>;
@@ -102,6 +103,7 @@ const COLUMN_ALIASES: Record<IbkrColumn, string[]> = {
   ],
   fx_rate: ['exchange rate', 'exchange rate to usd', 'fx rate', 'fxrate', 'fx rate to usd', '汇率', '美元汇率'],
   exchange: ['exchange', 'market', 'listing exchange', 'listingexchange', '交易所', '市场'],
+  account: ['account', 'account id', 'accountid', '账户', '账号'],
 };
 
 const ACTION_ALIASES: Record<string, 'buy' | 'sell' | LedgerCashEventType | null> = {
@@ -135,6 +137,8 @@ const ACTION_ALIASES: Record<string, 'buy' | 'sell' | LedgerCashEventType | null
   'cash deposit': 'broker_deposit',
   'wire received': 'broker_deposit',
   提款: 'broker_withdrawal',
+  取款: 'broker_withdrawal',
+  出金: 'broker_withdrawal',
   withdrawal: 'broker_withdrawal',
   'cash withdrawal': 'broker_withdrawal',
   'wire sent': 'broker_withdrawal',
@@ -320,7 +324,7 @@ function actionKind(value: string, amount?: string): 'buy' | 'sell' | LedgerCash
     ?? (normalized.includes('interest') || normalized.includes('利息') ? 'interest' : null)
     ?? (normalized.includes('withholding') || normalized.includes('预扣') || normalized.includes('tax') || normalized.includes('税') ? 'tax' : null)
     ?? (normalized.includes('deposit') || normalized.includes('wire received') || normalized.includes('入金') ? 'broker_deposit' : null)
-    ?? (normalized.includes('withdrawal') || normalized.includes('wire sent') || normalized.includes('提款') ? 'broker_withdrawal' : null)
+    ?? (normalized.includes('withdrawal') || normalized.includes('wire sent') || normalized.includes('提款') || normalized.includes('取款') ? 'broker_withdrawal' : null)
     ?? (normalized.includes('forex') || normalized.includes('fx') || normalized.includes('换汇') ? 'fx_conversion' : null)
     ?? (normalized.includes('fee') || normalized.includes('commission') || normalized.includes('费用') || normalized.includes('手续费') ? 'fee' : null)
     ?? (normalized.includes('transfer') ? (amount && Number(amount) < 0 ? 'broker_withdrawal' : 'broker_deposit') : null);
@@ -695,6 +699,7 @@ function parseInput(input: ImportInput): IbkrParsedImport {
   };
   const rows: ParsedImportRow[] = [];
   const items: Array<LedgerTrade | LedgerCashEvent> = [];
+  const accountBySource = new Map<number, string>();
 
   if (headerIndex < 0) {
     rows.push({
@@ -758,12 +763,14 @@ function parseInput(input: ImportInput): IbkrParsedImport {
       };
       const parsedRow = parseIbkrRow(sourceIndex, fields, segmentContext);
       parsedRow.source_fields = fields;
+      const account = valueAt(row, segmentColumns, 'account');
+      if (!isPlaceholder(account)) accountBySource.set(sourceIndex, account);
       if (parsedRow.item) items.push(parsedRow.item);
       rows.push(parsedRow);
     }
   }
 
-  const merged = mergeDailyFxConversion(items, rows);
+  const merged = mergeDailyFxConversion(dropInternalTransfers(items, rows, accountBySource), rows);
   addDuplicateOrdinals(merged);
   const itemBySource = new Map(merged.map((item) => [item.source_index, item]));
   for (const row of rows) {
@@ -792,6 +799,48 @@ function parseInput(input: ImportInput): IbkrParsedImport {
 }
 
 export { STATEMENT_AS_OF_CONTEXT_KEY, STATEMENT_CASH_CONTEXT_KEY } from './common.ts';
+
+/**
+ * A multi-account export (one statement covering linked accounts, its
+ * summary cash includes every account) shows a transfer between them as a
+ * 取款 in one account and a 存款 of the same amount on the same day in the
+ * other. Within the combined ledger that is not an external cash flow, so
+ * the pair is dropped: written as a deposit and a withdrawal it would
+ * inflate net contributions on both sides of the TWR flow series.
+ */
+function dropInternalTransfers(
+  items: Array<LedgerTrade | LedgerCashEvent>,
+  rows: ParsedImportRow[],
+  accountBySource: Map<number, string>,
+): Array<LedgerTrade | LedgerCashEvent> {
+  const transfers = items.filter((item): item is LedgerCashEvent => 'event_type' in item
+    && (item.event_type === 'broker_deposit' || item.event_type === 'broker_withdrawal')
+    && accountBySource.has(item.source_index));
+  const paired = new Set<LedgerCashEvent>();
+  const rowBySource = new Map(rows.map((row) => [row.source_index, row]));
+  for (const outgoing of transfers) {
+    if (outgoing.event_type !== 'broker_withdrawal' || paired.has(outgoing)) continue;
+    const from = accountBySource.get(outgoing.source_index)!;
+    const incoming = transfers.find((candidate) => candidate.event_type === 'broker_deposit'
+      && !paired.has(candidate)
+      && candidate.effective_date === outgoing.effective_date
+      && accountBySource.get(candidate.source_index) !== from
+      && Number(decimalAdd(candidate.usd_amount, outgoing.usd_amount, 10)) === 0);
+    if (!incoming) continue;
+    paired.add(outgoing);
+    paired.add(incoming);
+    const to = accountBySource.get(incoming.source_index)!;
+    for (const [event, other] of [[outgoing, incoming], [incoming, outgoing]] as const) {
+      const row = rowBySource.get(event.source_index);
+      if (!row) continue;
+      row.item = undefined;
+      row.category = 'cash_event';
+      row.default_status = 'ignore';
+      row.reason = `与第 ${other.source_index} 行是账户间内部互转（${from} → ${to}），合计为 0，不写入。`;
+    }
+  }
+  return paired.size === 0 ? items : items.filter((item) => !paired.has(item as LedgerCashEvent));
+}
 
 /**
  * IBKR lists every FX leg (and the translation adjustment) separately; most
