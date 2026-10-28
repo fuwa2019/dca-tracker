@@ -43,7 +43,7 @@ jobs:
         run: npm run typecheck
 
       - name: Build
-        run: npm run build
+        run: npm run build:local
 
       - name: Release performance budget
         run: npm run test:release-budget
