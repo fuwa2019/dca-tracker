@@ -538,7 +538,7 @@ export function SharePage() {
               <ShareExposureStat
                 label="已穿透"
                 value={pct(decomposedWeight, 1)}
-                sub="ETF 成分 + 直接持有"
+                sub={lookThrough.leverageFinancing > 0 ? '含杠杆 ETF 名义敞口' : 'ETF 成分 + 直接持有'}
               />
               <ShareExposureStat
                 label="长尾"

@@ -3,6 +3,7 @@ import { usePositionsModel, type PositionsModel } from '@/hooks/usePositionsMode
 import { unrealizedPL } from '@/lib/calc/position';
 import {
   computeLookThrough,
+  resolveLeveragedEtf,
   type HoldingInput,
   type LookThroughResult,
 } from '@/lib/calc/lookThrough';
@@ -51,9 +52,16 @@ export function useExposure(): ExposureModel {
     [holdings, cash, holdingsData.data],
   );
 
-  const asOf = (holdingsData.data._meta?.asOf ?? {}) as Record<string, string>;
+  // 杠杆 ETF 没有自己的成分表,日期和来源沿用实际采用的标的 ETF。
+  const asOf: Record<string, string> = { ...(holdingsData.data._meta?.asOf ?? {}) };
   const sources = Object.fromEntries(
-    positions.map((position) => [position.ticker, holdingsData.sources[position.ticker]] as const)
+    positions.map((position) => {
+      const leveraged = resolveLeveragedEtf(position.ticker, holdingsData.data);
+      if (leveraged && asOf[leveraged.underlying]) {
+        asOf[position.ticker] = `${leveraged.leverage}×${leveraged.underlying} ${asOf[leveraged.underlying]}`;
+      }
+      return [position.ticker, holdingsData.sources[leveraged?.underlying ?? position.ticker]] as const;
+    })
       .filter((entry): entry is [string, EtfHoldingSourceMeta] => entry[1] != null),
   );
   const isFallback = Object.values(sources).some((source) => source.provider === 'static');

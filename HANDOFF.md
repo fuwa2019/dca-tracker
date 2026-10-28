@@ -1,11 +1,28 @@
 # Current Handoff
 
-Updated: 2026-10-21
+Updated: 2026-10-28
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
+
+## 2026-10-28 — QLD look-through (local, not deployed)
+
+- QLD was shown as a single stock. `src/lib/calc/lookThrough.ts` now reads
+  `etf-holdings.json._meta.leveraged` (QLD = 2x, underlying QQQM/QQQ, the one
+  with the newest snapshot) and looks through at notional exposure; the excess
+  over market value is `leverageFinancing`, so look-through + long tail + cash
+  = NAV + leverageFinancing. Exposure page shows it as 杠杆名义敞口.
+- Migration `0060_etf_universe_leveraged_underlying.sql`: both ETF universe
+  functions report QQQ for a net-long QLD, so QLD-only holders get dynamic QQQ
+  holdings and reconcile keeps QQQ's set. No table, grant, or Worker change.
+- Verified: `test:etf-holdings` (new look-through cases), CI-equivalent set
+  with `build:local`, migration numbering/overloads, 0060 executed twice on a
+  throwaway local Postgres 15 with a mock `transactions` table, and the
+  exposure page in local demo mode with a QLD buy.
+- Committed locally, not pushed. Next, each needs explicit authorization:
+  apply 0060 to production, then deploy Pages. The Worker needs no deploy.
 
 ## 2026-10-21 — Schwab overnight quotes (released)
 

@@ -5,6 +5,9 @@
  * - 一个持仓若是已知 ETF(在 holdings 数据里),按成分股权重拆开,分摊到底层股票。
  * - 列出的成分股之外的长尾,计入 `unclassifiedValue`(诚实地标记「未穿透」),不会凭空消失。
  * - 现金类持仓(SGOV 等,在 cashLike 名单里)归入现金桶,不拆成股票。
+ * - 杠杆 ETF(在 `_meta.leveraged` 里,如 QLD = 2× 纳指100)借用标的指数 ETF 的成分,
+ *   按「市值 × 杠杆倍数」的名义敞口拆开;超出自身市值的部分记为 `leverageFinancing`
+ *   (基金内部的互换/期货融资),NAV 不变,股票敞口按名义计。
  * - 其它(直接持有的单票,如 SIVE)按 100% 自身计入。
  *
  * 纯函数:无网络、无 Supabase、无 React。
@@ -13,16 +16,27 @@
 import type {
   MonitorLineConfig,
   MonitorStatus,
-} from './exposureConfig';
-import { WARN_RATIO } from './exposureConfig';
+} from './exposureConfig.ts';
+import { WARN_RATIO } from './exposureConfig.ts';
 
 export interface EtfConstituent {
   ticker: string;
   weight: number;
 }
 
+/** 杠杆 ETF 的穿透口径:标的指数 ETF(按优先级,取成分表最新的一只)× 杠杆倍数。 */
+export interface LeveragedEtfSpec {
+  underlying: string[];
+  leverage: number;
+}
+
 export interface EtfHoldingsData {
-  _meta?: { cashLike?: string[]; asOf?: Record<string, string>; [k: string]: unknown };
+  _meta?: {
+    cashLike?: string[];
+    asOf?: Record<string, string>;
+    leveraged?: Record<string, LeveragedEtfSpec>;
+    [k: string]: unknown;
+  };
   etfs: Record<string, EtfConstituent[]>;
 }
 
@@ -44,7 +58,7 @@ export interface LookThroughStock {
   value: number;
   /** 占总净值(含现金)比例。 */
   weightNav: number;
-  /** 占股票市值(剔除现金)比例。 */
+  /** 占股票敞口(剔除现金,含杠杆名义敞口)比例。 */
   weightEquity: number;
   /** 各来源贡献(直接持有 + 各 ETF 透传),按贡献降序。 */
   sources: ContributionSource[];
@@ -66,10 +80,13 @@ export interface MonitorLineResult {
 export interface LookThroughResult {
   stocks: LookThroughStock[];
   totalNav: number;
+  /** 股票敞口 = 总净值 − 现金 + 杠杆融资(名义口径)。 */
   equityValue: number;
   cashValue: number;
-  /** 列出成分之外的长尾(未穿透部分)。 */
+  /** 列出成分之外的长尾(未穿透部分,杠杆 ETF 按名义计)。 */
   unclassifiedValue: number;
+  /** 杠杆 ETF 超出自身市值的名义敞口合计;已穿透 + 长尾 + 现金 = 总净值 + 它。 */
+  leverageFinancing: number;
   lines: MonitorLineResult[];
 }
 
@@ -77,6 +94,36 @@ function statusFor(pct: number, ceiling: number): MonitorStatus {
   if (pct >= ceiling) return 'over';
   if (pct >= ceiling * WARN_RATIO) return 'warn';
   return 'ok';
+}
+
+export interface ResolvedLeveragedEtf {
+  underlying: string;
+  leverage: number;
+  constituents: EtfConstituent[];
+}
+
+/**
+ * 杠杆 ETF → 实际采用的标的成分。候选里取有成分且 asOf 最新的一只(同日按列出顺序),
+ * 这样持有 QQQM 时 QLD 能跟着用 QQQM 的动态快照。非杠杆 ETF 返回 null。
+ */
+export function resolveLeveragedEtf(ticker: string, data: EtfHoldingsData): ResolvedLeveragedEtf | null {
+  const spec = data._meta?.leveraged?.[ticker.toUpperCase()];
+  const leverage = Number(spec?.leverage);
+  if (!spec || !(leverage > 0)) return null;
+  const asOf = data._meta?.asOf ?? {};
+  let best: ResolvedLeveragedEtf | null = null;
+  let bestAsOf = '';
+  for (const raw of spec.underlying) {
+    const underlying = raw.toUpperCase();
+    const constituents = data.etfs[underlying];
+    if (!constituents || constituents.length === 0) continue;
+    const date = String(asOf[underlying] ?? '');
+    if (!best || date > bestAsOf) {
+      best = { underlying, leverage, constituents };
+      bestAsOf = date;
+    }
+  }
+  return best;
 }
 
 export interface LookThroughInput {
@@ -111,6 +158,7 @@ export function computeLookThrough({
   let totalNav = uninvestedCash;
   let cashValue = uninvestedCash;
   let unclassifiedValue = 0;
+  let leverageFinancing = 0;
 
   for (const h of holdings) {
     const ticker = h.ticker.toUpperCase();
@@ -123,16 +171,19 @@ export function computeLookThrough({
       continue;
     }
 
-    const constituents = etfs[ticker];
+    const leveraged = resolveLeveragedEtf(ticker, data);
+    const constituents = leveraged?.constituents ?? etfs[ticker];
     if (constituents && constituents.length > 0) {
+      const exposure = value * (leveraged?.leverage ?? 1);
+      leverageFinancing += exposure - value;
       let listed = 0;
       for (const c of constituents) {
         const w = Number(c.weight) || 0;
         if (w <= 0) continue;
         listed += w;
-        add(c.ticker, value * w, ticker);
+        add(c.ticker, exposure * w, ticker);
       }
-      const remainder = value * Math.max(0, 1 - listed);
+      const remainder = exposure * Math.max(0, 1 - listed);
       unclassifiedValue += remainder;
     } else {
       // 直接持有的单票
@@ -140,7 +191,7 @@ export function computeLookThrough({
     }
   }
 
-  const equityValue = Math.max(0, totalNav - cashValue);
+  const equityValue = Math.max(0, totalNav - cashValue + leverageFinancing);
 
   const stocks: LookThroughStock[] = [...stockMap.entries()]
     .map(([ticker, e]) => ({
@@ -178,6 +229,7 @@ export function computeLookThrough({
     equityValue,
     cashValue,
     unclassifiedValue,
+    leverageFinancing,
     lines: lineResults,
   };
 }

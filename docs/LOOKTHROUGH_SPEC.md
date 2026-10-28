@@ -151,6 +151,11 @@ LTV(c) = Σ_{直接持有 c} MV(h)
 ```
 未列出的成分计入 `unclassifiedValue`(已实现,诚实标记"未穿透",不凭空消失)。
 
+杠杆 ETF(`etf-holdings.json._meta.leveraged`,如 QLD = 2× 纳指100)没有自己的成分表:借用候选标的(QQQM/QQQ 中成分表 asOf 最新的一只),
+按名义敞口 `MV(e) × L × w(c)` 穿透;超出自身市值的 `MV(e) × (L−1)` 记为 `leverageFinancing`,NAV 不变,
+`EquityValue` 按名义口径加上它,因此已穿透 + 长尾 + 现金 = TotalNAV + leverageFinancing。
+成分刷新范围(migration `0060`):净持有 QLD 视同持有 QQQ,所以只持有 QLD 的用户也会拉 QQQ 的动态成分。
+
 **2. 单票穿透权重**(排行榜:NVDA / TSM / AVGO)
 ```
 weight_nav(c)    = LTV(c) / TotalNAV         (含现金/国债,保守)

@@ -11,6 +11,9 @@
       "QQQM": "2026-03-31",
       "QQQ": "2026-03-31"
     },
+    "leveraged": {
+      "QLD": { "underlying": ["QQQM", "QQQ"], "leverage": 2 }
+    },
     "estimatedTickers": {
       "VOO": ["ORCL"],
       "VGT": ["ORCL"],

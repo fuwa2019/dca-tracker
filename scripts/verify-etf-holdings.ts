@@ -7,6 +7,7 @@ import {
   parseEtfHoldingSource,
   staticEtfHoldingSnapshot,
 } from '../workers/quote/src/etfHoldings.ts';
+import { computeLookThrough, resolveLeveragedEtf, type EtfHoldingsData } from '../src/lib/calc/lookThrough.ts';
 
 const csv = `Portfolio composition as of 08/04/2026
 Ticker,Security Name,% of Net Assets
@@ -117,5 +118,46 @@ assert.equal(normalizeConstituentTicker('-USD CASH-'), null);
 assert.throws(() => parseEtfHoldingSource('QQQM', 'invesco', 'x', csv.replace('AAPL,Apple,25%', 'NVDA,Apple,25%')), /duplicate_ticker/);
 assert.throws(() => parseEtfHoldingSource('VGT', 'vanguard', 'x', csv.replace('30%', '3%')), /invalid_weight_total/);
 assert.throws(() => parseEtfHoldingSource('VGT', 'vanguard', 'x', csv.replace('08/04/2026', 'unknown')), /missing_as_of/);
+
+const near = (actual: number | undefined, expected: number) => assert.ok(Math.abs((actual ?? NaN) - expected) < 1e-9, `${actual} != ${expected}`);
+const leveragedData: EtfHoldingsData = {
+  _meta: {
+    cashLike: ['SGOV'],
+    asOf: { QQQ: '2026-03-31', QQQM: '2026-10-20' },
+    leveraged: { QLD: { underlying: ['QQQ', 'QQQM'], leverage: 2 } },
+  },
+  etfs: {
+    QQQ: [{ ticker: 'NVDA', weight: 0.5 }],
+    QQQM: [{ ticker: 'NVDA', weight: 0.1 }, { ticker: 'AAPL', weight: 0.4 }],
+  },
+};
+// 取成分表最新的标的(QQQM 比 QQQ 新),QLD 不再被当成单票。
+assert.equal(resolveLeveragedEtf('qld', leveragedData)?.underlying, 'QQQM');
+assert.equal(resolveLeveragedEtf('QQQM', leveragedData), null);
+const qld = computeLookThrough({
+  holdings: [{ ticker: 'QLD', value: 100 }, { ticker: 'SGOV', value: 50 }],
+  uninvestedCash: 50,
+  data: leveragedData,
+  lines: [{ id: 'nvda', label: '', labelEn: '', tickers: ['NVDA'], ceiling: 0.12, basis: 'nav', description: '' }],
+});
+assert.equal(qld.totalNav, 200);
+assert.equal(qld.cashValue, 100);
+assert.equal(qld.leverageFinancing, 100);
+assert.equal(qld.equityValue, 200);
+assert.equal(qld.stocks.some((stock) => stock.ticker === 'QLD'), false);
+const qldNvda = qld.stocks.find((stock) => stock.ticker === 'NVDA');
+near(qldNvda?.value, 20);
+near(qldNvda?.weightNav, 0.1);
+near(qldNvda?.weightEquity, 0.1);
+assert.deepEqual(qldNvda?.sources.map((source) => source.via), ['QLD']);
+near(qld.stocks.find((stock) => stock.ticker === 'AAPL')?.value, 80);
+near(qld.unclassifiedValue, 100);
+near(qld.lines[0]?.pct, 0.1);
+// 已穿透 + 长尾 + 现金 = 总净值 + 杠杆融资。
+near(qld.stocks.reduce((sum, stock) => sum + stock.value, 0) + qld.unclassifiedValue + qld.cashValue, qld.totalNav + qld.leverageFinancing);
+const unlevered = computeLookThrough({ holdings: [{ ticker: 'QQQM', value: 100 }], data: leveragedData, lines: [] });
+assert.equal(unlevered.leverageFinancing, 0);
+assert.equal(unlevered.equityValue, 100);
+assert.equal(resolveLeveragedEtf('QLD', staticData as EtfHoldingsData)?.leverage, 2);
 
 console.log('ETF holdings parser checks passed.');

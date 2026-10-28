@@ -28,6 +28,7 @@ const SOURCE_HUE: Record<string, number> = {
   VGT: 280,
   QQQM: 305,
   QQQ: 305,
+  QLD: 222,
 };
 /** 按来源名确定性取色,保证图例和条形分段永远一致;未知 ETF 落在蓝→品红安全带内。 */
 function sourceColor(via: string): string {
@@ -95,8 +96,10 @@ export function ExposurePage() {
     return [...set].sort((a, b) => (a === 'direct' ? 1 : 0) - (b === 'direct' ? 1 : 0) || a.localeCompare(b));
   }, [lookThrough.stocks]);
 
-  // 三分法分母:已穿透到个股 + 未穿透长尾 + 现金国债 = 总净值。
+  // 三分法分母:已穿透到个股 + 未穿透长尾 + 现金国债 = 总净值(+ 杠杆 ETF 的融资敞口)。
   const nav = Math.max(lookThrough.totalNav, 1e-9);
+  const leverage = lookThrough.leverageFinancing;
+  const gross = nav + leverage;
   const decomposedValue = useMemo(
     () => lookThrough.stocks.reduce((acc, s) => acc + s.value, 0),
     [lookThrough.stocks],
@@ -216,14 +219,19 @@ export function ExposurePage() {
         <div>
           <div className="kicker">资产穿透覆盖</div>
           <div className="my-3 flex h-2 gap-0.5 overflow-hidden rounded-full bg-surface-elevated" aria-hidden="true">
-            <div className="bg-brand/80" style={{ width: `${Math.max(0, decomposedValue / nav * 100)}%` }} />
-            <div className="bg-muted-foreground/60" style={{ width: `${Math.max(0, lookThrough.unclassifiedValue / nav * 100)}%` }} />
-            <div className="bg-muted-foreground/25" style={{ width: `${Math.max(0, lookThrough.cashValue / nav * 100)}%` }} />
+            <div className="bg-brand/80" style={{ width: `${Math.max(0, decomposedValue / gross * 100)}%` }} />
+            <div className="bg-muted-foreground/60" style={{ width: `${Math.max(0, lookThrough.unclassifiedValue / gross * 100)}%` }} />
+            <div className="bg-muted-foreground/25" style={{ width: `${Math.max(0, lookThrough.cashValue / gross * 100)}%` }} />
           </div>
-          <div className="grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
+          <div className={`grid ${leverage > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-2 text-[11px] text-muted-foreground`}>
             <div>已穿透到个股 <strong className="inline-block font-num text-foreground">{fmtPct(decomposedValue / nav, 1)}</strong></div>
             <div>未穿透长尾 <strong className="inline-block font-num text-foreground">{fmtPct(lookThrough.unclassifiedValue / nav, 1)}</strong></div>
             <div>现金 / 国债 <strong className="inline-block font-num text-foreground">{fmtPct(lookThrough.cashValue / nav, 1)}</strong></div>
+            {leverage > 0 && (
+              <div title="杠杆 ETF 按名义敞口穿透，超出自身市值的部分由基金内部互换/期货融资，各项合计会超过 100%。">
+                杠杆名义敞口 <strong className="inline-block font-num text-foreground">+{fmtPct(leverage / nav, 1)}</strong>
+              </div>
+            )}
           </div>
         </div>
       </motion.section>
