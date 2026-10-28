@@ -363,23 +363,59 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
   );
 }
 
+/** True when the opaque pixels of a logo are near-white, so it needs a dark tile. */
+function isMostlyLight(img: HTMLImageElement): boolean {
+  try {
+    const size = 16;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return false;
+    ctx.drawImage(img, 0, 0, size, size);
+    const { data } = ctx.getImageData(0, 0, size, size);
+    let sum = 0;
+    let count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 128) continue;
+      sum += (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
+      count += 1;
+    }
+    return count > 0 && sum / count > 0.85;
+  } catch {
+    return false;
+  }
+}
+
 /** Reference row identity: the ticker's logo, or a text mark when none loads. */
 function TickerAvatar({ ticker }: { ticker: string }) {
   const [failed, setFailed] = useState(false);
+  const [lightMark, setLightMark] = useState(false);
   const symbol = ticker.trim().toUpperCase();
   const showLogo = !failed && /^[A-Z0-9.\-]{1,12}$/.test(symbol);
   return (
     <span
       aria-hidden
-      className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface-elevated font-num text-[10px] font-semibold text-muted-foreground"
+      className={cn(
+        'inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md font-num text-[10px] font-semibold',
+        // Logos arrive in mixed shapes and backgrounds; a shared soft-white tile
+        // with a hairline ring keeps them uniform, dimmed in dark mode to avoid glare.
+        showLogo
+          ? lightMark
+            ? 'bg-[#2a2926] p-1 ring-1 ring-inset ring-black/[0.07] dark:ring-white/10'
+            : 'bg-[#fdfcf9] p-1 ring-1 ring-inset ring-black/[0.07] dark:bg-[#dcdad2] dark:ring-white/10'
+          : 'bg-surface-elevated text-muted-foreground',
+      )}
     >
       {showLogo ? (
         <img
           src={`https://financialmodelingprep.com/image-stock/${encodeURIComponent(symbol)}.png`}
           alt=""
           loading="lazy"
+          crossOrigin="anonymous"
           referrerPolicy="no-referrer"
-          className="h-full w-full object-contain"
+          className="h-full w-full rounded-[4px] object-contain"
+          onLoad={(e) => setLightMark(isMostlyLight(e.currentTarget))}
           onError={() => setFailed(true)}
         />
       ) : (
