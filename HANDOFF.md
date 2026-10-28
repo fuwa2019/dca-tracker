@@ -973,3 +973,16 @@ Verified: `test:finance` (new pace assertions in `verify-goal-probability.mjs`),
 P50 / 20-year figures, 375px with no horizontal overflow, no console errors.
 No database or Worker change. Release record:
 `docs/release/2026-10-13-goal-observed-pace.md`.
+
+## 2026-10-28 — P&L calendar wrong on 10-26/10-27 (front-end fix, not deployed)
+
+Cause: `readFromSupabase` hit PostgREST's 1000-row cap (the owner needs 1146
+rows), so stored closes stopped ~2026-09-22; `symbolsNeedingBackfill` did not
+flag QLD/BOXX (window start 10-26 is under 7 days from the end), so 09-22
+closes were carried forward. Fix: `fetchAllRows` pages `daily_prices`
+(`trade_date`, `ticker` order, `.range`), and the backfill check also flags a
+symbol whose stored series ends more than 4 days before its window start.
+Tests in `scripts/verify-price-loading.mjs` (`test:ui`). No DB change.
+Same 1000-row risk remains, unfixed, in `usePortfolio.ts` (`transactions`,
+`cashflows`) and `useEtfHoldings.ts` (`etf_holdings`). The 10-27 intraday Yahoo
+rows should be overwritten by the nightly Schwab job.

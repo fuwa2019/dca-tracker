@@ -20,7 +20,10 @@ export function symbolsNeedingBackfill(
     const prices = map.get(symbol);
     if (!prices || prices.size === 0) return true;
     const dates = [...prices.keys()].sort();
+    // A window of any length needs a stored price at or near its start; a series that
+    // ends before the window would be carried forward at a stale close.
     return dates[0] > addDays(startDate, 7)
+      || dates[dates.length - 1] < addDays(startDate, -4)
       || (needsMultiPointSeries && (prices.size < 2 || dates[dates.length - 1] < addDays(endDate, -10)));
   });
 }
@@ -37,4 +40,19 @@ export async function fetchHistoryPages<T>(
     pages.push(await request(params));
   }
   return pages;
+}
+
+export const SUPABASE_PAGE_SIZE = 1000;
+
+/** Reads every page of a range-limited query; PostgREST caps one response at 1000 rows. */
+export async function fetchAllRows<T>(
+  fetchPage: (from: number, to: number) => Promise<T[]>,
+  pageSize = SUPABASE_PAGE_SIZE,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const page = await fetchPage(from, from + pageSize - 1);
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
 }

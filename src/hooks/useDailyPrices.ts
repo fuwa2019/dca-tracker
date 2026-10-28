@@ -5,7 +5,7 @@ import { isoDateInNewYork } from '@/lib/nyse-calendar';
 import { normalizeSymbol, normalizeSymbols } from '@/lib/symbols';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { localPriceMap } from '@/lib/localData';
-import { fetchHistoryPages, symbolsNeedingBackfill, type PriceBounds, type PriceMap } from '@/lib/priceBackfill';
+import { fetchAllRows, fetchHistoryPages, symbolsNeedingBackfill, type PriceBounds, type PriceMap } from '@/lib/priceBackfill';
 
 export type { PriceBounds, PriceMap } from '@/lib/priceBackfill';
 
@@ -35,16 +35,21 @@ interface WorkerHistoryResponse {
 }
 
 async function readFromSupabase(symbols: string[], earliestDate: string, basis: PriceBasis): Promise<PriceMap> {
-  const { data, error } = await supabase
-    .from('daily_prices')
-    .select('ticker,trade_date,close,adjusted_close')
-    .in('ticker', symbols)
-    .gte('trade_date', earliestDate)
-    .order('trade_date', { ascending: true })
-    .abortSignal(AbortSignal.timeout(REQUEST_TIMEOUT_MS));
-  if (error) throw error;
+  const rows = await fetchAllRows<DailyPriceRow>(async (from, to) => {
+    const { data, error } = await supabase
+      .from('daily_prices')
+      .select('ticker,trade_date,close,adjusted_close')
+      .in('ticker', symbols)
+      .gte('trade_date', earliestDate)
+      .order('trade_date', { ascending: true })
+      .order('ticker', { ascending: true })
+      .range(from, to)
+      .abortSignal(AbortSignal.timeout(REQUEST_TIMEOUT_MS));
+    if (error) throw error;
+    return (data as DailyPriceRow[]) ?? [];
+  });
   const map: PriceMap = new Map();
-  for (const row of (data as DailyPriceRow[]) ?? []) {
+  for (const row of rows) {
     let m = map.get(row.ticker);
     if (!m) {
       m = new Map();
