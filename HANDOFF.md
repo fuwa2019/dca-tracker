@@ -7,7 +7,14 @@ The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
 
-## 2026-10-28 — QLD look-through (local, not deployed)
+## 2026-10-28 — QLD look-through, linked-account transfers, DST display (released)
+
+Released 2026-10-28 (owner authorized): `cd39666` (with `d3fdcbb`, `b1da1b1`)
+pushed; owner applied 0060 in the SQL editor first; Pages entry
+`index-DQatRxp5.js`. Record: `docs/release/2026-10-28-qld-transfers-dst.md`.
+No Worker change. The notes below describe the QLD part.
+
+### QLD look-through
 
 - QLD was shown as a single stock. `src/lib/calc/lookThrough.ts` now reads
   `etf-holdings.json._meta.leveraged` (QLD = 2x, underlying QQQM/QQQ, the one
@@ -21,8 +28,6 @@ documents that own it, listed there and under Related Files below.
   with `build:local`, migration numbering/overloads, 0060 executed twice on a
   throwaway local Postgres 15 with a mock `transactions` table, and the
   exposure page in local demo mode with a QLD buy.
-- Committed locally, not pushed. Next, each needs explicit authorization:
-  apply 0060 to production, then deploy Pages. The Worker needs no deploy.
 
 ## 2026-10-21 — Schwab overnight quotes (released)
 
