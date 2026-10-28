@@ -363,14 +363,28 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
   );
 }
 
-/** Reference row identity: a rounded-square ticker mark before the name. */
+/** Reference row identity: the ticker's logo, or a text mark when none loads. */
 function TickerAvatar({ ticker }: { ticker: string }) {
+  const [failed, setFailed] = useState(false);
+  const symbol = ticker.trim().toUpperCase();
+  const showLogo = !failed && /^[A-Z0-9.\-]{1,12}$/.test(symbol);
   return (
     <span
       aria-hidden
-      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-surface-elevated font-num text-[10px] font-semibold text-muted-foreground"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface-elevated font-num text-[10px] font-semibold text-muted-foreground"
     >
-      {ticker.slice(0, 4)}
+      {showLogo ? (
+        <img
+          src={`https://financialmodelingprep.com/image-stock/${encodeURIComponent(symbol)}.png`}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className="h-full w-full object-contain"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        ticker.slice(0, 4)
+      )}
     </span>
   );
 }
