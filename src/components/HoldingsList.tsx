@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Minus } from '@/components/icons';
+import { TickerAvatar } from '@/components/TickerAvatar';
+import { getTickerName } from '@/data/ticker-names';
 import { unrealizedPL, type Position } from '@/lib/calc/position';
 import type { Quote } from '@/lib/quote';
 import { usd, signedUsd, signedPct, pct, changeColor } from '@/lib/format';
@@ -91,7 +93,15 @@ function HoldingsTable({ rows }: { rows: Row[] }) {
             animate={{ opacity: 1, y: 0 }}
             className="border-b border-border last:border-0 hover:bg-surface-elevated/40"
           >
-            <td className="px-4 py-3 font-semibold">{r.ticker}</td>
+            <td className="px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <TickerAvatar ticker={r.ticker} />
+                <div className="min-w-0">
+                  <div className="font-semibold">{r.ticker}</div>
+                  {getTickerName(r.ticker) && <div className="truncate text-[11px] text-muted-foreground">{getTickerName(r.ticker)}</div>}
+                </div>
+              </div>
+            </td>
             <td className="px-4 py-3 text-right tnum text-muted-foreground">{r.shares.toFixed(4)}</td>
             <td className="px-4 py-3 text-right tnum">
               {r.price !== null ? usd.format(r.price) : '—'}
@@ -137,11 +147,15 @@ function HoldingsCards({ rows, basis: _basis }: { rows: Row[]; basis: 'avg' | 'f
           className="px-4 py-3"
         >
           <div className="flex items-baseline justify-between">
-            <div>
-              <div className="font-semibold">{r.ticker}</div>
-              <div className="text-[11px] text-muted-foreground tnum">
-                {r.shares.toFixed(4)} 股 · {r.price !== null ? usd.format(r.price) : '—'}
-                {r.sessionLabel ? ` · ${r.sessionLabel}` : ''}
+            <div className="flex min-w-0 items-center gap-2.5">
+              <TickerAvatar ticker={r.ticker} />
+              <div className="min-w-0">
+                <div className="font-semibold">{r.ticker}</div>
+                {getTickerName(r.ticker) && <div className="truncate text-[11px] text-muted-foreground">{getTickerName(r.ticker)}</div>}
+                <div className="text-[11px] text-muted-foreground tnum">
+                  {r.shares.toFixed(4)} 股 · {r.price !== null ? usd.format(r.price) : '—'}
+                  {r.sessionLabel ? ` · ${r.sessionLabel}` : ''}
+                </div>
               </div>
             </div>
             <div className="text-right">

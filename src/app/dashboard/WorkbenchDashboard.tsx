@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { TickerAvatar } from '@/components/TickerAvatar';
 import { Link } from 'react-router-dom';
 import {
   Activity,
@@ -155,7 +156,7 @@ export function WorkbenchDashboard({ model }: { model: DashboardModel }) {
         <section className="workbench-panel" aria-label="已载入的持仓">
           <h2 className="text-sm font-semibold">当前持仓</h2>
           <p className="mt-2 text-xs text-muted-foreground">{positions.length} 个标的 · 估值待确认</p>
-          <div className="mt-3 flex flex-wrap gap-2 text-sm">{positions.map((position) => <span key={position.ticker}>{position.ticker}</span>)}</div>
+          <div className="mt-3 flex flex-wrap gap-2 text-sm">{positions.map((position) => <span key={position.ticker} className="inline-flex items-center gap-1.5"><TickerAvatar ticker={position.ticker} className="h-6 w-6 text-[9px]" />{position.ticker}</span>)}</div>
         </section>
       </div>
     );

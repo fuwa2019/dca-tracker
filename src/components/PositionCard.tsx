@@ -1,4 +1,6 @@
 import { motion } from 'framer-motion';
+import { TickerAvatar } from '@/components/TickerAvatar';
+import { getTickerName } from '@/data/ticker-names';
 import { Card } from '@/components/ui/card';
 import { usd, signedUsd, signedPct, changeColor } from '@/lib/format';
 import type { Position } from '@/lib/calc/position';
@@ -29,9 +31,13 @@ export function PositionCard({ position, quote, basis, index }: Props) {
     >
       <Card className="p-5">
         <div className="flex items-baseline justify-between">
-          <div>
-            <div className="text-sm font-semibold tracking-wide">{position.ticker}</div>
-            <div className="text-xs text-muted-foreground tnum">{position.shares.toFixed(4)} 股</div>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <TickerAvatar ticker={position.ticker} />
+            <div className="min-w-0">
+              <div className="text-sm font-semibold tracking-wide">{position.ticker}</div>
+              {getTickerName(position.ticker) && <div className="truncate text-xs text-muted-foreground">{getTickerName(position.ticker)}</div>}
+              <div className="text-xs text-muted-foreground tnum">{position.shares.toFixed(4)} 股</div>
+            </div>
           </div>
           <div className="text-right">
             <div className="text-lg font-semibold tnum">{price !== null ? usd.format(price) : '—'}</div>

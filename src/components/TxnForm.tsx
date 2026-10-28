@@ -16,6 +16,7 @@ import { formatDefaultNumber, shouldAutoFillField } from '@/lib/formAutoFill';
 import { cn } from '@/lib/utils';
 import { addTrackedSymbol } from '@/lib/trackedSymbols';
 import { normalizeSymbol } from '@/lib/symbols';
+import { getTickerName } from '@/data/ticker-names';
 import { LOCAL_MODE, LOCAL_USER } from '@/lib/localMode';
 import { transactionCashAmount } from '@/lib/calc/transactionAmounts';
 import type { Database } from '@/lib/database.types';
@@ -256,6 +257,7 @@ export function TxnForm({ initial, onDone, defaultSide = 'buy', defaultTicker = 
             }}
             required
           />
+          {getTickerName(normalizedTicker) && <p className="text-xs text-muted-foreground">{getTickerName(normalizedTicker)}</p>}
         </div>
       </div>
 

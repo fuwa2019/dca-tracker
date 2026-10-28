@@ -1,3 +1,5 @@
+import { TickerAvatar } from '@/components/TickerAvatar';
+import { getTickerName } from '@/data/ticker-names';
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -483,11 +485,15 @@ export function SharePage() {
                   key={p.ticker}
                   {...enter({ opacity: 0, y: 4 }, { delay: i * 0.03 })}
                   animate={{ opacity: 1, y: 0 }}
-                  className="grid grid-cols-[minmax(48px,62px)_minmax(0,1fr)_52px] items-center gap-2 px-3 py-3 sm:grid-cols-[96px_minmax(0,1fr)_96px_96px] sm:gap-3 sm:px-4"
+                  className="grid grid-cols-[minmax(124px,148px)_minmax(0,1fr)_56px] items-center gap-2 px-3 py-3 sm:grid-cols-[148px_minmax(0,1fr)_96px_96px] sm:gap-3 sm:px-4"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold">{p.ticker}</div>
-                    <div className="mt-0.5 text-[10px] text-muted-foreground sm:hidden">累计 {signedPct(p.return_pct)}</div>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <TickerAvatar ticker={p.ticker} className="h-7 w-7 sm:h-8 sm:w-8" />
+                    <div className="min-w-0">
+                      <div className="truncate font-semibold">{p.ticker}</div>
+                      {getTickerName(p.ticker) && <div className="line-clamp-2 text-[10px] leading-tight text-muted-foreground">{getTickerName(p.ticker)}</div>}
+                      <div className="mt-0.5 whitespace-nowrap text-[10px] text-muted-foreground sm:hidden">累计 {signedPct(p.return_pct)}</div>
+                    </div>
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -556,10 +562,11 @@ export function SharePage() {
               {lookThroughTop.map((s, i) => (
                 <div
                   key={s.ticker}
-                  className="grid grid-cols-[54px_minmax(0,1fr)_48px] items-center gap-2 px-3 py-2.5 sm:grid-cols-[64px_minmax(0,1fr)_52px] sm:gap-3 sm:px-4"
+                  className="grid grid-cols-[84px_minmax(0,1fr)_48px] items-center gap-2 px-3 py-2.5 sm:grid-cols-[96px_minmax(0,1fr)_52px] sm:gap-3 sm:px-4"
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-semibold">{s.ticker}</span>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <TickerAvatar ticker={s.ticker} className="h-6 w-6 text-[9px]" />
+                    <span className="truncate font-semibold">{s.ticker}</span>
                   </div>
                   <div className="h-2.5 overflow-hidden rounded-full bg-surface-elevated">
                     <motion.div
@@ -630,8 +637,16 @@ function ShareMoverCard({
         <div className="divide-y divide-border">
           {rows.map((row) => (
             <div key={`${title}-${row.ticker}`} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
-              <div className="font-semibold">{row.ticker}</div>
-              <div className="text-right">
+              <div className="flex min-w-0 items-center gap-2">
+                <TickerAvatar ticker={row.ticker} className="h-7 w-7" />
+                <div className="min-w-0">
+                  <div className="font-semibold">{row.ticker}</div>
+                  {getTickerName(row.ticker) && (
+                    <div className="truncate text-[10px] text-muted-foreground">{getTickerName(row.ticker)}</div>
+                  )}
+                </div>
+              </div>
+              <div className="shrink-0 text-right">
                 <div className={cn('font-num text-sm font-semibold', changeColor(row.changePct))}>
                   {signedPct(row.changePct)}
                 </div>
