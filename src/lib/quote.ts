@@ -1,4 +1,5 @@
 import { isoDateInNewYork, isNyseHoliday } from '@/lib/nyse-calendar';
+import type { EtWindow } from '@/lib/marketClock';
 import {
   apiLimitConfigFromEnv,
   rateLimited,
@@ -83,6 +84,8 @@ export interface UsMarketSession {
   detail: string;
   isTrading: boolean;
   isRegular: boolean;
+  /** ET wall-clock window of an open session, for rendering in the viewer's zone. */
+  window: EtWindow | null;
 }
 
 export async function fetchQuotes(symbols: string[]): Promise<Quote[]> {
@@ -248,24 +251,42 @@ export function getUsMarketSession(now = new Date()): UsMarketSession {
   const isWeeknight = isWeekday && !isHoliday && weekday !== 'Fri' && minutes >= 20 * 60;
 
   if (isWeekend && !isSundayNight) {
-    return { key: 'closed', label: '休市', detail: '周末休市', isTrading: false, isRegular: false };
+    return { key: 'closed', label: '休市', detail: '周末休市', isTrading: false, isRegular: false, window: null };
   }
   if (isHoliday) {
-    return { key: 'closed', label: '休市', detail: 'NYSE 节假日休市', isTrading: false, isRegular: false };
+    return { key: 'closed', label: '休市', detail: 'NYSE 节假日休市', isTrading: false, isRegular: false, window: null };
   }
   if (isSundayNight || isOvernightMorning || isWeeknight) {
-    return { key: 'overnight', label: '夜盘', detail: '20:00-04:00 ET', isTrading: true, isRegular: false };
+    // Before 04:00 the overnight session opened on the previous ET date.
+    const startDate = minutes < 4 * 60 ? previousIsoDate(etDate) : etDate;
+    return {
+      key: 'overnight', label: '夜盘', detail: '20:00-04:00 ET', isTrading: true, isRegular: false,
+      window: { startDate, start: 20 * 60, end: 4 * 60 },
+    };
   }
   if (minutes >= 4 * 60 && minutes < 9 * 60 + 30) {
-    return { key: 'pre_market', label: '早盘', detail: '04:00-09:30 ET', isTrading: true, isRegular: false };
+    return {
+      key: 'pre_market', label: '早盘', detail: '04:00-09:30 ET', isTrading: true, isRegular: false,
+      window: { startDate: etDate, start: 4 * 60, end: 9 * 60 + 30 },
+    };
   }
   if (minutes >= 9 * 60 + 30 && minutes < 16 * 60) {
-    return { key: 'regular', label: '盘中', detail: '09:30-16:00 ET', isTrading: true, isRegular: true };
+    return {
+      key: 'regular', label: '盘中', detail: '09:30-16:00 ET', isTrading: true, isRegular: true,
+      window: { startDate: etDate, start: 9 * 60 + 30, end: 16 * 60 },
+    };
   }
   if (minutes >= 16 * 60 && minutes < 20 * 60) {
-    return { key: 'after_hours', label: '盘后', detail: '16:00-20:00 ET', isTrading: true, isRegular: false };
+    return {
+      key: 'after_hours', label: '盘后', detail: '16:00-20:00 ET', isTrading: true, isRegular: false,
+      window: { startDate: etDate, start: 16 * 60, end: 20 * 60 },
+    };
   }
-  return { key: 'closed', label: '休市', detail: '非交易时段', isTrading: false, isRegular: false };
+  return { key: 'closed', label: '休市', detail: '非交易时段', isTrading: false, isRegular: false, window: null };
+}
+
+function previousIsoDate(iso: string): string {
+  return new Date(Date.parse(`${iso}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
 }
 
 /** Heuristic: is the US market currently open (regular hours)? Uses ET (NYC) wall-clock. */

@@ -17,11 +17,13 @@ interface Props {
   children: ReactNode;
   className?: string;
   dot?: boolean;
+  title?: string;
 }
 
-export function StatusBadge({ tone = 'neutral', children, className, dot }: Props) {
+export function StatusBadge({ tone = 'neutral', children, className, dot, title }: Props) {
   return (
     <span
+      title={title}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium',
         tones[tone],

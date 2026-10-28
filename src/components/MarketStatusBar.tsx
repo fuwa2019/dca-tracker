@@ -6,6 +6,7 @@ import { getQuoteStatusSummary } from '@/lib/quoteStatus';
 import { StatusBadge, type StatusTone } from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';
 import { LOCAL_MODE } from '@/lib/localMode';
+import { formatEtWindowInZone, getNewYorkClock, localZoneLabel } from '@/lib/marketClock';
 
 interface Props {
   className?: string;
@@ -61,24 +62,31 @@ export function MarketStatusBar({ className, compact = false }: Props) {
   }, [queryClient]);
 
   const session = getUsMarketSession(now);
+  const nyClock = getNewYorkClock(now);
+  const localWindow = session.window ? formatEtWindowInZone(session.window) : null;
+  const sessionText = localWindow ? `${session.detail}（${localZoneLabel()} ${localWindow}）` : session.detail;
+  const clockTitle = nyClock.nextChange
+    ? `纽约${nyClock.label} ${nyClock.utcOffset}，${nyClock.nextChange.date.slice(5).replace('-', '/')} 起切换为${nyClock.nextChange.label}`
+    : `纽约${nyClock.label} ${nyClock.utcOffset}`;
   const quoteSummary = useMemo(() => getQuoteStatusSummary(quotes), [quotes]);
   const summaryText = LOCAL_MODE ? '内置 QQQ 样本 · 不连接 Supabase / Quote Worker' : quoteSummary.text;
   const summaryTitle = LOCAL_MODE ? '本地 Debug 模式使用内置 10 年 QQQ 数据' : quoteSummary.title;
 
   return (
     <div className={cn('flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground tnum', className)}>
-      <StatusBadge tone={sessionTone[session.key]} dot>
+      <StatusBadge tone={sessionTone[session.key]} dot title={compact ? `${sessionText} · ${clockTitle}` : undefined}>
         美股{session.label}
       </StatusBadge>
       {!compact && (
-        <span className="inline-flex items-center gap-1">
+        <span className="inline-flex items-center gap-1" title={clockTitle}>
           <Clock className="h-3 w-3" />
-          NYC {formatEtClock(now)} ET
+          NYC {formatEtClock(now)} ET · {nyClock.label}
+          {nyClock.nextChange && `（${nyClock.nextChange.date.slice(5).replace('-', '/')} 起${nyClock.nextChange.label}）`}
         </span>
       )}
       {!compact && (
         <span className="inline" title={summaryTitle}>
-          · {session.detail} · {summaryText}
+          · {sessionText} · {summaryText}
         </span>
       )}
     </div>
