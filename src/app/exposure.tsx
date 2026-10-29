@@ -11,6 +11,8 @@ import { useExposure } from '@/hooks/useExposure';
 import type { LookThroughStock } from '@/lib/calc/lookThrough';
 import { pct as fmtPct, usd } from '@/lib/format';
 import { refreshEtfHoldings } from '@/lib/etfHoldings';
+import { TickerAvatar } from '@/components/TickerAvatar';
+import { getTickerName } from '@/data/ticker-names';
 import { LOCAL_MODE } from '@/lib/localMode';
 import { READ_ONLY_SHARE } from '@/lib/shareSession';
 import { useEnterMotion } from '@/hooks/useEnterMotion';
@@ -212,9 +214,11 @@ export function ExposurePage() {
         <div>
           <div className="kicker">最大单票 · 占总净值</div>
           <div className="mt-1 font-num text-2xl font-semibold">
-            {topStock ? <><span className="mr-3 text-sm">{topStock.ticker}</span>{fmtPct(topStock.weightNav, 1)}</> : '—'}
+            {topStock ? <><TickerAvatar ticker={topStock.ticker} className="mr-2 h-7 w-7 align-middle" /><span className="mr-3 text-sm">{topStock.ticker}</span>{fmtPct(topStock.weightNav, 1)}</> : '—'}
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">{topStock ? usd.format(topStock.value) : '无底层股票'}</div>
+          <div className="mt-1 text-[11px] text-muted-foreground">
+            {topStock ? `${getTickerName(topStock.ticker) ? `${getTickerName(topStock.ticker)} · ` : ''}${usd.format(topStock.value)}` : '无底层股票'}
+          </div>
         </div>
         <div>
           <div className="kicker">资产穿透覆盖</div>
@@ -263,7 +267,7 @@ export function ExposurePage() {
 
         {topStocks.length > 0 && <p className="mb-3 text-xs text-muted-foreground">重点 {barStocks.length} 只占 {fmtPct(barWeight, 1)}，其余 {numericStocks.length} 只占 {fmtPct(numericWeight, 1)}。</p>}
         <Card className="relative overflow-hidden p-0">
-          <div aria-hidden="true" className="pointer-events-none invisible absolute inset-x-0 top-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 px-4 sm:grid-cols-[120px_minmax(0,1fr)_100px] sm:gap-x-5">
+          <div aria-hidden="true" className="pointer-events-none invisible absolute inset-x-0 top-0 grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 px-4 sm:grid-cols-[152px_minmax(0,1fr)_100px] sm:gap-x-5">
             <span />
             <div ref={setTrackNode} className="col-span-2 row-start-2 sm:col-span-1 sm:col-start-2 sm:row-start-1" />
             <span />
@@ -323,6 +327,7 @@ function StockRow({ stock, index, maxWeight, nav, numeric = false }: { stock: Lo
         <summary className={`cursor-pointer list-none items-center px-4 py-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand focus-visible:-outline-offset-2 [&::-webkit-details-marker]:hidden ${numeric ? 'flex justify-between gap-2' : 'grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 sm:grid-cols-[120px_minmax(0,1fr)_100px] sm:gap-x-5'}`}>
           <span className="flex min-w-0 items-center gap-2">
             {!numeric && <span className="w-4 shrink-0 font-num text-[10px] text-muted-foreground" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>}
+            <TickerAvatar ticker={stock.ticker} className={numeric ? 'h-6 w-6 text-[9px]' : 'h-7 w-7 text-[9px]'} />
             <span className={`break-all font-semibold ${numeric ? 'text-xs' : ''}`}>{stock.ticker}</span>
           </span>
           {!numeric && <div className="col-span-2 row-start-2 h-2.5 min-w-0 overflow-hidden rounded bg-surface-elevated sm:col-span-1 sm:col-start-2 sm:row-start-1" aria-hidden="true">
@@ -341,7 +346,7 @@ function StockRow({ stock, index, maxWeight, nav, numeric = false }: { stock: Lo
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-open:rotate-180" />
           </span>
         </summary>
-        <div className={`mx-4 mb-4 rounded-lg bg-surface-elevated/50 px-3 py-3 ${numeric ? '' : 'sm:ml-[156px]'}`}>
+        <div className={`mx-4 mb-4 rounded-lg bg-surface-elevated/50 px-3 py-3 ${numeric ? '' : 'sm:ml-[188px]'}`}>
           <p className="mb-2 text-[11px] text-muted-foreground">各来源对总净值的贡献 · 合计 {fmtPct(stock.weightNav, 2)}</p>
           <dl className="space-y-2 text-xs">
             {stock.sources.map((src) => (
