@@ -1,11 +1,21 @@
 # Current Handoff
 
-Updated: 2026-10-28
+Updated: 2026-10-29
 
 This file is the current task and verified state. It is deliberately short.
 The chronological session narrative from 2026-08-19 to 2026-08-24 was moved to
 `docs/archive/ai/2026-08-handoff-sessions.md`; durable knowledge lives in the
 documents that own it, listed there and under Related Files below.
+
+## 2026-10-29 — iPhone portrait/landscape layout (pushed to master)
+
+Owner authorized commit, push, and Pages release. Front end only: one-row
+phone header, slimmer landscape bottom nav with side safe-area insets, phone
+transaction rows that keep the full ticker, and 买/卖 chips without a dot.
+Record: `docs/release/2026-10-29-iphone-layout.md`. Post-deploy checks on
+`dca-tracker-git.pages.dev` are still open (host denied from the release
+session); next step is the cache-busted bundle and route check from a machine
+that can reach it, plus a look on a real iPhone in landscape.
 
 ## 2026-10-28 — QLD look-through, linked-account transfers, DST display (released)
 
