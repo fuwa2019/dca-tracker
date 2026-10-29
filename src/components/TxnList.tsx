@@ -235,8 +235,8 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
                       </td>
                       {visible('event') && (
                         <td className="px-3 py-2.5">
-                          <StatusBadge tone={eventChip.tone} dot className="text-[10px]">
-                            {eventChip.label}
+                          <StatusBadge tone={eventChip.tone} className="text-[10px]">
+                            {tradeSideShort(t.side)}
                           </StatusBadge>
                         </td>
                       )}
@@ -295,13 +295,14 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
                     <div className="flex min-w-0 items-center gap-2.5">
                       <TickerAvatar ticker={t.ticker} />
                       <div className="min-w-0">
+                        {/* The ticker and side never shrink; only the name gives way. */}
                         <div className="flex items-center gap-1.5">
-                          <span className="truncate font-semibold">{t.ticker}</span>
+                          <span className="shrink-0 font-semibold">{t.ticker}</span>
                           {getTickerName(t.ticker) && (
-                            <span className="truncate text-[11px] text-muted-foreground">{getTickerName(t.ticker)}</span>
+                            <span className="min-w-0 truncate text-[11px] text-muted-foreground">{getTickerName(t.ticker)}</span>
                           )}
-                          <StatusBadge tone={eventChip.tone} dot className="text-[10px]">
-                            {eventChip.label}
+                          <StatusBadge tone={eventChip.tone} className="shrink-0 whitespace-nowrap px-1.5 text-[10px]">
+                            {tradeSideShort(t.side)}
                           </StatusBadge>
                         </div>
                         {/* Wraps between groups rather than truncating, so the trade price stays readable on phones. */}
@@ -371,6 +372,11 @@ export function TxnList({ rows, emptyText = '暂无交易', sort: controlledSort
       </Dialog>
     </>
   );
+}
+
+/** One-character side for the list chip, so it never wraps on a phone. */
+function tradeSideShort(side: string | null | undefined): string {
+  return side === 'sell' ? '卖' : '买';
 }
 
 function tradePriceLabel(row: TxnRow): string {

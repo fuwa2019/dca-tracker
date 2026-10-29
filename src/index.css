@@ -209,6 +209,10 @@
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
   /* Custom scrollbar in dark mode — subtle, doesn't fight the surface */
   ::-webkit-scrollbar {
     width: 10px;

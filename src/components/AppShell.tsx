@@ -123,12 +123,13 @@ export function AppShell() {
   }, [location.key]);
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-background lg:flex-row">
+    // Side insets keep landscape content clear of the Dynamic Island; they are 0 in portrait.
+    <div className="safe-x flex h-full w-full overflow-hidden bg-background lg:flex-row">
       <DesktopNav />
       <div className="flex min-w-0 flex-1 flex-col">
         <ReadOnlyShareBanner />
         <TopBar title={pageTitle(location.pathname)} section={activeItem(location.pathname).section} />
-        <main ref={scrollContainerRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-10">
+        <main ref={scrollContainerRef} className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto pb-[calc(6.5rem+env(safe-area-inset-bottom))] landscape:pb-[calc(4.25rem+env(safe-area-inset-bottom))] lg:pb-10 lg:landscape:pb-10">
           <RouteErrorBoundary resetKey={location.pathname}>
             <motion.div
               key={motionKey(location.pathname)}
@@ -217,7 +218,8 @@ function RouteTabs({ section }: { section: NavItem['section'] }) {
           end={exact}
           className={({ isActive }) => cn('tab-pill', isActive && 'tab-pill-active')}
         >
-          <Icon className="h-4 w-4 shrink-0" />
+          {/* Phones drop the icon so the tabs share the header row with the market status. */}
+          <Icon className="hidden h-4 w-4 shrink-0 sm:block" />
           <span className="truncate">{label}</span>
         </NavLink>
       ))}
@@ -242,22 +244,17 @@ function TopBar({ title, section }: { title: string; section: NavItem['section']
       <div className="flex flex-col gap-y-2 px-3 py-2.5 lg:flex-row lg:items-center lg:gap-x-3 lg:px-6 lg:py-2.5">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <Logo className="lg:hidden" />
-          <div className={cn('min-w-0 flex-1 overflow-x-auto', tabsInBottomNav && 'hidden lg:block')}>
+          <div className={cn('min-w-0 overflow-x-auto', tabsInBottomNav ? 'hidden lg:block lg:flex-1' : 'flex-1')}>
             <RouteTabs section={section} />
           </div>
-          {tabsInBottomNav && (
-            <div className="min-w-0 flex-1 lg:hidden">
-              <MarketStatusBar className="flex" compact />
-            </div>
-          )}
+          {/* One header row on phones: the market status sits beside the tabs instead of under them. */}
+          <div className={cn('lg:hidden', tabsInBottomNav ? 'min-w-0 flex-1' : 'shrink-0')}>
+            <MarketStatusBar className="flex" compact />
+          </div>
           <LocalBadge className="hidden sm:inline-flex lg:hidden" />
           <div className="lg:hidden">
             <ThemeToggle />
           </div>
-        </div>
-
-        <div className={cn('lg:hidden', tabsInBottomNav && 'hidden')}>
-          <MarketStatusBar className="flex" compact />
         </div>
 
         <div className="hidden items-center gap-3 lg:flex lg:shrink-0">
@@ -374,8 +371,9 @@ function DesktopNav() {
 
 function MobileNav() {
   return (
-    <nav aria-label="底部导航" className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 z-30 w-[calc(100vw-1.5rem)] max-w-[calc(100vw-1.5rem)] lg:hidden">
-      <div className="flex overflow-hidden rounded-lg border border-border bg-surface px-1.5 py-1 shadow-[0_10px_28px_-18px_hsl(var(--elevation)/0.4)]">
+    <nav aria-label="底部导航" className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] right-[calc(0.75rem+env(safe-area-inset-right))] z-30 landscape:bottom-[max(0.5rem,env(safe-area-inset-bottom))] lg:hidden">
+      {/* Landscape phones have little height, so items go icon-beside-label in a slimmer bar. */}
+      <div className="flex overflow-hidden rounded-lg border border-border bg-surface px-1.5 py-1 landscape:py-0.5 shadow-[0_10px_28px_-18px_hsl(var(--elevation)/0.4)]">
         {MOBILE_NAV.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -383,7 +381,7 @@ function MobileNav() {
             end={to === '/'}
             className={({ isActive }) =>
               cn(
-                'relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-md text-[10px] transition-colors',
+                'relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-md text-[10px] transition-colors landscape:min-h-9 landscape:flex-row landscape:gap-1.5 landscape:text-xs',
                 isActive ? 'bg-brand/10 text-brand' : 'text-muted-foreground hover:bg-surface-elevated hover:text-foreground',
               )
             }
